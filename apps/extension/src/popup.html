@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+
+    <title>VoxFlow</title>
+
+    <link
+      rel="stylesheet"
+      href="popup.css"
+    />
+  </head>
+
+  <body>
+    <main class="popup">
+
+      <div class="brand">
+        <div class="logo">
+          V
+        </div>
+
+        <div>
+          <h1>VoxFlow</h1>
+
+          <p>
+            Speak naturally. Type anywhere.
+          </p>
+        </div>
+      </div>
+
+      <div class="status">
+        <span class="status-dot"></span>
+
+        <span>
+          Extension connected
+        </span>
+      </div>
+
+      <label
+        for="transcript"
+        class="input-label"
+      >
+        What do you want to say?
+      </label>
+
+      <textarea
+        id="transcript"
+        placeholder="Type what you would normally say..."
+      ></textarea>
+
+      <button
+        id="insert-button"
+        type="button"
+      >
+        Transform & Insert
+      </button>
+
+      <p
+        id="message"
+        class="message"
+      ></p>
+
+    </main>
+
+    <script
+      type="module"
+      src="popup.js"
+    ></script>
+  </body>
+</html>

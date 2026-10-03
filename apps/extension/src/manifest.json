@@ -3,24 +3,26 @@
   "name": "VoxFlow",
   "version": "0.1.0",
   "description": "Speak naturally. Type anywhere.",
-  "action": {
-    "default_title": "Open VoxFlow",
-    "default_popup": "index.html"
-  },
   "permissions": [
-    "storage"
+    "activeTab",
+    "scripting"
   ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "action": {
+    "default_title": "VoxFlow",
+    "default_popup": "popup.html"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ]

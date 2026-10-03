@@ -1,0 +1,162 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #09090b;
+  color: #fafafa;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.popup {
+  padding: 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 40px;
+  height: 40px;
+
+  border-radius: 12px;
+
+  background: #818cf8;
+  color: white;
+
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.brand p {
+  margin: 3px 0 0;
+  color: #71717a;
+  font-size: 11px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  margin-top: 22px;
+  padding: 10px 12px;
+
+  border-radius: 10px;
+
+  background: #18181b;
+
+  color: #a1a1aa;
+
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+
+  background: #34d399;
+}
+
+button {
+  width: 100%;
+
+  margin-top: 14px;
+  padding: 12px;
+
+  border: 0;
+  border-radius: 10px;
+
+  background: white;
+  color: #09090b;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.message {
+  min-height: 18px;
+
+  margin: 12px 0 0;
+
+  color: #a1a1aa;
+
+  font-size: 12px;
+  text-align: center;
+}
+.input-label {
+  display: block;
+
+  margin-top: 16px;
+  margin-bottom: 7px;
+
+  color: #a1a1aa;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  text-transform: uppercase;
+}
+
+textarea {
+  width: 100%;
+  min-height: 100px;
+
+  padding: 12px;
+
+  box-sizing: border-box;
+
+  border: 1px solid #3f3f46;
+  border-radius: 10px;
+
+  background: #18181b;
+  color: #fafafa;
+
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+
+  resize: vertical;
+
+  outline: none;
+}
+
+textarea:focus {
+  border-color: #818cf8;
+}
+
+textarea::placeholder {
+  color: #52525b;
+}
