@@ -4,21 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "lint": "eslint ."
-  },
-  "dependencies": {
-    "@vitejs/plugin-react": "^5.0.4",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "dev": "tsc --watch",
+    "build": "tsc && cp src/manifest.json dist/manifest.json && cp src/popup.html dist/popup.html && cp src/popup.css dist/popup.css",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.3.3",
-    "@testing-library/react-hooks": "^8.0.1",
-    "jsdom": "^30.1.1",
+    "@types/chrome": "^0.1.33",
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
     "vitest": "^5.0.3"
