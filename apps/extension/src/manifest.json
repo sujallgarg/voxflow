@@ -5,15 +5,17 @@
   "description": "Speak naturally. Type anywhere.",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "tabCapture",
+    "offscreen",
+    "storage"
   ],
   "action": {
     "default_title": "VoxFlow",
     "default_popup": "popup.html"
   },
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {

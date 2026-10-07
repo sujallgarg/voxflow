@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsc --watch",
-    "build": "tsc && cp src/manifest.json dist/manifest.json && cp src/popup.html dist/popup.html && cp src/popup.css dist/popup.css",
+    "build": "tsc && cp src/manifest.json dist/manifest.json && cp src/popup.html dist/popup.html && cp src/popup.css dist/popup.css && cp src/offscreen.html dist/offscreen.html && cp src/permission.html dist/permission.html",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

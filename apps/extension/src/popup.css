@@ -160,3 +160,106 @@ textarea:focus {
 textarea::placeholder {
   color: #52525b;
 }
+.record-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  width: 100%;
+
+  margin-top: 14px;
+  padding: 13px;
+
+  border: 0;
+  border-radius: 10px;
+
+  background: white;
+  color: #09090b;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.record-button.recording {
+  background: #ef4444;
+  color: white;
+}
+
+.record-button:hover {
+  opacity: 0.9;
+}
+
+.record-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#record-icon {
+  font-size: 15px;
+}
+
+.transcript-container {
+  margin-top: 16px;
+}
+
+.section-label {
+  margin-bottom: 7px;
+
+  color: #a1a1aa;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  text-transform: uppercase;
+}
+
+.transcript {
+  min-height: 70px;
+
+  padding: 12px;
+
+  border: 1px solid #3f3f46;
+  border-radius: 10px;
+
+  background: #18181b;
+  color: #d4d4d8;
+
+  font-size: 13px;
+  line-height: 1.5;
+
+  white-space: pre-wrap;
+}
+
+.transform-button {
+  width: 100%;
+
+  margin-top: 12px;
+  padding: 12px;
+
+  border: 0;
+  border-radius: 10px;
+
+  background: #818cf8;
+  color: white;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.transform-button:hover {
+  opacity: 0.9;
+}
+
+.transform-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hidden {
+  display: none;
+}
