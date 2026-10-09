@@ -1,46 +1,10 @@
-interface InsertRequest {
-  type: "INSERT_TEXT";
-  text: string;
-}
+console.log("VoxFlow background service worker loaded.");
 
-interface StartTabCaptureRequest {
-  type: "START_TAB_CAPTURE";
-  targetLanguage?: string;
-}
+const API_BASE_URL = "http://localhost:3001";
+const STORAGE_KEY_SESSION = "voxflow_session_state";
+const STORAGE_KEY_TARGET_LANG = "voxflow_target_language";
 
-interface StopTabCaptureRequest {
-  type: "STOP_TAB_CAPTURE";
-}
-
-interface GetTabCaptureStateRequest {
-  type: "GET_TAB_CAPTURE_STATE";
-}
-
-interface GetLatestTabResultRequest {
-  type: "GET_LATEST_TAB_RESULT";
-}
-
-interface SetTargetLanguageRequest {
-  type: "SET_TARGET_LANGUAGE";
-  targetLanguage: string;
-}
-
-interface OffscreenCompleteMessage {
-  type: "TAB_CAPTURE_COMPLETE";
-  audioBase64: string;
-  mimeType: string;
-}
-
-interface OffscreenStartedMessage {
-  type: "TAB_CAPTURE_STARTED";
-}
-
-interface OffscreenErrorMessage {
-  type: "TAB_CAPTURE_ERROR";
-  error: string;
-}
-
-interface TabPipelineResult {
+interface PipelineResult {
   transcript: string;
   language: unknown;
   understanding: unknown;
@@ -52,350 +16,559 @@ interface TabPipelineResult {
   };
 }
 
-type BackgroundMessage =
-  | InsertRequest
-  | StartTabCaptureRequest
-  | StopTabCaptureRequest
-  | GetTabCaptureStateRequest
-  | GetLatestTabResultRequest
-  | SetTargetLanguageRequest
-  | OffscreenCompleteMessage
-  | OffscreenStartedMessage
-  | OffscreenErrorMessage;
+interface SessionState {
+  sessionId: string;
+  mode: "idle" | "recording_mic" | "capturing_tab" | "processing";
+  step:
+    | "idle"
+    | "recording"
+    | "finalizing"
+    | "transcribing"
+    | "detecting_language"
+    | "understanding"
+    | "detecting_context"
+    | "transforming"
+    | "ready"
+    | "error";
+  targetLanguage: string;
+  targetTabId?: number | null;
+  transcript?: string;
+  finalText?: string;
+  error?: string | null;
+  startedAt?: number;
+  completedAt?: number;
+}
+
+let currentSession: SessionState = {
+  sessionId: "init",
+  mode: "idle",
+  step: "idle",
+  targetLanguage: "Auto",
+  transcript: "",
+  finalText: "",
+  error: null
+};
 
 let capturedTabId: number | null = null;
-
-let captureStarting = false;
-let captureStopping = false;
-
-let tabPipelineProcessing = false;
-
-let activeTargetLanguage = "Auto";
-
-let latestTabPipelineResult:
-  | TabPipelineResult
-  | null = null;
-
-let latestTabPipelineError:
-  | string
-  | null = null;
-
-console.log(
-  "VoxFlow background service worker loaded."
-);
+let isStartingCapture = false;
+let isStoppingCapture = false;
 
 // --------------------------------------------------
-// OFFSCREEN DOCUMENT
+// STORAGE & SESSION INITIALIZATION
 // --------------------------------------------------
 
-async function createOffscreenDocument() {
-  const existingContexts =
-    await chrome.runtime.getContexts({
-      contextTypes: ["OFFSCREEN_DOCUMENT"]
+let sessionInitPromise: Promise<void> | null = null;
+
+async function initSessionFromStorage(): Promise<void> {
+  try {
+    // Enable session storage access across extension contexts if available
+    if ("session" in chrome.storage && chrome.storage.session.setAccessLevel) {
+      chrome.storage.session
+        .setAccessLevel({
+          accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS"
+        })
+        .catch(() => {});
+    }
+
+    const data = await chrome.storage.local.get([
+      STORAGE_KEY_SESSION,
+      STORAGE_KEY_TARGET_LANG
+    ]);
+
+    const savedTargetLang = (data[STORAGE_KEY_TARGET_LANG] as string) || "Auto";
+
+    if (data[STORAGE_KEY_SESSION]) {
+      currentSession = data[STORAGE_KEY_SESSION] as SessionState;
+
+      // If SW resumed while it thought recording was active, verify offscreen
+      if (
+        currentSession.mode === "recording_mic" ||
+        currentSession.mode === "capturing_tab"
+      ) {
+        const offscreenAlive = await checkOffscreenState();
+        if (!offscreenAlive.isCapturing) {
+          console.log("Offscreen inactive on service worker resume. Resetting recording state.");
+          currentSession.mode = "idle";
+          currentSession.step = "idle";
+          await persistSession();
+        }
+      }
+    } else {
+      currentSession = {
+        sessionId: Date.now().toString(),
+        mode: "idle",
+        step: "idle",
+        targetLanguage: savedTargetLang,
+        transcript: "",
+        finalText: "",
+        error: null
+      };
+      await persistSession();
+    }
+  } catch (err) {
+    console.error("VoxFlow: failed to load session from storage:", err);
+  }
+}
+
+function ensureSessionLoaded(): Promise<void> {
+  if (!sessionInitPromise) {
+    sessionInitPromise = initSessionFromStorage();
+  }
+  return sessionInitPromise;
+}
+
+async function persistSession(): Promise<void> {
+  try {
+    await chrome.storage.local.set({
+      [STORAGE_KEY_SESSION]: currentSession,
+      [STORAGE_KEY_TARGET_LANG]: currentSession.targetLanguage
     });
+    // Mirror to session storage if supported
+    if ("session" in chrome.storage) {
+      chrome.storage.session
+        .set({
+          [STORAGE_KEY_SESSION]: currentSession
+        })
+        .catch(() => {});
+    }
+  } catch (err) {
+    console.error("VoxFlow: failed to persist session:", err);
+  }
+}
 
-  if (existingContexts.length > 0) {
+void ensureSessionLoaded();
+
+// --------------------------------------------------
+// OFFSCREEN DOCUMENT MANAGEMENT
+// --------------------------------------------------
+
+async function hasOffscreenDocument(): Promise<boolean> {
+  try {
+    if ("getContexts" in chrome.runtime && typeof chrome.runtime.getContexts === "function") {
+      const contexts = await chrome.runtime.getContexts({
+        contextTypes: ["OFFSCREEN_DOCUMENT"]
+      });
+      return contexts.length > 0;
+    }
+  } catch {}
+
+  try {
+    const res = (await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_GET_STATE"
+    })) as { isCapturing?: boolean } | undefined;
+    return Boolean(res);
+  } catch {
+    return false;
+  }
+}
+
+async function createOffscreenDocument(): Promise<void> {
+  const exists = await hasOffscreenDocument();
+  if (exists) {
     return;
   }
 
-  console.log(
-    "VoxFlow: creating offscreen document..."
-  );
-
+  console.log("VoxFlow: creating offscreen audio document...");
   await chrome.offscreen.createDocument({
     url: "offscreen.html",
     reasons: ["USER_MEDIA"],
-    justification:
-      "Capture audio from the current Chrome tab for VoxFlow transcription."
+    justification: "Capture microphone and tab audio for VoxFlow speech transcription."
   });
 
-  console.log(
-    "VoxFlow: offscreen document created."
-  );
+  // Brief initialization delay
+  await new Promise<void>((resolve) => setTimeout(resolve, 150));
+  console.log("VoxFlow: offscreen document created and ready.");
 }
 
-async function closeOffscreenDocument() {
+async function closeOffscreenDocument(): Promise<void> {
   try {
-    const contexts =
-      await chrome.runtime.getContexts({
-        contextTypes: ["OFFSCREEN_DOCUMENT"]
-      });
-
-    if (contexts.length > 0) {
+    const exists = await hasOffscreenDocument();
+    if (exists) {
       await chrome.offscreen.closeDocument();
-
-      console.log(
-        "VoxFlow: offscreen document closed."
-      );
+      console.log("VoxFlow: offscreen document closed.");
     }
   } catch (error) {
-    console.error(
-      "VoxFlow offscreen cleanup error:",
-      error
-    );
+    console.warn("VoxFlow offscreen cleanup notice:", error);
+  }
+}
+
+async function checkOffscreenState(): Promise<{ isCapturing: boolean; captureMode?: string }> {
+  try {
+    const exists = await hasOffscreenDocument();
+    if (!exists) {
+      return { isCapturing: false };
+    }
+
+    const state = (await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_GET_STATE"
+    })) as { isCapturing: boolean; captureMode?: string } | undefined;
+
+    return {
+      isCapturing: Boolean(state?.isCapturing),
+      captureMode: state?.captureMode
+    };
+  } catch {
+    return { isCapturing: false };
   }
 }
 
 // --------------------------------------------------
-// INSERT TEXT
+// TEXT INSERTION WITH SCRIPT INJECTION RETRY
 // --------------------------------------------------
 
 async function handleInsertText(
-  message: InsertRequest,
-  sendResponse: (
-    response: {
-      success: boolean;
-      reason?: string;
-    }
-  ) => void
+  text: string,
+  sendResponse: (res: { success: boolean; reason?: string }) => void
 ) {
   try {
-    const tabs =
-      await chrome.tabs.query({
-        active: true,
-        currentWindow: true
-      });
+    let targetTab: chrome.tabs.Tab | undefined;
 
-    const activeTab = tabs[0];
+    if (currentSession.targetTabId) {
+      try {
+        const tab = await chrome.tabs.get(currentSession.targetTabId);
+        if (tab?.id) targetTab = tab;
+      } catch {
+        targetTab = undefined;
+      }
+    }
 
-    if (!activeTab?.id) {
-      sendResponse({
-        success: false,
-        reason: "No active tab found."
-      });
+    if (!targetTab) {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      targetTab = tabs[0];
+      if (!targetTab?.id) {
+        const fallbackTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        targetTab = fallbackTabs[0];
+      }
+    }
 
+    if (!targetTab?.id) {
+      sendResponse({ success: false, reason: "No active browser tab found to insert text into." });
       return;
     }
 
-    const response =
-      await chrome.tabs.sendMessage(
-        activeTab.id,
-        message
-      );
+    const tabId = targetTab.id;
 
-    sendResponse(
-      response ?? {
-        success: false,
-        reason:
-          "No response from content script."
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, {
+        type: "INSERT_TEXT",
+        text
+      });
+
+      if (response && response.success) {
+        sendResponse(response);
+        return;
       }
-    );
-  } catch (error) {
-    console.error(
-      "VoxFlow insertion error:",
-      error
-    );
 
+      if (response && response.reason) {
+        sendResponse(response);
+        return;
+      }
+    } catch {
+      // Content script not ready; attempt injection fallback
+    }
+
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content.js"]
+      });
+
+      await new Promise((r) => setTimeout(r, 120));
+
+      const retryResponse = await chrome.tabs.sendMessage(tabId, {
+        type: "INSERT_TEXT",
+        text
+      });
+
+      sendResponse(retryResponse ?? { success: false, reason: "No response from text field handler." });
+    } catch (injectErr) {
+      console.error("Script injection insertion error:", injectErr);
+      sendResponse({
+        success: false,
+        reason: "Could not insert text into this webpage (restricted page or iframe)."
+      });
+    }
+  } catch (error) {
+    console.error("VoxFlow insertion error:", error);
     sendResponse({
       success: false,
-      reason:
-        "Could not communicate with the active page."
+      reason: error instanceof Error ? error.message : "Text insertion failed."
     });
   }
 }
 
 // --------------------------------------------------
-// START TAB CAPTURE
+// START MICROPHONE RECORDING
+// --------------------------------------------------
+
+async function handleStartMicRecording(
+  targetLanguage: string | undefined,
+  sendResponse: (res: { success: boolean; reason?: string; sessionId?: string }) => void
+) {
+  await ensureSessionLoaded();
+
+  if (isStartingCapture) {
+    sendResponse({ success: false, reason: "Recording is already starting." });
+    return;
+  }
+
+  if (currentSession.mode === "recording_mic") {
+    sendResponse({ success: false, reason: "Microphone recording is already active." });
+    return;
+  }
+
+  if (currentSession.mode === "capturing_tab") {
+    sendResponse({ success: false, reason: "Tab audio capture is currently active. Stop it first." });
+    return;
+  }
+
+  if (currentSession.mode === "processing") {
+    sendResponse({ success: false, reason: "Previous audio is still being processed." });
+    return;
+  }
+
+  isStartingCapture = true;
+
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeTab = tabs[0] ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0];
+
+    await createOffscreenDocument();
+
+    const newSessionId = Date.now().toString();
+
+    const response = (await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_START_MIC",
+      sessionId: newSessionId
+    })) as { success: boolean; reason?: string } | undefined;
+
+    if (!response?.success) {
+      throw new Error(response?.reason || "Failed to start microphone in extension context.");
+    }
+
+    currentSession = {
+      sessionId: newSessionId,
+      mode: "recording_mic",
+      step: "recording",
+      targetLanguage: targetLanguage || currentSession.targetLanguage || "Auto",
+      targetTabId: activeTab?.id ?? null,
+      transcript: "",
+      finalText: "",
+      error: null,
+      startedAt: Date.now()
+    };
+
+    await persistSession();
+    sendResponse({ success: true, sessionId: newSessionId });
+  } catch (error) {
+    console.error("VoxFlow: start mic error:", error);
+    const reason = error instanceof Error ? error.message : "Unable to start microphone recording.";
+    currentSession.mode = "idle";
+    currentSession.step = "error";
+    currentSession.error = reason;
+    await persistSession();
+    await closeOffscreenDocument();
+    sendResponse({ success: false, reason });
+  } finally {
+    isStartingCapture = false;
+  }
+}
+
+// --------------------------------------------------
+// STOP MICROPHONE RECORDING
+// --------------------------------------------------
+
+async function handleStopMicRecording(
+  sendResponse: (res: { success: boolean; reason?: string }) => void
+) {
+  await ensureSessionLoaded();
+
+  if (isStoppingCapture) {
+    sendResponse({ success: false, reason: "Recording is already stopping." });
+    return;
+  }
+
+  if (currentSession.mode !== "recording_mic") {
+    sendResponse({ success: false, reason: "Microphone recording is not active." });
+    return;
+  }
+
+  isStoppingCapture = true;
+
+  try {
+    currentSession.step = "finalizing";
+    await persistSession();
+
+    await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_STOP_MIC"
+    });
+
+    sendResponse({ success: true });
+  } catch (error) {
+    console.error("VoxFlow: stop mic error:", error);
+    sendResponse({
+      success: false,
+      reason: error instanceof Error ? error.message : "Unable to stop microphone."
+    });
+  } finally {
+    isStoppingCapture = false;
+  }
+}
+
+// --------------------------------------------------
+// START TAB AUDIO CAPTURE
 // --------------------------------------------------
 
 async function handleStartTabCapture(
   targetLanguage: string | undefined,
-  sendResponse: (
-    response: {
-      success: boolean;
-      reason?: string;
-    }
-  ) => void
+  sendResponse: (res: { success: boolean; reason?: string; sessionId?: string }) => void
 ) {
-  if (captureStarting) {
-    sendResponse({
-      success: false,
-      reason:
-        "Tab capture is already starting."
-    });
+  await ensureSessionLoaded();
 
+  if (isStartingCapture) {
+    sendResponse({ success: false, reason: "Tab capture is already starting." });
     return;
   }
 
-  if (capturedTabId !== null) {
-    sendResponse({
-      success: false,
-      reason:
-        "Tab audio is already being captured."
-    });
-
+  if (currentSession.mode === "capturing_tab") {
+    sendResponse({ success: false, reason: "Tab audio capture is already active." });
     return;
   }
 
-  if (tabPipelineProcessing) {
-    sendResponse({
-      success: false,
-      reason:
-        "VoxFlow is still processing the previous audio."
-    });
-
+  if (currentSession.mode === "recording_mic") {
+    sendResponse({ success: false, reason: "Microphone recording is currently active. Stop it first." });
     return;
   }
 
-  captureStarting = true;
+  if (currentSession.mode === "processing") {
+    sendResponse({ success: false, reason: "Previous audio is still being processed." });
+    return;
+  }
 
-  activeTargetLanguage =
-    targetLanguage || "Auto";
-
-  latestTabPipelineResult = null;
-  latestTabPipelineError = null;
-
-  console.log(
-    "VoxFlow: target language:",
-    activeTargetLanguage
-  );
+  isStartingCapture = true;
 
   try {
-    console.log(
-      "VoxFlow: START_TAB_CAPTURE received."
-    );
-
-    const tabs =
-      await chrome.tabs.query({
-        active: true,
-        currentWindow: true
-      });
-
-    const activeTab = tabs[0];
+    let activeTab: chrome.tabs.Tab | undefined;
+    const currentTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (currentTabs[0]?.id && !currentTabs[0].url?.startsWith("chrome-extension://")) {
+      activeTab = currentTabs[0];
+    }
+    if (!activeTab) {
+      const lastFocusedTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      activeTab = lastFocusedTabs.find((t) => t.id && !t.url?.startsWith("chrome-extension://"));
+    }
 
     if (!activeTab?.id) {
-      sendResponse({
-        success: false,
-        reason: "No active tab found."
-      });
-
+      sendResponse({ success: false, reason: "No active browser tab found to capture audio from." });
       return;
     }
 
-    console.log(
-      "VoxFlow: active tab:",
-      activeTab.id,
-      activeTab.url
-    );
+    if (
+      activeTab.url?.startsWith("chrome://") ||
+      activeTab.url?.startsWith("edge://") ||
+      activeTab.url?.startsWith("about:")
+    ) {
+      sendResponse({
+        success: false,
+        reason: "Chrome cannot capture audio from internal browser pages (chrome://). Open a normal website like YouTube."
+      });
+      return;
+    }
 
     await createOffscreenDocument();
 
-    console.log(
-      "VoxFlow: requesting tab stream ID..."
-    );
-
-    const streamId =
-      await chrome.tabCapture.getMediaStreamId({
-        targetTabId: activeTab.id
-      });
-
-    console.log(
-      "VoxFlow: stream ID received."
-    );
+    const streamId = await chrome.tabCapture.getMediaStreamId({
+      targetTabId: activeTab.id
+    });
 
     capturedTabId = activeTab.id;
+    const newSessionId = Date.now().toString();
 
-    await chrome.runtime.sendMessage({
-      type: "START_TAB_CAPTURE",
-      streamId
-    });
+    const response = (await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_START_TAB",
+      streamId,
+      sessionId: newSessionId
+    })) as { success: boolean; reason?: string } | undefined;
 
-    console.log(
-      "VoxFlow: stream ID sent to offscreen."
-    );
+    if (!response?.success) {
+      throw new Error(response?.reason || "Failed to start tab audio in extension context.");
+    }
 
-    sendResponse({
-      success: true
-    });
+    currentSession = {
+      sessionId: newSessionId,
+      mode: "capturing_tab",
+      step: "recording",
+      targetLanguage: targetLanguage || currentSession.targetLanguage || "Auto",
+      targetTabId: activeTab.id,
+      transcript: "",
+      finalText: "",
+      error: null,
+      startedAt: Date.now()
+    };
+
+    await persistSession();
+    sendResponse({ success: true, sessionId: newSessionId });
   } catch (error) {
+    console.error("VoxFlow: start tab capture error:", error);
     capturedTabId = null;
-
-    console.error(
-      "VoxFlow: tab capture error:",
-      error
-    );
-
+    const reason = error instanceof Error ? error.message : "Unable to start tab audio capture.";
+    currentSession.mode = "idle";
+    currentSession.step = "error";
+    currentSession.error = reason;
+    await persistSession();
     await closeOffscreenDocument();
-
-    sendResponse({
-      success: false,
-      reason:
-        error instanceof Error
-          ? error.message
-          : "Unable to start tab audio capture."
-    });
+    sendResponse({ success: false, reason });
   } finally {
-    captureStarting = false;
+    isStartingCapture = false;
   }
 }
 
 // --------------------------------------------------
-// STOP TAB CAPTURE
+// STOP TAB AUDIO CAPTURE
 // --------------------------------------------------
 
 async function handleStopTabCapture(
-  sendResponse: (
-    response: {
-      success: boolean;
-      reason?: string;
-    }
-  ) => void
+  sendResponse: (res: { success: boolean; reason?: string }) => void
 ) {
-  if (captureStopping) {
-    sendResponse({
-      success: false,
-      reason:
-        "Tab capture is already stopping."
-    });
+  await ensureSessionLoaded();
 
+  if (isStoppingCapture) {
+    sendResponse({ success: false, reason: "Tab capture is already stopping." });
     return;
   }
 
-  captureStopping = true;
+  if (currentSession.mode !== "capturing_tab") {
+    sendResponse({ success: false, reason: "Tab capture is not active." });
+    return;
+  }
+
+  isStoppingCapture = true;
 
   try {
-    console.log(
-      "VoxFlow: STOP_TAB_CAPTURE received."
-    );
+    currentSession.step = "finalizing";
+    await persistSession();
 
     await chrome.runtime.sendMessage({
-      type: "STOP_TAB_CAPTURE"
+      target: "offscreen",
+      type: "OFFSCREEN_STOP_TAB"
     });
 
     capturedTabId = null;
-
-    sendResponse({
-      success: true
-    });
-
-    /*
-     * IMPORTANT:
-     *
-     * Do NOT close the offscreen document here.
-     *
-     * The offscreen document still needs to finish
-     * creating the audio blob and send
-     * TAB_CAPTURE_COMPLETE.
-     */
+    sendResponse({ success: true });
   } catch (error) {
-    console.error(
-      "VoxFlow stop tab capture error:",
-      error
-    );
-
+    console.error("VoxFlow: stop tab capture error:", error);
     capturedTabId = null;
-
-    await closeOffscreenDocument();
-
     sendResponse({
       success: false,
-      reason:
-        error instanceof Error
-          ? error.message
-          : "Unable to stop tab audio capture."
+      reason: error instanceof Error ? error.message : "Unable to stop tab audio capture."
     });
   } finally {
-    captureStopping = false;
+    isStoppingCapture = false;
   }
 }
 
@@ -403,698 +576,308 @@ async function handleStopTabCapture(
 // BASE64 → BLOB
 // --------------------------------------------------
 
-function base64ToBlob(
-  base64: string,
-  mimeType: string
-): Blob {
+function base64ToBlob(base64: string, mimeType: string): Blob {
   const binaryString = atob(base64);
-
-  const bytes =
-    new Uint8Array(
-      binaryString.length
-    );
-
-  for (
-    let index = 0;
-    index < binaryString.length;
-    index++
-  ) {
-    bytes[index] =
-      binaryString.charCodeAt(index);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
   }
-
-  return new Blob(
-    [bytes],
-    {
-      type: mimeType
-    }
-  );
+  return new Blob([bytes], { type: mimeType });
 }
 
 // --------------------------------------------------
-// TRANSCRIBE CAPTURED AUDIO
+// FULL AI PIPELINE (PRESERVING ALL 5 API STEPS)
 // --------------------------------------------------
 
-async function transcribeCapturedAudio(
+async function runAiPipeline(
   audioBase64: string,
-  mimeType: string
-) {
-  console.log(
-    "VoxFlow: converting captured audio..."
-  );
+  mimeType: string,
+  forSessionId: string
+): Promise<PipelineResult> {
+  await ensureSessionLoaded();
 
-  const audioBlob =
-    base64ToBlob(
-      audioBase64,
-      mimeType
-    );
-
-  console.log(
-    "VoxFlow: audio blob size:",
-    audioBlob.size
-  );
-
-  if (audioBlob.size === 0) {
-    throw new Error(
-      "Captured audio blob is empty."
-    );
+  if (currentSession.sessionId !== forSessionId) {
+    console.warn("VoxFlow: ignoring audio from older session:", forSessionId, "current:", currentSession.sessionId);
+    throw new Error("Session expired.");
   }
 
-  const formData =
-    new FormData();
-
-  formData.append(
-    "file",
-    audioBlob,
-    "tab-audio.webm"
-  );
-
-  console.log(
-    "VoxFlow: sending audio to /transcribe..."
-  );
-
-  const response =
-    await fetch(
-      "http://localhost:3001/transcribe",
-      {
-        method: "POST",
-        body: formData
-      }
-    );
-
-  if (!response.ok) {
-    const errorText =
-      await response.text();
-
-    throw new Error(
-      `Transcription failed (${response.status}): ${errorText}`
-    );
-  }
-
-  const result =
-    await response.json();
-
-  console.log(
-    "VoxFlow: transcription result:",
-    JSON.stringify(
-      result,
-      null,
-      2
-    )
-  );
-
-  const transcript =
-    result?.text?.trim();
-
-  if (!transcript) {
-    throw new Error(
-      "Transcription returned empty text."
-    );
-  }
-
-  console.log(
-    "VoxFlow: transcript:",
-    transcript
-  );
-
-  return {
-    transcript
-  };
-}
-
-// --------------------------------------------------
-// FULL AI PIPELINE
-// --------------------------------------------------
-
-async function runTabPipeline(
-  audioBase64: string,
-  mimeType: string
-): Promise<TabPipelineResult> {
-  tabPipelineProcessing = true;
+  currentSession.mode = "processing";
+  currentSession.step = "transcribing";
+  currentSession.error = null;
+  await persistSession();
 
   try {
-    // ----------------------------------------------
-    // TRANSCRIPTION
-    // ----------------------------------------------
-
-    const transcription =
-      await transcribeCapturedAudio(
-        audioBase64,
-        mimeType
-      );
-
-    const {
-      transcript
-    } = transcription;
-
-    // ----------------------------------------------
-    // LANGUAGE DETECTION
-    // ----------------------------------------------
-
-    console.log(
-      "VoxFlow: detecting language..."
-    );
-
-    const languageResponse =
-      await fetch(
-        "http://localhost:3001/detect-language",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-          body: JSON.stringify({
-            transcript
-          })
-        }
-      );
-
-    if (!languageResponse.ok) {
-      const errorText =
-        await languageResponse.text();
-
-      throw new Error(
-        `Language detection failed (${languageResponse.status}): ${errorText}`
-      );
+    // 1. Transcription (/transcribe)
+    const audioBlob = base64ToBlob(audioBase64, mimeType);
+    if (audioBlob.size === 0) {
+      throw new Error("Recorded audio is empty.");
     }
 
-    const language =
-      await languageResponse.json();
+    const formData = new FormData();
+    formData.append("file", audioBlob, "recording.webm");
 
-    console.log(
-      "VoxFlow: language result:",
-      JSON.stringify(
-        language,
-        null,
-        2
-      )
-    );
+    console.log("VoxFlow: Step 1 → calling /transcribe...");
+    const transcribeRes = await fetch(`${API_BASE_URL}/transcribe`, {
+      method: "POST",
+      body: formData
+    });
 
-    // ----------------------------------------------
-    // UNDERSTANDING
-    // ----------------------------------------------
-
-    console.log(
-      "VoxFlow: understanding transcript..."
-    );
-
-    const understandingResponse =
-      await fetch(
-        "http://localhost:3001/understand",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-          body: JSON.stringify({
-            transcript
-          })
-        }
-      );
-
-    if (!understandingResponse.ok) {
-      const errorText =
-        await understandingResponse.text();
-
-      throw new Error(
-        `Understanding failed (${understandingResponse.status}): ${errorText}`
-      );
+    if (!transcribeRes.ok) {
+      const errText = await transcribeRes.text();
+      throw new Error(`Transcription failed (${transcribeRes.status}): ${errText}`);
     }
 
-    const understanding =
-      await understandingResponse.json();
+    const transcribeData = await transcribeRes.json();
+    const transcript = transcribeData?.text?.trim();
 
-    console.log(
-      "VoxFlow: understanding result:",
-      JSON.stringify(
-        understanding,
-        null,
-        2
-      )
-    );
-
-    // ----------------------------------------------
-    // CONTEXT
-    // ----------------------------------------------
-
-    console.log(
-      "VoxFlow: detecting context..."
-    );
-
-    const contextResponse =
-      await fetch(
-        "http://localhost:3001/detect-context",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-          body: JSON.stringify({
-            transcript
-          })
-        }
-      );
-
-    if (!contextResponse.ok) {
-      const errorText =
-        await contextResponse.text();
-
-      throw new Error(
-        `Context detection failed (${contextResponse.status}): ${errorText}`
-      );
+    if (!transcript) {
+      throw new Error("Transcription returned empty text.");
     }
 
-    const context =
-      await contextResponse.json();
+    currentSession.transcript = transcript;
+    currentSession.step = "detecting_language";
+    await persistSession();
 
-    console.log(
-      "VoxFlow: context result:",
-      JSON.stringify(
-        context,
-        null,
-        2
-      )
-    );
+    // 2. Language Detection (/detect-language)
+    console.log("VoxFlow: Step 2 → calling /detect-language...");
+    const langRes = await fetch(`${API_BASE_URL}/detect-language`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript })
+    });
 
-    // ----------------------------------------------
-    // TRANSFORMATION
-    // ----------------------------------------------
-
-    console.log(
-      "VoxFlow: transforming transcript..."
-    );
-
-    const transformationResponse =
-      await fetch(
-        "http://localhost:3001/transform",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-          body: JSON.stringify({
-            transcript,
-
-            meaning:
-              understanding.meaning,
-
-            intent:
-              understanding.intent,
-
-            audience:
-              context.audience,
-
-            communicationType:
-              context.communicationType,
-
-            tone:
-              context.tone,
-
-            formality:
-              context.formality,
-
-            likelyChannel:
-              context.likelyChannel,
-
-            purpose:
-              context.purpose,
-
-            targetLanguage:
-              activeTargetLanguage ===
-              "Auto"
-                ? undefined
-                : activeTargetLanguage
-          })
-        }
-      );
-
-    if (!transformationResponse.ok) {
-      const errorText =
-        await transformationResponse.text();
-
-      throw new Error(
-        `Transformation failed (${transformationResponse.status}): ${errorText}`
-      );
+    let languageData: unknown = null;
+    if (langRes.ok) {
+      languageData = await langRes.json();
     }
 
-    const transformation =
-      await transformationResponse.json();
+    currentSession.step = "understanding";
+    await persistSession();
 
-    console.log(
-      "VoxFlow: transformation result:",
-      JSON.stringify(
-        transformation,
-        null,
-        2
-      )
-    );
+    // 3. Intent Understanding (/understand)
+    console.log("VoxFlow: Step 3 → calling /understand...");
+    const understandRes = await fetch(`${API_BASE_URL}/understand`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript })
+    });
 
-    console.log(
-      "----------------------------------------"
-    );
+    let understandData: { meaning?: string; intent?: string } = {};
+    if (understandRes.ok) {
+      understandData = await understandRes.json();
+    }
 
-    console.log(
-      "VoxFlow: FINAL TEXT:",
-      transformation.finalText
-    );
+    currentSession.step = "detecting_context";
+    await persistSession();
 
-    console.log(
-      "----------------------------------------"
-    );
+    // 4. Context Detection (/detect-context)
+    console.log("VoxFlow: Step 4 → calling /detect-context...");
+    const contextRes = await fetch(`${API_BASE_URL}/detect-context`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript })
+    });
 
-    return {
-      transcript,
-      language,
-      understanding,
-      context,
-      transformation
+    let contextData: {
+      audience?: string;
+      communicationType?: string;
+      tone?: string;
+      formality?: string;
+      likelyChannel?: string;
+      purpose?: string;
+    } = {};
+
+    if (contextRes.ok) {
+      contextData = await contextRes.json();
+    }
+
+    currentSession.step = "transforming";
+    await persistSession();
+
+    // 5. Context-aware Transformation (/transform)
+    console.log("VoxFlow: Step 5 → calling /transform...");
+    const transformRes = await fetch(`${API_BASE_URL}/transform`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        transcript,
+        meaning: understandData.meaning,
+        intent: understandData.intent,
+        audience: contextData.audience,
+        communicationType: contextData.communicationType,
+        tone: contextData.tone,
+        formality: contextData.formality,
+        likelyChannel: contextData.likelyChannel,
+        purpose: contextData.purpose,
+        targetLanguage:
+          currentSession.targetLanguage === "Auto"
+            ? undefined
+            : currentSession.targetLanguage
+      })
+    });
+
+    if (!transformRes.ok) {
+      const errText = await transformRes.text();
+      throw new Error(`Transformation failed (${transformRes.status}): ${errText}`);
+    }
+
+    const transformData = (await transformRes.json()) as {
+      finalText: string;
+      targetLanguage: string;
+      transformation: string;
     };
+
+    const finalResult: PipelineResult = {
+      transcript,
+      language: languageData,
+      understanding: understandData,
+      context: contextData,
+      transformation: transformData
+    };
+
+    currentSession.mode = "idle";
+    currentSession.step = "ready";
+    currentSession.finalText = transformData.finalText;
+    currentSession.completedAt = Date.now();
+    currentSession.error = null;
+
+    await persistSession();
+
+    return finalResult;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "AI pipeline encountered an error.";
+    console.error("VoxFlow pipeline error:", error);
+    currentSession.mode = "idle";
+    currentSession.step = "error";
+    currentSession.error = errorMsg;
+    await persistSession();
+    throw error;
   } finally {
-    tabPipelineProcessing = false;
+    void closeOffscreenDocument();
   }
 }
 
 // --------------------------------------------------
-// SEND RESULT TO POPUP SAFELY
+// CHROME RUNTIME MESSAGE HANDLER
 // --------------------------------------------------
 
-async function sendPipelineResultToPopup(
-  result: TabPipelineResult
-) {
-  try {
-    await chrome.runtime.sendMessage({
-      type: "TAB_PIPELINE_COMPLETE",
-      result
+chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  const msg = message as Record<string, unknown>;
+
+  // 1. Text Insertion
+  if (msg.type === "INSERT_TEXT" && typeof msg.text === "string") {
+    void handleInsertText(msg.text, sendResponse);
+    return true;
+  }
+
+  // 2. Microphone Controls
+  if (msg.type === "START_MIC_RECORDING") {
+    void handleStartMicRecording(msg.targetLanguage as string | undefined, sendResponse);
+    return true;
+  }
+
+  if (msg.type === "STOP_MIC_RECORDING") {
+    void handleStopMicRecording(sendResponse);
+    return true;
+  }
+
+  // 3. Tab Audio Controls
+  if (msg.type === "START_TAB_CAPTURE") {
+    void handleStartTabCapture(msg.targetLanguage as string | undefined, sendResponse);
+    return true;
+  }
+
+  if (msg.type === "STOP_TAB_CAPTURE") {
+    void handleStopTabCapture(sendResponse);
+    return true;
+  }
+
+  // 4. Session State Query
+  if (msg.type === "GET_SESSION_STATE") {
+    void ensureSessionLoaded().then(() => {
+      sendResponse({ session: currentSession });
     });
-  } catch {
-    /*
-     * Popup may be closed.
-     *
-     * This is NOT an error anymore because
-     * the result is already stored in
-     * latestTabPipelineResult.
-     */
-    console.log(
-      "VoxFlow: popup is closed. Result saved."
-    );
+    return true;
   }
-}
 
-async function sendPipelineErrorToPopup(
-  error: string
-) {
-  try {
-    await chrome.runtime.sendMessage({
-      type: "TAB_PIPELINE_ERROR",
-      error
+  // 5. Set Target Language
+  if (msg.type === "SET_TARGET_LANGUAGE") {
+    void ensureSessionLoaded().then(async () => {
+      const lang = (msg.targetLanguage as string) || "Auto";
+      currentSession.targetLanguage = lang;
+      await persistSession();
+      sendResponse({ success: true, targetLanguage: lang });
     });
-  } catch {
-    console.log(
-      "VoxFlow: popup is closed. Error saved."
-    );
+    return true;
   }
-}
 
-// --------------------------------------------------
-// MESSAGE HANDLER
-// --------------------------------------------------
-
-chrome.runtime.onMessage.addListener(
-  (
-    message: BackgroundMessage,
-    _sender,
-    sendResponse
-  ) => {
-    // ----------------------------------------------
-    // INSERT TEXT
-    // ----------------------------------------------
-
-    if (
-      message.type ===
-      "INSERT_TEXT"
-    ) {
-      void handleInsertText(
-        message,
-        sendResponse
-      );
-
-      return true;
-    }
-
-    // ----------------------------------------------
-    // START TAB CAPTURE
-    // ----------------------------------------------
-
-    if (
-      message.type ===
-      "START_TAB_CAPTURE"
-    ) {
-      void handleStartTabCapture(
-        message.targetLanguage,
-        sendResponse
-      );
-
-      return true;
-    }
-
-    // ----------------------------------------------
-    // STOP TAB CAPTURE
-    // ----------------------------------------------
-
-    if (
-      message.type ===
-      "STOP_TAB_CAPTURE"
-    ) {
-      void handleStopTabCapture(
-        sendResponse
-      );
-
-      return true;
-    }
-
-    // ----------------------------------------------
-    // GET CAPTURE STATE
-    // ----------------------------------------------
-
-    if (
-      message.type ===
-      "GET_TAB_CAPTURE_STATE"
-    ) {
-      sendResponse({
-        isCapturing:
-          capturedTabId !== null,
-
-        isProcessing:
-          tabPipelineProcessing,
-
-        targetLanguage:
-          activeTargetLanguage
-      });
-
-      return true;
-    }
-
-    // ----------------------------------------------
-    // GET LATEST RESULT
-    // ----------------------------------------------
-
-    if (
-      message.type ===
-      "GET_LATEST_TAB_RESULT"
-    ) {
-      sendResponse({
-        result:
-          latestTabPipelineResult,
-
-        error:
-          latestTabPipelineError,
-
-        isCapturing:
-          capturedTabId !== null,
-
-        isProcessing:
-          tabPipelineProcessing,
-
-        targetLanguage:
-          activeTargetLanguage
-      });
-
-      return true;
-    }
-
-    // ----------------------------------------------
-    // SET TARGET LANGUAGE
-    // ----------------------------------------------
-
-    if (
-      message.type ===
-      "SET_TARGET_LANGUAGE"
-    ) {
-      activeTargetLanguage =
-        message.targetLanguage ||
-        "Auto";
-
-      console.log(
-        "VoxFlow: target language changed:",
-        activeTargetLanguage
-      );
-
-      sendResponse({
-        success: true,
-        targetLanguage:
-          activeTargetLanguage
-      });
-
-      return true;
-    }
-
-    // ----------------------------------------------
-    // OFFSCREEN CAPTURE STARTED
-    // ----------------------------------------------
-
-    if (
-      message.type ===
-      "TAB_CAPTURE_STARTED"
-    ) {
-      console.log(
-        "VoxFlow: OFFSCREEN → capture started."
-      );
-
-      return false;
-    }
-
-    // ----------------------------------------------
-    // OFFSCREEN CAPTURE COMPLETE
-    // ----------------------------------------------
-
-    if (
-      message.type ===
-      "TAB_CAPTURE_COMPLETE"
-    ) {
-      console.log(
-        "VoxFlow: OFFSCREEN → capture complete."
-      );
-
-      console.log(
-        "VoxFlow: base64 audio length:",
-        message.audioBase64?.length
-      );
-
-      console.log(
-        "VoxFlow: captured audio type:",
-        message.mimeType
-      );
-
-      /*
-       * The capture itself is finished.
-       * Now the AI pipeline starts.
-       */
+  // 6. Reset / Clear Session
+  if (msg.type === "RESET_SESSION" || msg.type === "CANCEL_RECORDING") {
+    void ensureSessionLoaded().then(async () => {
+      currentSession = {
+        sessionId: Date.now().toString(),
+        mode: "idle",
+        step: "idle",
+        targetLanguage: currentSession.targetLanguage,
+        transcript: "",
+        finalText: "",
+        error: null
+      };
       capturedTabId = null;
+      await persistSession();
+      await closeOffscreenDocument();
+      sendResponse({ success: true });
+    });
+    return true;
+  }
 
-      void runTabPipeline(
-        message.audioBase64,
-        message.mimeType
-      )
-        .then(async (result) => {
-          latestTabPipelineResult =
-            result;
+  // 7. Offscreen Audio Completion
+  if (
+    msg.type === "TAB_CAPTURE_COMPLETE" ||
+    msg.type === "MIC_RECORDING_COMPLETE"
+  ) {
+    const sessionId = (msg.sessionId as string) || currentSession.sessionId;
+    capturedTabId = null;
 
-          latestTabPipelineError =
-            null;
-
-          console.log(
-            "VoxFlow: complete AI pipeline result:",
-            JSON.stringify(
-              result,
-              null,
-              2
-            )
-          );
-
-          await sendPipelineResultToPopup(
-            result
-          );
-
-          await closeOffscreenDocument();
-        })
-        .catch(async (error) => {
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : "VoxFlow AI pipeline failed.";
-
-          latestTabPipelineResult =
-            null;
-
-          latestTabPipelineError =
-            errorMessage;
-
-          tabPipelineProcessing =
-            false;
-
-          console.error(
-            "VoxFlow: tab pipeline error:",
-            error
-          );
-
-          await sendPipelineErrorToPopup(
-            errorMessage
-          );
-
-          await closeOffscreenDocument();
-        });
-
-      return false;
-    }
-
-    // ----------------------------------------------
-    // OFFSCREEN ERROR
-    // ----------------------------------------------
-
-    if (
-      message.type ===
-      "TAB_CAPTURE_ERROR"
-    ) {
-      console.error(
-        "VoxFlow: OFFSCREEN → capture error:",
-        message.error
-      );
-
-      capturedTabId = null;
-
-      latestTabPipelineError =
-        message.error;
-
-      tabPipelineProcessing =
-        false;
-
-      void closeOffscreenDocument();
-
-      return false;
-    }
+    void runAiPipeline(
+      msg.audioBase64 as string,
+      msg.mimeType as string,
+      sessionId
+    ).catch(() => {});
 
     return false;
   }
-);
 
-// --------------------------------------------------
-// TAB CLOSED
-// --------------------------------------------------
-
-chrome.tabs.onRemoved.addListener(
-  (tabId) => {
-    if (
-      tabId === capturedTabId
-    ) {
-      capturedTabId = null;
-
-      console.log(
-        "VoxFlow: captured tab closed."
-      );
-    }
+  // 8. Offscreen Error
+  if (msg.type === "RECORDING_ERROR") {
+    capturedTabId = null;
+    currentSession.mode = "idle";
+    currentSession.step = "error";
+    currentSession.error = (msg.error as string) || "Recording error occurred.";
+    void persistSession();
+    void closeOffscreenDocument();
+    return false;
   }
-);
+
+  return false;
+});
+
+// --------------------------------------------------
+// TAB CLOSED LISTENER
+// --------------------------------------------------
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === capturedTabId && currentSession.mode === "capturing_tab") {
+    console.log("VoxFlow: captured tab closed.");
+    capturedTabId = null;
+    currentSession.mode = "idle";
+    currentSession.step = "error";
+    currentSession.error = "Captured browser tab was closed.";
+    void persistSession();
+    void closeOffscreenDocument();
+  }
+});

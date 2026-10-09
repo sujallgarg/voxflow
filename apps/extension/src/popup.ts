@@ -1,1148 +1,476 @@
-const API_URL =
-  "http://localhost:3001";
+import {
+  MIXED_LANGUAGE_MODES,
+  STANDARD_LANGUAGES,
+  isValidTargetLanguage
+} from "./languages.js";
 
-// --------------------------------------------------
-// DOM
-// --------------------------------------------------
-
-const recordButton =
-  document.getElementById(
-    "record-button"
-  ) as HTMLButtonElement;
-
-const recordIcon =
-  document.getElementById(
-    "record-icon"
-  ) as HTMLSpanElement;
-
-const recordText =
-  document.getElementById(
-    "record-text"
-  ) as HTMLSpanElement;
-
-const tabAudioButton =
-  document.getElementById(
-    "tab-audio-button"
-  ) as HTMLButtonElement | null;
-
-const transcriptContainer =
-  document.getElementById(
-    "transcript-container"
-  ) as HTMLDivElement;
-
-const transcriptElement =
-  document.getElementById(
-    "transcript"
-  ) as HTMLDivElement;
-
-const message =
-  document.getElementById(
-    "message"
-  ) as HTMLParagraphElement;
-
-// --------------------------------------------------
-// STATE
-// --------------------------------------------------
-
-let isRecording = false;
-let isProcessing = false;
-let isTabCapturing = false;
-let isTabProcessing = false;
-
-let targetLanguage = "Auto";
-
-// --------------------------------------------------
-// TYPES
-// --------------------------------------------------
-
-interface TranscriptionResponse {
-  text: string;
-}
-
-interface TransformResponse {
-  finalText: string;
+interface SessionState {
+  sessionId: string;
+  mode: "idle" | "recording_mic" | "capturing_tab" | "processing";
+  step:
+    | "idle"
+    | "recording"
+    | "finalizing"
+    | "transcribing"
+    | "detecting_language"
+    | "understanding"
+    | "detecting_context"
+    | "transforming"
+    | "ready"
+    | "error";
   targetLanguage: string;
-  transformation: string;
+  targetTabId?: number | null;
+  transcript?: string;
+  finalText?: string;
+  error?: string | null;
+  startedAt?: number;
+  completedAt?: number;
 }
 
-interface InsertResponse {
-  success: boolean;
-  reason?: string;
-}
+const STORAGE_KEY_SESSION = "voxflow_session_state";
+const STORAGE_KEY_TARGET_LANG = "voxflow_target_language";
 
-interface TabPipelineResult {
-  transcript: string;
-  language: unknown;
-  understanding: unknown;
-  context: unknown;
-  transformation: TransformResponse;
-}
+// --------------------------------------------------
+// DOM ELEMENTS
+// --------------------------------------------------
 
-interface LatestTabResultResponse {
-  result:
-    | TabPipelineResult
-    | null;
+const statusBar = document.getElementById("status-bar") as HTMLDivElement;
+const statusText = document.getElementById("status-text") as HTMLSpanElement;
 
-  error:
-    | string
-    | null;
+const languageSelect = document.getElementById(
+  "voxflow-target-language"
+) as HTMLSelectElement;
 
-  isCapturing: boolean;
-  isProcessing: boolean;
-  targetLanguage: string;
+const recordButton = document.getElementById("record-button") as HTMLButtonElement;
+const recordIcon = document.getElementById("record-icon") as HTMLSpanElement;
+const recordText = document.getElementById("record-text") as HTMLSpanElement;
+
+const tabAudioButton = document.getElementById("tab-audio-button") as HTMLButtonElement;
+const tabAudioIcon = document.getElementById("tab-audio-icon") as HTMLSpanElement;
+const tabAudioText = document.getElementById("tab-audio-text") as HTMLSpanElement;
+
+const messageEl = document.getElementById("message") as HTMLParagraphElement;
+
+const transcriptContainer = document.getElementById(
+  "transcript-container"
+) as HTMLDivElement;
+const transcriptEl = document.getElementById("transcript") as HTMLDivElement;
+
+const finalTextContainer = document.getElementById(
+  "final-text-container"
+) as HTMLDivElement;
+const finalTextEl = document.getElementById("final-text") as HTMLDivElement;
+const outputLangBadge = document.getElementById(
+  "output-language-badge"
+) as HTMLSpanElement;
+
+const insertButton = document.getElementById("insert-button") as HTMLButtonElement;
+const copyButton = document.getElementById("copy-button") as HTMLButtonElement;
+const resetButton = document.getElementById("reset-button") as HTMLButtonElement;
+
+// Local mirror of session
+let currentSession: SessionState = {
+  sessionId: "init",
+  mode: "idle",
+  step: "idle",
+  targetLanguage: "Auto",
+  transcript: "",
+  finalText: "",
+  error: null
+};
+
+// --------------------------------------------------
+// POPULATE LANGUAGE SELECTOR
+// --------------------------------------------------
+
+function populateLanguageSelector() {
+  languageSelect.innerHTML = "";
+
+  // 1. Auto
+  const autoOpt = document.createElement("option");
+  autoOpt.value = "Auto";
+  autoOpt.textContent = "Auto (Contextual Detection)";
+  languageSelect.appendChild(autoOpt);
+
+  // 2. Mixed Language Modes
+  const mixedGroup = document.createElement("optgroup");
+  mixedGroup.label = "── Mixed Language Modes ──";
+  for (const mode of MIXED_LANGUAGE_MODES) {
+    const opt = document.createElement("option");
+    opt.value = mode.name;
+    opt.textContent = `${mode.name} (Code-switching)`;
+    mixedGroup.appendChild(opt);
+  }
+  languageSelect.appendChild(mixedGroup);
+
+  // 3. Standard Languages
+  const langGroup = document.createElement("optgroup");
+  langGroup.label = "── Languages ──";
+  for (const lang of STANDARD_LANGUAGES) {
+    const opt = document.createElement("option");
+    opt.value = lang;
+    opt.textContent = lang;
+    langGroup.appendChild(opt);
+  }
+  languageSelect.appendChild(langGroup);
 }
 
 // --------------------------------------------------
-// TARGET LANGUAGE UI
+// RENDER UI FROM SESSION STATE
 // --------------------------------------------------
 
-function createTargetLanguageUI() {
-  if (
-    document.getElementById(
-      "voxflow-target-language-container"
-    )
-  ) {
-    return;
+function renderUI(session: SessionState) {
+  currentSession = session;
+
+  // Sync selected language
+  if (session.targetLanguage && languageSelect.value !== session.targetLanguage) {
+    languageSelect.value = session.targetLanguage;
   }
 
-  const container =
-    document.createElement("div");
+  // Status Bar & Pill Styling
+  statusBar.classList.remove("recording", "processing");
 
-  container.id =
-    "voxflow-target-language-container";
-
-  container.style.marginBottom =
-    "12px";
-
-  const label =
-    document.createElement("label");
-
-  label.textContent =
-    "Output language";
-
-  label.style.display =
-    "block";
-
-  label.style.marginBottom =
-    "6px";
-
-  label.style.fontSize =
-    "12px";
-
-  label.style.fontWeight =
-    "600";
-
-  const select =
-    document.createElement("select");
-
-  select.id =
-    "voxflow-target-language";
-
-  select.style.width =
-    "100%";
-
-  select.style.padding =
-    "8px";
-
-  select.style.borderRadius =
-    "8px";
-
-  select.style.border =
-    "1px solid #ddd";
-
-  select.style.background =
-    "#fff";
-
-  const languages = [
-    "Auto",
-    "English",
-    "Hindi",
-    "German",
-    "Portuguese",
-    "Spanish",
-    "French"
-  ];
-
-  for (const language of languages) {
-    const option =
-      document.createElement("option");
-
-    option.value =
-      language;
-
-    option.textContent =
-      language;
-
-    select.appendChild(option);
-  }
-
-  select.value =
-    targetLanguage;
-
-  select.addEventListener(
-    "change",
-    async () => {
-      targetLanguage =
-        select.value;
-
-      localStorage.setItem(
-        "voxflow-target-language",
-        targetLanguage
-      );
-
-      try {
-        await chrome.runtime.sendMessage({
-          type: "SET_TARGET_LANGUAGE",
-          targetLanguage
-        });
-
-        message.textContent =
-          `Output language: ${targetLanguage}`;
-      } catch (error) {
-        console.error(
-          "VoxFlow target language error:",
-          error
-        );
-      }
+  if (session.mode === "recording_mic") {
+    statusBar.classList.add("recording");
+    statusText.textContent = "🎙️ Recording from microphone...";
+  } else if (session.mode === "capturing_tab") {
+    statusBar.classList.add("recording");
+    statusText.textContent = "🔊 Capturing tab audio...";
+  } else if (session.mode === "processing") {
+    statusBar.classList.add("processing");
+    switch (session.step) {
+      case "finalizing":
+        statusText.textContent = "⏳ Finalizing audio...";
+        break;
+      case "transcribing":
+        statusText.textContent = "⏳ Transcribing speech...";
+        break;
+      case "detecting_language":
+        statusText.textContent = "⏳ Detecting spoken language...";
+        break;
+      case "understanding":
+        statusText.textContent = "⏳ Analyzing meaning and intent...";
+        break;
+      case "detecting_context":
+        statusText.textContent = "⏳ Detecting communication context...";
+        break;
+      case "transforming":
+        statusText.textContent = "⏳ AI Transforming message...";
+        break;
+      default:
+        statusText.textContent = "⏳ Processing audio with AI...";
     }
-  );
-
-  container.appendChild(label);
-  container.appendChild(select);
-
-  const firstElement =
-    document.body.firstElementChild;
-
-  if (firstElement) {
-    firstElement.prepend(
-      container
-    );
+  } else if (session.step === "ready") {
+    statusText.textContent = "✓ Text ready for insertion";
+  } else if (session.step === "error" || session.error) {
+    statusText.textContent = "⚠️ An error occurred";
   } else {
-    document.body.prepend(
-      container
-    );
-  }
-}
-
-function loadTargetLanguage() {
-  const saved =
-    localStorage.getItem(
-      "voxflow-target-language"
-    );
-
-  if (
-    saved &&
-    [
-      "Auto",
-      "English",
-      "Hindi",
-      "German",
-      "Portuguese",
-      "Spanish",
-      "French"
-    ].includes(saved)
-  ) {
-    targetLanguage =
-      saved;
-  }
-}
-
-// --------------------------------------------------
-// AI OUTPUT UI
-// --------------------------------------------------
-
-function ensureFinalTextUI() {
-  if (
-    document.getElementById(
-      "voxflow-final-text-container"
-    )
-  ) {
-    return;
+    statusText.textContent = "Extension ready";
   }
 
-  const container =
-    document.createElement("div");
+  // Buttons State
+  if (session.mode === "recording_mic") {
+    recordButton.classList.add("recording");
+    recordIcon.textContent = "⏹";
+    recordText.textContent = "Stop speaking";
+    recordButton.disabled = false;
 
-  container.id =
-    "voxflow-final-text-container";
+    tabAudioButton.disabled = true;
+    tabAudioButton.classList.remove("recording");
+    tabAudioIcon.textContent = "🔊";
+    tabAudioText.textContent = "Listen to Tab";
+  } else if (session.mode === "capturing_tab") {
+    tabAudioButton.classList.add("recording");
+    tabAudioIcon.textContent = "⏹";
+    tabAudioText.textContent = "Stop Tab Audio";
+    tabAudioButton.disabled = false;
 
-  container.style.marginTop =
-    "12px";
+    recordButton.disabled = true;
+    recordButton.classList.remove("recording");
+    recordIcon.textContent = "🎙";
+    recordText.textContent = "Start speaking";
+  } else if (session.mode === "processing") {
+    recordButton.disabled = true;
+    recordButton.classList.remove("recording");
+    recordIcon.textContent = "🎙";
+    recordText.textContent = "Start speaking";
 
-  const title =
-    document.createElement("div");
-
-  title.textContent =
-    "AI Output";
-
-  title.style.fontWeight =
-    "600";
-
-  title.style.fontSize =
-    "12px";
-
-  title.style.marginBottom =
-    "6px";
-
-  const output =
-    document.createElement("div");
-
-  output.id =
-    "voxflow-final-text";
-
-  output.style.padding =
-    "10px";
-
-  output.style.borderRadius =
-    "8px";
-
-  output.style.background =
-    "#8f5d5dff";
-
-  output.style.whiteSpace =
-    "pre-wrap";
-
-  output.style.wordBreak =
-    "break-word";
-
-  output.textContent =
-    "No output yet.";
-
-  container.appendChild(
-    title
-  );
-
-  container.appendChild(
-    output
-  );
-
-  const parent =
-    transcriptContainer.parentElement;
-
-  if (parent) {
-    parent.appendChild(
-      container
-    );
+    tabAudioButton.disabled = true;
+    tabAudioButton.classList.remove("recording");
+    tabAudioIcon.textContent = "🔊";
+    tabAudioText.textContent = "Listen to Tab";
   } else {
-    document.body.appendChild(
-      container
-    );
+    // Idle
+    recordButton.disabled = false;
+    recordButton.classList.remove("recording");
+    recordIcon.textContent = "🎙";
+    recordText.textContent = "Start speaking";
+
+    tabAudioButton.disabled = false;
+    tabAudioButton.classList.remove("recording");
+    tabAudioIcon.textContent = "🔊";
+    tabAudioText.textContent = "Listen to Tab";
+  }
+
+  // Message area
+  if (session.error) {
+    messageEl.textContent = session.error;
+    messageEl.classList.add("error");
+  } else if (session.mode === "recording_mic") {
+    messageEl.textContent = "Listening to microphone. You may close popup anytime.";
+    messageEl.classList.remove("error");
+  } else if (session.mode === "capturing_tab") {
+    messageEl.textContent = "Recording tab audio. Tab playback continues normally.";
+    messageEl.classList.remove("error");
+  } else if (session.mode === "processing") {
+    messageEl.textContent = "AI pipeline running in background...";
+    messageEl.classList.remove("error");
+  } else if (session.step === "ready") {
+    messageEl.textContent = `Completed ✓ (${session.targetLanguage})`;
+    messageEl.classList.remove("error");
+  } else {
+    messageEl.textContent = "";
+    messageEl.classList.remove("error");
+  }
+
+  // Transcript Preview
+  if (session.transcript && session.transcript.trim()) {
+    transcriptEl.textContent = session.transcript;
+    transcriptContainer.classList.remove("hidden");
+  } else {
+    transcriptContainer.classList.add("hidden");
+  }
+
+  // Final Output
+  if (session.finalText && session.finalText.trim()) {
+    finalTextEl.textContent = session.finalText;
+    outputLangBadge.textContent = session.targetLanguage || "Auto";
+    finalTextContainer.classList.remove("hidden");
+  } else {
+    finalTextContainer.classList.add("hidden");
   }
 }
 
-function showFinalText(
-  text: string
-) {
-  ensureFinalTextUI();
-
-  const output =
-    document.getElementById(
-      "voxflow-final-text"
-    );
-
-  if (output) {
-    output.textContent =
-      text;
-  }
-}
-
 // --------------------------------------------------
-// TRANSCRIPT UI
+// SESSION SYNC & LISTENERS
 // --------------------------------------------------
 
-function showTranscript(
-  transcript: string
-) {
-  transcriptElement.textContent =
-    transcript;
-
-  transcriptContainer.classList.remove(
-    "hidden"
-  );
-}
-
-// --------------------------------------------------
-// TAB CAPTURE STATE
-// --------------------------------------------------
-
-async function syncTabCaptureState() {
+async function syncState() {
   try {
-    const response =
-      await chrome.runtime.sendMessage({
-        type: "GET_TAB_CAPTURE_STATE"
-      });
+    const response = (await chrome.runtime.sendMessage({
+      type: "GET_SESSION_STATE"
+    })) as { session?: SessionState } | undefined;
 
-    if (!response) {
+    if (response?.session) {
+      renderUI(response.session);
       return;
     }
 
-    isTabCapturing =
-      Boolean(
-        response.isCapturing
-      );
+    // Storage fallback
+    const stored = await chrome.storage.local.get([
+      STORAGE_KEY_SESSION,
+      STORAGE_KEY_TARGET_LANG
+    ]);
 
-    isTabProcessing =
-      Boolean(
-        response.isProcessing
-      );
-
-    if (
-      response.targetLanguage
-    ) {
-      targetLanguage =
-        response.targetLanguage;
-
-      localStorage.setItem(
-        "voxflow-target-language",
-        targetLanguage
-      );
-
-      const select =
-        document.getElementById(
-          "voxflow-target-language"
-        ) as HTMLSelectElement | null;
-
-      if (select) {
-        select.value =
-          targetLanguage;
-      }
+    if (stored[STORAGE_KEY_SESSION]) {
+      renderUI(stored[STORAGE_KEY_SESSION] as SessionState);
     }
-
-    updateTabButton();
-  } catch (error) {
-    console.error(
-      "VoxFlow state sync error:",
-      error
-    );
+  } catch (err) {
+    console.error("VoxFlow state query error:", err);
   }
 }
 
-function updateTabButton() {
-  if (!tabAudioButton) {
-    return;
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes[STORAGE_KEY_SESSION]?.newValue) {
+    renderUI(changes[STORAGE_KEY_SESSION].newValue as SessionState);
   }
-
-  if (isTabProcessing) {
-    tabAudioButton.disabled =
-      true;
-
-    tabAudioButton.textContent =
-      "⏳ Processing...";
-
-    return;
-  }
-
-  if (isTabCapturing) {
-    tabAudioButton.disabled =
-      false;
-
-    tabAudioButton.textContent =
-      "⏹ Stop Tab Audio";
-
-    return;
-  }
-
-  tabAudioButton.disabled =
-    false;
-
-  tabAudioButton.textContent =
-    "🔊 Listen to Tab";
-}
+});
 
 // --------------------------------------------------
-// LOAD SAVED RESULT
+// LANGUAGE SELECTOR CHANGE
 // --------------------------------------------------
 
-async function loadLatestTabResult() {
+languageSelect.addEventListener("change", async () => {
+  const chosenLanguage = languageSelect.value;
+  if (!isValidTargetLanguage(chosenLanguage)) return;
+
   try {
-    const response =
-      (await chrome.runtime.sendMessage({
-        type: "GET_LATEST_TAB_RESULT"
-      })) as LatestTabResultResponse;
-
-    if (!response) {
-      return;
-    }
-
-    isTabCapturing =
-      Boolean(
-        response.isCapturing
-      );
-
-    isTabProcessing =
-      Boolean(
-        response.isProcessing
-      );
-
-    if (
-      response.targetLanguage
-    ) {
-      targetLanguage =
-        response.targetLanguage;
-
-      localStorage.setItem(
-        "voxflow-target-language",
-        targetLanguage
-      );
-
-      const select =
-        document.getElementById(
-          "voxflow-target-language"
-        ) as HTMLSelectElement | null;
-
-      if (select) {
-        select.value =
-          targetLanguage;
-      }
-    }
-
-    if (response.result) {
-      console.log(
-        "VoxFlow: loaded saved AI result:",
-        response.result
-      );
-
-      showTranscript(
-        response.result.transcript
-      );
-
-      showFinalText(
-        response.result
-          .transformation
-          .finalText
-      );
-
-      message.textContent =
-        `Done ✓ → ${response.result.transformation.targetLanguage}`;
-    }
-
-    if (response.error) {
-      message.textContent =
-        response.error;
-    }
-
-    updateTabButton();
-  } catch (error) {
-    console.error(
-      "VoxFlow: failed to load latest result:",
-      error
-    );
+    await chrome.runtime.sendMessage({
+      type: "SET_TARGET_LANGUAGE",
+      targetLanguage: chosenLanguage
+    });
+    messageEl.textContent = `Target language set to ${chosenLanguage}`;
+    messageEl.classList.remove("error");
+  } catch (err) {
+    console.error("Set language error:", err);
   }
-}
+});
 
 // --------------------------------------------------
-// TAB AUDIO BUTTON
+// MICROPHONE RECORDING CONTROLS
 // --------------------------------------------------
 
-if (tabAudioButton) {
-  tabAudioButton.addEventListener(
-    "click",
-    async () => {
-      if (
-        isProcessing ||
-        isRecording ||
-        isTabProcessing
-      ) {
-        return;
-      }
-
-      // --------------------------------------------
-      // STOP
-      // --------------------------------------------
-
-      if (isTabCapturing) {
-        tabAudioButton.disabled =
-          true;
-
-        message.textContent =
-          "Stopping tab capture...";
-
-        try {
-          const response =
-            await chrome.runtime.sendMessage({
-              type: "STOP_TAB_CAPTURE"
-            });
-
-          if (
-            !response?.success
-          ) {
-            throw new Error(
-              response?.reason ||
-                "Failed to stop tab capture."
-            );
-          }
-
-          isTabCapturing =
-            false;
-
-          /*
-           * IMPORTANT:
-           *
-           * We do NOT consider the operation
-           * completely finished yet.
-           *
-           * Background is now processing the
-           * captured audio.
-           */
-
-          isTabProcessing =
-            true;
-
-          message.textContent =
-            "Audio captured. Processing...";
-
-          updateTabButton();
-        } catch (error) {
-          console.error(
-            "Stop tab capture error:",
-            error
-          );
-
-          isTabCapturing =
-            false;
-
-          isTabProcessing =
-            false;
-
-          updateTabButton();
-
-          message.textContent =
-            error instanceof Error
-              ? error.message
-              : "Error stopping tab capture.";
-        }
-
-        return;
-      }
-
-      // --------------------------------------------
-      // START
-      // --------------------------------------------
-
-      tabAudioButton.disabled =
-        true;
-
-      recordButton.disabled =
-        true;
-
-      message.textContent =
-        "Starting tab capture...";
-
-      try {
-        const response =
-          await chrome.runtime.sendMessage({
-            type: "START_TAB_CAPTURE",
-            targetLanguage
-          });
-
-        if (
-          !response?.success
-        ) {
-          throw new Error(
-            response?.reason ||
-              "Failed to start tab capture."
-          );
-        }
-
-        isTabCapturing =
-          true;
-
-        isTabProcessing =
-          false;
-
-        message.textContent =
-          `Listening to tab → ${targetLanguage}`;
-
-        updateTabButton();
-      } catch (error) {
-        console.error(
-          "Start tab capture error:",
-          error
-        );
-
-        isTabCapturing =
-          false;
-
-        isTabProcessing =
-          false;
-
-        recordButton.disabled =
-          false;
-
-        updateTabButton();
-
-        message.textContent =
-          error instanceof Error
-            ? error.message
-            : "Error starting tab capture.";
-      }
-    }
-  );
-}
-
-// --------------------------------------------------
-// REAL-TIME PIPELINE RESULTS
-// --------------------------------------------------
-
-chrome.runtime.onMessage.addListener(
-  (message) => {
-    if (
-      message.type ===
-      "TAB_PIPELINE_COMPLETE"
-    ) {
-      const result =
-        message.result as TabPipelineResult;
-
-      isTabCapturing =
-        false;
-
-      isTabProcessing =
-        false;
-
-      showTranscript(
-        result.transcript
-      );
-
-      showFinalText(
-        result.transformation
-          .finalText
-      );
-
-      messageElement(
-        `Done ✓ → ${result.transformation.targetLanguage}`
-      );
-
-      updateTabButton();
-
-      recordButton.disabled =
-        false;
-
-      return;
-    }
-
-    if (
-      message.type ===
-      "TAB_PIPELINE_ERROR"
-    ) {
-      isTabCapturing =
-        false;
-
-      isTabProcessing =
-        false;
-
-      messageElement(
-        message.error ||
-          "VoxFlow pipeline failed."
-      );
-
-      updateTabButton();
-
-      recordButton.disabled =
-        false;
-    }
-  }
-);
-
-function messageElement(
-  text: string
-) {
-  message.textContent =
-    text;
-}
-
-// --------------------------------------------------
-// MICROPHONE BUTTON
-// --------------------------------------------------
-
-recordButton.addEventListener(
-  "click",
-  async () => {
-    if (
-      isProcessing ||
-      isTabCapturing ||
-      isTabProcessing
-    ) {
-      return;
-    }
-
-    if (isRecording) {
-      await stopRecording();
-
-      return;
-    }
-
-    await startRecording();
-  }
-);
-
-function resetRecordButton() {
-  recordButton.disabled =
-    false;
-
-  recordButton.classList.remove(
-    "recording"
-  );
-
-  recordIcon.textContent =
-    "🎙";
-
-  recordText.textContent =
-    "Start speaking";
-
-  if (
-    tabAudioButton &&
-    !isTabCapturing &&
-    !isTabProcessing
-  ) {
-    tabAudioButton.disabled =
-      false;
-  }
-}
-
-async function startRecording() {
-  try {
-    message.textContent =
-      "Requesting microphone...";
-
-    recordButton.disabled =
-      true;
-
-    if (tabAudioButton) {
-      tabAudioButton.disabled =
-        true;
-    }
-
+recordButton.addEventListener("click", async () => {
+  if (currentSession.mode === "recording_mic") {
+    // STOP
+    recordButton.disabled = true;
+    messageEl.textContent = "Stopping recording...";
     try {
-      if (
-        navigator.permissions?.query
-      ) {
-        const permission =
-          await navigator.permissions.query({
-            name:
-              "microphone" as PermissionName
-          });
+      const res = (await chrome.runtime.sendMessage({
+        type: "STOP_MIC_RECORDING"
+      })) as { success: boolean; reason?: string } | undefined;
 
-        if (
-          permission.state ===
-          "denied"
-        ) {
-          throw new Error(
-            "Microphone permission was denied."
-          );
-        }
+      if (!res?.success) {
+        throw new Error(res?.reason || "Could not stop microphone.");
       }
-    } catch {
-      // Continue if permission API
-      // is unavailable.
+    } catch (err) {
+      messageEl.textContent = err instanceof Error ? err.message : "Stop failed";
+      messageEl.classList.add("error");
+      recordButton.disabled = false;
     }
-
-    const setupResponse =
-      await chrome.runtime.sendMessage({
-        type: "SETUP_OFFSCREEN"
-      });
-
-    if (
-      setupResponse &&
-      setupResponse.success === false
-    ) {
-      throw new Error(
-        setupResponse.reason ||
-          "Failed to initialize audio recorder."
-      );
-    }
-
-    const startResponse =
-      await chrome.runtime.sendMessage({
-        target: "offscreen",
-        type: "START_RECORDING"
-      });
-
-    if (
-      !startResponse?.success
-    ) {
-      throw new Error(
-        startResponse?.error ||
-          "Microphone could not be accessed."
-      );
-    }
-
-    isRecording =
-      true;
-
-    isProcessing =
-      false;
-
-    recordButton.disabled =
-      false;
-
-    recordButton.classList.add(
-      "recording"
-    );
-
-    recordIcon.textContent =
-      "■";
-
-    recordText.textContent =
-      "Stop speaking";
-
-    message.textContent =
-      "Listening...";
-  } catch (error) {
-    console.error(
-      "VoxFlow microphone error:",
-      error
-    );
-
-    message.textContent =
-      error instanceof Error
-        ? error.message
-        : "Microphone could not be accessed.";
-
-    isRecording =
-      false;
-
-    isProcessing =
-      false;
-
-    resetRecordButton();
-  }
-}
-
-async function stopRecording() {
-  if (isProcessing) {
     return;
   }
 
-  isRecording =
-    false;
-
-  isProcessing =
-    true;
-
-  recordButton.disabled =
-    true;
-
-  if (tabAudioButton) {
-    tabAudioButton.disabled =
-      true;
-  }
-
-  recordIcon.textContent =
-    "⏳";
-
-  recordText.textContent =
-    "Processing...";
-
-  message.textContent =
-    "Transcribing...";
+  // START
+  recordButton.disabled = true;
+  messageEl.textContent = "Starting microphone...";
 
   try {
-    const stopResponse =
-      await chrome.runtime.sendMessage({
-        target: "offscreen",
-        type: "STOP_RECORDING"
-      });
+    const res = (await chrome.runtime.sendMessage({
+      type: "START_MIC_RECORDING",
+      targetLanguage: languageSelect.value
+    })) as { success: boolean; reason?: string } | undefined;
 
-    if (
-      !stopResponse?.success ||
-      !stopResponse.audioDataUrl
-    ) {
-      throw new Error(
-        stopResponse?.error ||
-          "No audio was recorded."
-      );
+    if (!res?.success) {
+      const reason = res?.reason || "";
+      if (
+        reason.toLowerCase().includes("permission") ||
+        reason.toLowerCase().includes("notallowederror") ||
+        reason.toLowerCase().includes("denied")
+      ) {
+        await chrome.tabs.create({ url: "permission.html" });
+        throw new Error("Please grant microphone permission in the opened tab.");
+      }
+      throw new Error(reason || "Failed to start microphone recording.");
     }
-
-    const response =
-      await fetch(
-        stopResponse.audioDataUrl
-      );
-
-    const audioBlob =
-      await response.blob();
-
-    if (
-      audioBlob.size === 0
-    ) {
-      throw new Error(
-        "No audio was recorded."
-      );
-    }
-
-    // --------------------------------------------
-    // TRANSCRIBE
-    // --------------------------------------------
-
-    const formData =
-      new FormData();
-
-    formData.append(
-      "file",
-      audioBlob,
-      "voxflow.webm"
-    );
-
-    const transcribeResponse =
-      await fetch(
-        `${API_URL}/transcribe`,
-        {
-          method: "POST",
-          body: formData
-        }
-      );
-
-    if (
-      !transcribeResponse.ok
-    ) {
-      const error =
-        await transcribeResponse
-          .json()
-          .catch(
-            () => null
-          );
-
-      throw new Error(
-        error?.error ||
-          `Transcription failed (${transcribeResponse.status})`
-      );
-    }
-
-    const transcribeResult =
-      (await transcribeResponse.json()) as
-        TranscriptionResponse;
-
-    if (
-      !transcribeResult.text?.trim()
-    ) {
-      throw new Error(
-        "No speech was detected."
-      );
-    }
-
-    const transcript =
-      transcribeResult.text.trim();
-
-    showTranscript(
-      transcript
-    );
-
-    // --------------------------------------------
-    // TRANSFORM
-    // --------------------------------------------
-
-    message.textContent =
-      "Transforming...";
-
-    const transformResponse =
-      await fetch(
-        `${API_URL}/transform`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-          body: JSON.stringify({
-            transcript,
-
-            targetLanguage:
-              targetLanguage ===
-              "Auto"
-                ? undefined
-                : activeTargetLanguage
-          })
-        }
-      );
-
-    if (
-      !transformResponse.ok
-    ) {
-      const error =
-        await transformResponse
-          .json()
-          .catch(
-            () => null
-          );
-
-      throw new Error(
-        error?.error ||
-          `Transformation failed (${transformResponse.status})`
-      );
-    }
-
-    const transformResult =
-      (await transformResponse.json()) as
-        TransformResponse;
-
-    if (
-      !transformResult.finalText
-    ) {
-      throw new Error(
-        "VoxFlow returned empty final text."
-      );
-    }
-
-    showFinalText(
-      transformResult.finalText
-    );
-
-    // --------------------------------------------
-    // INSERT
-    // --------------------------------------------
-
-    message.textContent =
-      "Inserting...";
-
-    const insertResponse =
-      (await chrome.runtime.sendMessage({
-        type: "INSERT_TEXT",
-        text:
-          transformResult.finalText
-      })) as InsertResponse;
-
-    if (
-      !insertResponse?.success
-    ) {
-      message.textContent =
-        insertResponse?.reason ||
-        "Unable to insert text.";
-
-      return;
-    }
-
-    message.textContent =
-      "Text inserted ✓";
-  } catch (error) {
-    console.error(
-      "VoxFlow automatic pipeline error:",
-      error
-    );
-
-    message.textContent =
-      error instanceof Error
-        ? error.message
-        : "Something went wrong.";
-  } finally {
-    isRecording =
-      false;
-
-    isProcessing =
-      false;
-
-    resetRecordButton();
+  } catch (err) {
+    messageEl.textContent = err instanceof Error ? err.message : "Start failed";
+    messageEl.classList.add("error");
+    recordButton.disabled = false;
   }
-}
+});
+
+// --------------------------------------------------
+// TAB AUDIO CAPTURE CONTROLS
+// --------------------------------------------------
+
+tabAudioButton.addEventListener("click", async () => {
+  if (currentSession.mode === "capturing_tab") {
+    // STOP
+    tabAudioButton.disabled = true;
+    messageEl.textContent = "Stopping tab audio capture...";
+    try {
+      const res = (await chrome.runtime.sendMessage({
+        type: "STOP_TAB_CAPTURE"
+      })) as { success: boolean; reason?: string } | undefined;
+
+      if (!res?.success) {
+        throw new Error(res?.reason || "Could not stop tab capture.");
+      }
+    } catch (err) {
+      messageEl.textContent = err instanceof Error ? err.message : "Stop failed";
+      messageEl.classList.add("error");
+      tabAudioButton.disabled = false;
+    }
+    return;
+  }
+
+  // START
+  tabAudioButton.disabled = true;
+  messageEl.textContent = "Starting tab audio capture...";
+
+  try {
+    const res = (await chrome.runtime.sendMessage({
+      type: "START_TAB_CAPTURE",
+      targetLanguage: languageSelect.value
+    })) as { success: boolean; reason?: string } | undefined;
+
+    if (!res?.success) {
+      throw new Error(res?.reason || "Failed to start tab audio capture.");
+    }
+  } catch (err) {
+    messageEl.textContent = err instanceof Error ? err.message : "Start failed";
+    messageEl.classList.add("error");
+    tabAudioButton.disabled = false;
+  }
+});
+
+// --------------------------------------------------
+// INSERT TEXT ACTION
+// --------------------------------------------------
+
+insertButton.addEventListener("click", async () => {
+  if (!currentSession.finalText) return;
+
+  insertButton.disabled = true;
+  messageEl.textContent = "Inserting text into active field...";
+  messageEl.classList.remove("error");
+
+  try {
+    const res = (await chrome.runtime.sendMessage({
+      type: "INSERT_TEXT",
+      text: currentSession.finalText
+    })) as { success: boolean; reason?: string } | undefined;
+
+    if (res?.success) {
+      messageEl.textContent = "Text inserted successfully ✓";
+    } else {
+      messageEl.textContent =
+        res?.reason || "Could not insert text. Ensure a text field is focused.";
+      messageEl.classList.add("error");
+    }
+  } catch (err) {
+    messageEl.textContent = err instanceof Error ? err.message : "Insertion error";
+    messageEl.classList.add("error");
+  } finally {
+    insertButton.disabled = false;
+  }
+});
+
+// --------------------------------------------------
+// COPY ACTION
+// --------------------------------------------------
+
+copyButton.addEventListener("click", async () => {
+  if (!currentSession.finalText) return;
+
+  try {
+    await navigator.clipboard.writeText(currentSession.finalText);
+    const originalText = copyButton.textContent;
+    copyButton.textContent = "✓ Copied";
+    setTimeout(() => {
+      copyButton.textContent = originalText;
+    }, 1500);
+  } catch (err) {
+    console.error("Clipboard copy error:", err);
+  }
+});
+
+// --------------------------------------------------
+// RESET ACTION
+// --------------------------------------------------
+
+resetButton.addEventListener("click", async () => {
+  try {
+    await chrome.runtime.sendMessage({ type: "RESET_SESSION" });
+  } catch (err) {
+    console.error("Reset error:", err);
+  }
+});
 
 // --------------------------------------------------
 // INITIALIZATION
 // --------------------------------------------------
 
-loadTargetLanguage();
-
-createTargetLanguageUI();
-
-ensureFinalTextUI();
-
-void syncTabCaptureState();
-
-void loadLatestTabResult();
+populateLanguageSelector();
+void syncState();

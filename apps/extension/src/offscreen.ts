@@ -1,58 +1,107 @@
-console.log(
-  "VoxFlow: OFFSCREEN SCRIPT LOADED."
-);
+console.log("VoxFlow: Offscreen audio document loaded.");
 
-interface StartTabCaptureMessage {
-  type: "START_TAB_CAPTURE";
+interface OffscreenStartTabMessage {
+  target: "offscreen";
+  type: "OFFSCREEN_START_TAB";
   streamId: string;
+  sessionId: string;
 }
 
-interface StopTabCaptureMessage {
-  type: "STOP_TAB_CAPTURE";
+interface OffscreenStopTabMessage {
+  target: "offscreen";
+  type: "OFFSCREEN_STOP_TAB";
 }
 
-type OffscreenMessage =
-  | StartTabCaptureMessage
-  | StopTabCaptureMessage;
+interface OffscreenStartMicMessage {
+  target: "offscreen";
+  type: "OFFSCREEN_START_MIC";
+  sessionId: string;
+}
 
+interface OffscreenStopMicMessage {
+  target: "offscreen";
+  type: "OFFSCREEN_STOP_MIC";
+}
+
+interface OffscreenGetStateMessage {
+  target: "offscreen";
+  type: "OFFSCREEN_GET_STATE";
+}
+
+type OffscreenCommand =
+  | OffscreenStartTabMessage
+  | OffscreenStopTabMessage
+  | OffscreenStartMicMessage
+  | OffscreenStopMicMessage
+  | OffscreenGetStateMessage;
+
+type CaptureMode = "none" | "tab" | "mic";
+
+let captureMode: CaptureMode = "none";
+let currentSessionId = "";
 let mediaRecorder: MediaRecorder | null = null;
 let mediaStream: MediaStream | null = null;
 let audioContext: AudioContext | null = null;
 
 let audioChunks: Blob[] = [];
-
-let isCapturing = false;
 let isFinishing = false;
 
+// --------------------------------------------------
+// MESSAGE DISPATCHER (Strictly filters for offscreen)
+// --------------------------------------------------
+
 chrome.runtime.onMessage.addListener(
-  (
-    message: OffscreenMessage,
-    _sender,
-    sendResponse
-  ) => {
-    if (
-      message.type === "START_TAB_CAPTURE"
-    ) {
-      void startTabCapture(
-        message.streamId
-      );
+  (message: unknown, _sender, sendResponse) => {
+    if (!message || typeof message !== "object") {
+      return false;
+    }
 
-      sendResponse({
-        success: true
+    const cmd = message as Partial<OffscreenCommand>;
+    if (cmd.target !== "offscreen") {
+      // Ignore messages intended for background or popup
+      return false;
+    }
+
+    // 1. Tab Capture Start
+    if (cmd.type === "OFFSCREEN_START_TAB" && cmd.streamId) {
+      const sessionId = cmd.sessionId || Date.now().toString();
+      void startTabCapture(cmd.streamId, sessionId).then((res) => {
+        sendResponse(res);
       });
-
       return true;
     }
 
-    if (
-      message.type === "STOP_TAB_CAPTURE"
-    ) {
-      stopTabCapture();
+    // 2. Tab Capture Stop
+    if (cmd.type === "OFFSCREEN_STOP_TAB") {
+      stopCapture();
+      sendResponse({ success: true });
+      return true;
+    }
 
-      sendResponse({
-        success: true
+    // 3. Microphone Start
+    if (cmd.type === "OFFSCREEN_START_MIC") {
+      const sessionId = cmd.sessionId || Date.now().toString();
+      void startMicRecording(sessionId).then((res) => {
+        sendResponse(res);
       });
+      return true;
+    }
 
+    // 4. Microphone Stop
+    if (cmd.type === "OFFSCREEN_STOP_MIC") {
+      stopCapture();
+      sendResponse({ success: true });
+      return true;
+    }
+
+    // 5. Query State
+    if (cmd.type === "OFFSCREEN_GET_STATE") {
+      sendResponse({
+        isCapturing: captureMode !== "none",
+        captureMode,
+        sessionId: currentSessionId,
+        isFinishing
+      });
       return true;
     }
 
@@ -60,363 +109,277 @@ chrome.runtime.onMessage.addListener(
   }
 );
 
-async function startTabCapture(
-  streamId: string
-) {
-  if (isCapturing) {
-    console.warn(
-      "VoxFlow: tab capture already active."
-    );
+// --------------------------------------------------
+// TAB AUDIO CAPTURE
+// --------------------------------------------------
 
-    return;
+async function startTabCapture(
+  streamId: string,
+  sessionId: string
+): Promise<{ success: boolean; reason?: string }> {
+  if (captureMode !== "none") {
+    console.warn("VoxFlow: capture already active in mode:", captureMode);
+    return {
+      success: false,
+      reason: `Another recording is already active (${captureMode}).`
+    };
   }
 
   try {
-    console.log(
-      "VoxFlow: starting tab capture..."
-    );
-
+    console.log("VoxFlow: initializing tab audio capture, streamId:", streamId);
     audioChunks = [];
     isFinishing = false;
+    currentSessionId = sessionId;
 
-    mediaStream =
-      await navigator.mediaDevices.getUserMedia(
-        {
-          audio: {
-            mandatory: {
-              chromeMediaSource: "tab",
-              chromeMediaSourceId:
-                streamId
-            }
-          },
-          video: false
-        } as MediaStreamConstraints
-      );
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        mandatory: {
+          chromeMediaSource: "tab",
+          chromeMediaSourceId: streamId
+        }
+      },
+      video: false
+    } as MediaStreamConstraints);
 
-    const tracks =
-      mediaStream.getAudioTracks();
-
-    console.log(
-      "VoxFlow: audio tracks:",
-      tracks.length
-    );
-
+    const tracks = mediaStream.getAudioTracks();
     if (tracks.length === 0) {
-      throw new Error(
-        "No audio track captured."
-      );
+      throw new Error("No audio tracks found in captured tab.");
     }
 
-    audioContext =
-      new AudioContext();
-
-    if (
-      audioContext.state ===
-      "suspended"
-    ) {
+    audioContext = new AudioContext();
+    if (audioContext.state === "suspended") {
       await audioContext.resume();
     }
 
-    const source =
-      audioContext.createMediaStreamSource(
-        mediaStream
-      );
+    const source = audioContext.createMediaStreamSource(mediaStream);
+    const recordingDestination = audioContext.createMediaStreamDestination();
 
-    const recordingDestination =
-      audioContext.createMediaStreamDestination();
+    // Route 1: Keep tab audio playing through user speakers
+    source.connect(audioContext.destination);
+    // Route 2: Feed same stream to MediaRecorder
+    source.connect(recordingDestination);
 
-    /*
-     * Keep YouTube/browser audio playing.
-     */
-    source.connect(
-      audioContext.destination
-    );
-
-    /*
-     * Send the same audio to MediaRecorder.
-     */
-    source.connect(
-      recordingDestination
-    );
-
-    const mimeType =
-      getSupportedMimeType();
-
+    const mimeType = getSupportedMimeType();
     mediaRecorder = mimeType
-      ? new MediaRecorder(
-          recordingDestination.stream,
-          {
-            mimeType
-          }
-        )
-      : new MediaRecorder(
-          recordingDestination.stream
-        );
+      ? new MediaRecorder(recordingDestination.stream, { mimeType })
+      : new MediaRecorder(recordingDestination.stream);
 
-    mediaRecorder.ondataavailable =
-      (event) => {
-        if (event.data.size > 0) {
-          audioChunks.push(
-            event.data
-          );
-
-          console.log(
-            "VoxFlow: audio chunk:",
-            event.data.size
-          );
-        }
-      };
-
-    mediaRecorder.onerror =
-      (event) => {
-        console.error(
-          "VoxFlow: MediaRecorder error:",
-          event
-        );
-
-        if (!isFinishing) {
-          chrome.runtime.sendMessage({
-            type: "TAB_CAPTURE_ERROR",
-            error:
-              "Tab audio recorder encountered an error."
-          });
-        }
-
-        cleanup();
-      };
-
-    mediaRecorder.onstop =
-      () => {
-        if (isFinishing) {
-          return;
-        }
-
-        void finishRecording();
-      };
+    setupMediaRecorderListeners("tab");
 
     mediaRecorder.start(250);
+    captureMode = "tab";
 
-    isCapturing = true;
-
-    console.log(
-      "VoxFlow: tab recording started."
-    );
-
-    chrome.runtime.sendMessage({
-      type: "TAB_CAPTURE_STARTED"
-    });
+    console.log("VoxFlow: tab audio recording successfully started.");
+    return { success: true };
   } catch (error) {
-    console.error(
-      "VoxFlow: tab capture failed:",
-      error
-    );
-
+    console.error("VoxFlow: start tab capture failed:", error);
     cleanup();
-
-    chrome.runtime.sendMessage({
-      type: "TAB_CAPTURE_ERROR",
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unable to capture tab audio."
-    });
+    const reason =
+      error instanceof Error ? error.message : "Unable to capture tab audio.";
+    return { success: false, reason };
   }
 }
 
-function stopTabCapture() {
-  if (!isCapturing) {
-    console.log(
-      "VoxFlow: no active capture."
-    );
+// --------------------------------------------------
+// MICROPHONE RECORDING
+// --------------------------------------------------
 
-    cleanup();
-
-    return;
+async function startMicRecording(
+  sessionId: string
+): Promise<{ success: boolean; reason?: string }> {
+  if (captureMode !== "none") {
+    console.warn("VoxFlow: capture already active in mode:", captureMode);
+    return {
+      success: false,
+      reason: `Another recording is already active (${captureMode}).`
+    };
   }
-
-  if (isFinishing) {
-    return;
-  }
-
-  console.log(
-    "VoxFlow: stopping tab capture..."
-  );
-
-  if (
-    mediaRecorder &&
-    mediaRecorder.state !== "inactive"
-  ) {
-    mediaRecorder.stop();
-  } else {
-    void finishRecording();
-  }
-}
-
-async function finishRecording() {
-  if (isFinishing) {
-    return;
-  }
-
-  isFinishing = true;
 
   try {
-    console.log(
-      "VoxFlow: finishing recording..."
-    );
+    console.log("VoxFlow: initializing microphone recording in offscreen...");
+    audioChunks = [];
+    isFinishing = false;
+    currentSessionId = sessionId;
 
-    /*
-     * Wait for the final dataavailable event.
-     */
-    await new Promise<void>(
-      (resolve) => {
-        setTimeout(resolve, 150);
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
       }
-    );
+    });
 
-    console.log(
-      "VoxFlow: chunks:",
-      audioChunks.length
-    );
+    const tracks = mediaStream.getAudioTracks();
+    if (tracks.length === 0) {
+      throw new Error("No microphone audio tracks available.");
+    }
+
+    const mimeType = getSupportedMimeType();
+    mediaRecorder = mimeType
+      ? new MediaRecorder(mediaStream, { mimeType })
+      : new MediaRecorder(mediaStream);
+
+    setupMediaRecorderListeners("mic");
+
+    mediaRecorder.start(250);
+    captureMode = "mic";
+
+    console.log("VoxFlow: microphone recording successfully started.");
+    return { success: true };
+  } catch (error) {
+    console.error("VoxFlow: start mic recording failed:", error);
+    cleanup();
+    const reason =
+      error instanceof Error ? error.message : "Unable to access microphone.";
+    return { success: false, reason };
+  }
+}
+
+// --------------------------------------------------
+// MEDIARECORDER EVENT LISTENERS
+// --------------------------------------------------
+
+function setupMediaRecorderListeners(mode: "tab" | "mic") {
+  if (!mediaRecorder) return;
+
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) {
+      audioChunks.push(event.data);
+    }
+  };
+
+  mediaRecorder.onerror = (event) => {
+    console.error(`VoxFlow [${mode}] MediaRecorder error:`, event);
+    if (!isFinishing) {
+      chrome.runtime
+        .sendMessage({
+          target: "background",
+          type: "RECORDING_ERROR",
+          sessionId: currentSessionId,
+          mode,
+          error: "MediaRecorder encountered an error while capturing audio."
+        })
+        .catch(() => {});
+    }
+    cleanup();
+  };
+
+  mediaRecorder.onstop = () => {
+    if (isFinishing) return;
+    void finalizeAndSend(mode);
+  };
+}
+
+// --------------------------------------------------
+// STOP CAPTURE
+// --------------------------------------------------
+
+function stopCapture() {
+  if (captureMode === "none") {
+    console.log("VoxFlow: no active capture to stop.");
+    cleanup();
+    return;
+  }
+
+  if (isFinishing) {
+    console.log("VoxFlow: capture is already finalizing.");
+    return;
+  }
+
+  const activeMode = captureMode;
+  console.log(`VoxFlow: stopping active ${activeMode} capture...`);
+
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  } else {
+    void finalizeAndSend(activeMode);
+  }
+}
+
+// --------------------------------------------------
+// FINALIZE AUDIO & SEND TO BACKGROUND
+// --------------------------------------------------
+
+async function finalizeAndSend(mode: "tab" | "mic") {
+  if (isFinishing) return;
+  isFinishing = true;
+
+  const sessionId = currentSessionId;
+
+  try {
+    console.log(`VoxFlow: finalizing ${mode} recording (session: ${sessionId})...`);
+
+    // Allow any pending dataavailable events to flush
+    await new Promise<void>((resolve) => setTimeout(resolve, 200));
 
     if (audioChunks.length === 0) {
-      throw new Error(
-        "No tab audio was captured."
-      );
+      throw new Error(`No audio data was recorded (${mode}).`);
     }
 
     const mimeType =
-      audioChunks[0]?.type ||
-      mediaRecorder?.mimeType ||
-      "audio/webm";
+      audioChunks[0]?.type || mediaRecorder?.mimeType || "audio/webm";
 
-    const audioBlob =
-      new Blob(audioChunks, {
-        type: mimeType
-      });
-
-    console.log(
-      "VoxFlow: audio blob size:",
-      audioBlob.size
-    );
+    const audioBlob = new Blob(audioChunks, { type: mimeType });
+    console.log(`VoxFlow [${mode}] finalized blob size:`, audioBlob.size, "bytes");
 
     if (audioBlob.size === 0) {
-      throw new Error(
-        "Captured tab audio is empty."
-      );
+      throw new Error(`Finalized audio recording is empty (${mode}).`);
     }
 
-    /*
-     * Chrome extension messaging uses JSON-style
-     * serialization here, so do NOT send ArrayBuffer
-     * directly.
-     *
-     * Convert the Blob to base64 instead.
-     */
-    const base64 =
-      await blobToBase64(
-        audioBlob
-      );
+    const base64 = await blobToBase64(audioBlob);
 
-    console.log(
-      "VoxFlow: base64 audio length:",
-      base64.length
-    );
+    const completeMessageType =
+      mode === "tab" ? "TAB_CAPTURE_COMPLETE" : "MIC_RECORDING_COMPLETE";
 
-    chrome.runtime.sendMessage({
-      type: "TAB_CAPTURE_COMPLETE",
+    await chrome.runtime.sendMessage({
+      target: "background",
+      type: completeMessageType,
+      sessionId,
       audioBase64: base64,
       mimeType
     });
-  } catch (error) {
-    console.error(
-      "VoxFlow: finish capture error:",
-      error
-    );
 
-    chrome.runtime.sendMessage({
-      type: "TAB_CAPTURE_ERROR",
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unable to process tab audio."
-    });
+    console.log(`VoxFlow: sent ${completeMessageType} to background.`);
+  } catch (error) {
+    console.error(`VoxFlow: finalize ${mode} failed:`, error);
+    const errorMsg =
+      error instanceof Error ? error.message : "Failed to finalize audio recording.";
+
+    chrome.runtime
+      .sendMessage({
+        target: "background",
+        type: "RECORDING_ERROR",
+        sessionId,
+        mode,
+        error: errorMsg
+      })
+      .catch(() => {});
   } finally {
     cleanup();
   }
 }
 
-function blobToBase64(
-  blob: Blob
-): Promise<string> {
-  return new Promise(
-    (resolve, reject) => {
-      const reader =
-        new FileReader();
-
-      reader.onloadend = () => {
-        const result =
-          reader.result;
-
-        if (
-          typeof result !== "string"
-        ) {
-          reject(
-            new Error(
-              "Unable to convert audio to base64."
-            )
-          );
-
-          return;
-        }
-
-        const commaIndex =
-          result.indexOf(",");
-
-        if (commaIndex === -1) {
-          reject(
-            new Error(
-              "Invalid base64 audio data."
-            )
-          );
-
-          return;
-        }
-
-        resolve(
-          result.slice(
-            commaIndex + 1
-          )
-        );
-      };
-
-      reader.onerror = () => {
-        reject(
-          new Error(
-            "Failed to read audio blob."
-          )
-        );
-      };
-
-      reader.readAsDataURL(blob);
-    }
-  );
-}
+// --------------------------------------------------
+// CLEANUP & HELPERS
+// --------------------------------------------------
 
 function cleanup() {
-  isCapturing = false;
+  captureMode = "none";
+  isFinishing = false;
+  currentSessionId = "";
 
   if (mediaStream) {
-    mediaStream
-      .getTracks()
-      .forEach((track) => {
+    mediaStream.getTracks().forEach((track) => {
+      try {
         track.stop();
-      });
+      } catch {}
+    });
   }
 
   if (audioContext) {
-    void audioContext
-      .close()
-      .catch(() => {});
+    try {
+      void audioContext.close();
+    } catch {}
   }
 
   mediaRecorder = null;
@@ -424,25 +387,42 @@ function cleanup() {
   audioContext = null;
   audioChunks = [];
 
-  console.log(
-    "VoxFlow: tab capture cleaned up."
-  );
+  console.log("VoxFlow: offscreen resources cleaned up.");
 }
 
-function getSupportedMimeType() {
-  const types = [
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Unable to serialize audio data to base64."));
+        return;
+      }
+      const commaIndex = result.indexOf(",");
+      if (commaIndex === -1) {
+        reject(new Error("Malformed base64 audio format."));
+        return;
+      }
+      resolve(result.slice(commaIndex + 1));
+    };
+    reader.onerror = () => {
+      reject(new Error("FileReader failed to convert audio blob."));
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+function getSupportedMimeType(): string {
+  const candidates = [
     "audio/webm;codecs=opus",
     "audio/webm",
     "audio/ogg;codecs=opus"
   ];
 
-  for (const type of types) {
-    if (
-      MediaRecorder.isTypeSupported(
-        type
-      )
-    ) {
-      return type;
+  for (const mime of candidates) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(mime)) {
+      return mime;
     }
   }
 

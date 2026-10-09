@@ -2,88 +2,74 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VoxFlow</title>
-
-    <link
-      rel="stylesheet"
-      href="popup.css"
-    />
+    <link rel="stylesheet" href="popup.css" />
   </head>
-
   <body>
     <main class="popup">
-
-      <div class="brand">
-        <div class="logo">
-          V
-        </div>
-
+      <header class="brand">
+        <div class="logo">V</div>
         <div>
           <h1>VoxFlow</h1>
+          <p>Speak naturally. Type anywhere.</p>
+        </div>
+      </header>
 
-          <p>
-            Speak naturally. Type anywhere.
-          </p>
+      <div class="status" id="status-bar">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Ready</span>
+      </div>
+
+      <div class="form-group" id="language-group">
+        <label for="voxflow-target-language" class="input-label">Output Language</label>
+        <select id="voxflow-target-language" class="language-select">
+          <option value="Auto">Auto (Contextual)</option>
+        </select>
+      </div>
+
+      <div class="controls">
+        <button id="record-button" type="button" class="btn btn-mic">
+          <span id="record-icon">🎙</span>
+          <span id="record-text">Start speaking</span>
+        </button>
+
+        <button id="tab-audio-button" type="button" class="btn btn-tab">
+          <span id="tab-audio-icon">🔊</span>
+          <span id="tab-audio-text">Listen to Tab</span>
+        </button>
+      </div>
+
+      <p id="message" class="message"></p>
+
+      <div id="transcript-container" class="section-container hidden">
+        <div class="section-header">
+          <span class="section-label">Transcript</span>
+        </div>
+        <div id="transcript" class="transcript"></div>
+      </div>
+
+      <div id="final-text-container" class="section-container hidden">
+        <div class="section-header">
+          <span class="section-label">AI Output</span>
+          <span id="output-language-badge" class="badge"></span>
+        </div>
+        <div id="final-text" class="final-text"></div>
+
+        <div class="action-buttons">
+          <button id="insert-button" type="button" class="btn btn-primary">
+            ↵ Insert into Field
+          </button>
+          <button id="copy-button" type="button" class="btn btn-secondary">
+            📋 Copy
+          </button>
+          <button id="reset-button" type="button" class="btn btn-ghost">
+            ✕ Clear
+          </button>
         </div>
       </div>
-
-      <div class="status">
-        <span class="status-dot"></span>
-
-        <span>
-          Extension connected
-        </span>
-      </div>
-
-      <button
-        id="record-button"
-        type="button"
-      >
-        <span id="record-icon">🎙</span>
-
-        <span id="record-text">
-          Start speaking
-        </span>
-      </button>
-      <button
-  id="tab-audio-button"
-  type="button"
->
-  🔊 Listen to Tab
-</button>
-
-      <div
-        id="transcript-container"
-        class="transcript-container hidden"
-      >
-        <div class="section-label">
-          Transcript
-        </div>
-
-        <div
-          id="transcript"
-          class="transcript"
-        ></div>
-      </div>
-
-
-
-      <p
-        id="message"
-        class="message"
-      ></p>
-
     </main>
 
-    <script
-      type="module"
-      src="popup.js"
-    ></script>
+    <script type="module" src="popup.js"></script>
   </body>
 </html>
