@@ -1,29 +1,60 @@
 import type { FastifyPluginAsync } from "fastify";
 import { transcribeAudio } from "../services/transcription.service";
 
+const ALLOWED_MIME_TYPES = new Set([
+  "audio/webm",
+  "video/webm",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/mp3",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/m4a",
+  "audio/x-m4a",
+  "audio/mp4",
+  "application/octet-stream"
+]);
+
 const transcriptionRoute: FastifyPluginAsync = async (app) => {
   app.post("/transcribe", async (request, reply) => {
     try {
+      if (!request.isMultipart()) {
+        return reply.code(400).send({
+          error: "Request must be multipart/form-data with an audio file.",
+          code: "NOT_MULTIPART"
+        });
+      }
+
       const file = await request.file();
 
       if (!file) {
         return reply.code(400).send({
-          error: "Audio file is required."
+          error: "Audio file is required.",
+          code: "MISSING_AUDIO_FILE"
+        });
+      }
+
+      if (file.mimetype && !ALLOWED_MIME_TYPES.has(file.mimetype.toLowerCase())) {
+        return reply.code(400).send({
+          error: `Unsupported audio format: ${file.mimetype}. Supported formats include WebM, WAV, MP3, and OGG.`,
+          code: "UNSUPPORTED_AUDIO_FORMAT"
         });
       }
 
       const audioBuffer = await file.toBuffer();
 
-      if (!audioBuffer.length) {
+      if (!audioBuffer || audioBuffer.length === 0) {
         return reply.code(400).send({
-          error: "Audio file is empty."
+          error: "Audio file is empty.",
+          code: "EMPTY_AUDIO_FILE"
         });
       }
 
       app.log.info({
+        action: "transcribeAudio",
         filename: file.filename,
         mimetype: file.mimetype,
-        size: audioBuffer.length
+        sizeBytes: audioBuffer.length
       });
 
       const text = await transcribeAudio(
@@ -34,7 +65,7 @@ const transcriptionRoute: FastifyPluginAsync = async (app) => {
       return {
         text
       };
-    } catch (error) {
+    } catch (error: any) {
       app.log.error(error);
 
       const message =
@@ -43,7 +74,8 @@ const transcriptionRoute: FastifyPluginAsync = async (app) => {
           : "Unknown transcription error";
 
       return reply.code(500).send({
-        error: message
+        error: message,
+        code: "TRANSCRIPTION_ERROR"
       });
     }
   });

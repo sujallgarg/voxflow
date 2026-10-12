@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+      - CORS_ORIGIN=http://localhost,http://localhost:5173,http://localhost:80
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - AI_MODEL=${AI_MODEL:-openai/gpt-oss-120b}
+      - TRANSCRIPTION_MODEL=${TRANSCRIPTION_MODEL:-whisper-large-v3-turbo}
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:3001
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped

@@ -1,28 +1,35 @@
-import "dotenv/config";
-import Groq, { toFile } from "groq-sdk";
+import { toFile } from "groq-sdk";
+import { groq, DEFAULT_TRANSCRIPTION_MODEL } from "./groq.client";
 
-const apiKey = process.env.GROQ_API_KEY;
-
-if (!apiKey) {
-  throw new Error(
-    "GROQ_API_KEY is missing. Add it to apps/api/.env"
-  );
+export interface TranscribeOptions {
+  filename?: string;
+  language?: string;
+  prompt?: string;
 }
-
-const groq = new Groq({
-  apiKey
-});
 
 export async function transcribeAudio(
   audio: Buffer,
-  filename = "voxflow.webm"
+  filename = "voxflow.webm",
+  options?: TranscribeOptions
 ): Promise<string> {
-  const file = await toFile(audio, filename, { type: "audio/webm" });
+  if (!audio || audio.length === 0) {
+    throw new Error("Cannot transcribe empty audio buffer.");
+  }
 
-  const transcription = await groq.audio.transcriptions.create({
-    file,
-    model: "whisper-large-v3-turbo"
-  });
+  try {
+    const file = await toFile(audio, filename, { type: "audio/webm" });
 
-  return transcription.text ?? "";
+    const transcription = await groq.audio.transcriptions.create({
+      file,
+      model: DEFAULT_TRANSCRIPTION_MODEL,
+      language: options?.language,
+      prompt: options?.prompt
+    });
+
+    return (transcription.text ?? "").trim();
+  } catch (error: any) {
+    console.error("Transcription service error:", error);
+    const msg = error?.message || "Failed to transcribe audio stream.";
+    throw new Error(`Transcription failed: ${msg}`);
+  }
 }

@@ -1,6 +1,6 @@
 console.log("VoxFlow background service worker loaded.");
 
-const API_BASE_URL = "http://localhost:3001";
+import { API_BASE_URL } from "./config.js";
 const STORAGE_KEY_SESSION = "voxflow_session_state";
 const STORAGE_KEY_TARGET_LANG = "voxflow_target_language";
 
@@ -18,7 +18,7 @@ interface PipelineResult {
 
 interface SessionState {
   sessionId: string;
-  mode: "idle" | "recording_mic" | "capturing_tab" | "processing";
+  mode: "idle" | "recording_mic" | "capturing_tab" | "capturing_meeting" | "processing";
   step:
     | "idle"
     | "recording"
@@ -28,6 +28,7 @@ interface SessionState {
     | "understanding"
     | "detecting_context"
     | "transforming"
+    | "generating_notes"
     | "ready"
     | "error";
   targetLanguage: string;
@@ -37,6 +38,10 @@ interface SessionState {
   error?: string | null;
   startedAt?: number;
   completedAt?: number;
+  meetingId?: string;
+  meetingTitle?: string;
+  meetingLink?: string;
+  isPaused?: boolean;
 }
 
 let currentSession: SessionState = {
@@ -83,7 +88,8 @@ async function initSessionFromStorage(): Promise<void> {
       // If SW resumed while it thought recording was active, verify offscreen
       if (
         currentSession.mode === "recording_mic" ||
-        currentSession.mode === "capturing_tab"
+        currentSession.mode === "capturing_tab" ||
+        currentSession.mode === "capturing_meeting"
       ) {
         const offscreenAlive = await checkOffscreenState();
         if (!offscreenAlive.isCapturing) {
@@ -142,6 +148,10 @@ void ensureSessionLoaded();
 // OFFSCREEN DOCUMENT MANAGEMENT
 // --------------------------------------------------
 
+let isCreatingOffscreen = false;
+let isClosingOffscreen = false;
+let activeOffscreenSessionId: string | null = null;
+
 async function hasOffscreenDocument(): Promise<boolean> {
   try {
     if ("getContexts" in chrome.runtime && typeof chrome.runtime.getContexts === "function") {
@@ -163,33 +173,82 @@ async function hasOffscreenDocument(): Promise<boolean> {
   }
 }
 
-async function createOffscreenDocument(): Promise<void> {
+async function ensureOffscreenDocument(forSessionId: string): Promise<void> {
+  activeOffscreenSessionId = forSessionId;
+
+  // Wait if closing operation is currently finishing
+  while (isClosingOffscreen) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  // Wait if another creation is in flight
+  while (isCreatingOffscreen) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
   const exists = await hasOffscreenDocument();
   if (exists) {
     return;
   }
 
-  console.log("VoxFlow: creating offscreen audio document...");
-  await chrome.offscreen.createDocument({
-    url: "offscreen.html",
-    reasons: ["USER_MEDIA"],
-    justification: "Capture microphone and tab audio for VoxFlow speech transcription."
-  });
-
-  // Brief initialization delay
-  await new Promise<void>((resolve) => setTimeout(resolve, 150));
-  console.log("VoxFlow: offscreen document created and ready.");
+  isCreatingOffscreen = true;
+  try {
+    console.log("VoxFlow: creating offscreen document for session:", forSessionId);
+    await chrome.offscreen.createDocument({
+      url: "offscreen.html",
+      reasons: ["USER_MEDIA"],
+      justification: "Capture microphone and tab audio for VoxFlow speech transcription."
+    });
+    // Brief delay to allow offscreen script event listeners to register
+    await new Promise((r) => setTimeout(r, 150));
+    console.log("VoxFlow: offscreen document created and ready.");
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Only a single offscreen document may be created")) {
+      return;
+    }
+    throw err;
+  } finally {
+    isCreatingOffscreen = false;
+  }
 }
 
-async function closeOffscreenDocument(): Promise<void> {
+async function releaseOffscreenDocument(forSessionId?: string): Promise<void> {
+  // If called for a previous session, but a newer session has already claimed the offscreen doc, preserve it!
+  if (forSessionId && activeOffscreenSessionId && activeOffscreenSessionId !== forSessionId) {
+    console.log("VoxFlow: skipping offscreen closure; document claimed by newer session:", activeOffscreenSessionId);
+    return;
+  }
+
+  // If an active recording is in progress, do not close!
+  if (
+    currentSession.mode === "recording_mic" ||
+    currentSession.mode === "capturing_tab" ||
+    currentSession.mode === "capturing_meeting"
+  ) {
+    console.log("VoxFlow: skipping offscreen closure; active recording in progress:", currentSession.mode);
+    return;
+  }
+
+  while (isCreatingOffscreen) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  if (isClosingOffscreen) {
+    return;
+  }
+
+  isClosingOffscreen = true;
   try {
     const exists = await hasOffscreenDocument();
     if (exists) {
       await chrome.offscreen.closeDocument();
-      console.log("VoxFlow: offscreen document closed.");
+      activeOffscreenSessionId = null;
+      console.log("VoxFlow: offscreen document cleanly closed.");
     }
   } catch (error) {
     console.warn("VoxFlow offscreen cleanup notice:", error);
+  } finally {
+    isClosingOffscreen = false;
   }
 }
 
@@ -324,6 +383,11 @@ async function handleStartMicRecording(
     return;
   }
 
+  if (currentSession.mode === "capturing_meeting") {
+    sendResponse({ success: false, reason: "Meeting capture is currently active. Stop it first." });
+    return;
+  }
+
   if (currentSession.mode === "processing") {
     sendResponse({ success: false, reason: "Previous audio is still being processed." });
     return;
@@ -335,9 +399,8 @@ async function handleStartMicRecording(
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const activeTab = tabs[0] ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0];
 
-    await createOffscreenDocument();
-
     const newSessionId = Date.now().toString();
+    await ensureOffscreenDocument(newSessionId);
 
     const response = (await chrome.runtime.sendMessage({
       target: "offscreen",
@@ -370,7 +433,7 @@ async function handleStartMicRecording(
     currentSession.step = "error";
     currentSession.error = reason;
     await persistSession();
-    await closeOffscreenDocument();
+    await releaseOffscreenDocument();
     sendResponse({ success: false, reason });
   } finally {
     isStartingCapture = false;
@@ -444,6 +507,11 @@ async function handleStartTabCapture(
     return;
   }
 
+  if (currentSession.mode === "capturing_meeting") {
+    sendResponse({ success: false, reason: "Meeting capture is currently active. Stop it first." });
+    return;
+  }
+
   if (currentSession.mode === "processing") {
     sendResponse({ success: false, reason: "Previous audio is still being processed." });
     return;
@@ -479,14 +547,14 @@ async function handleStartTabCapture(
       return;
     }
 
-    await createOffscreenDocument();
+    const newSessionId = Date.now().toString();
+    await ensureOffscreenDocument(newSessionId);
 
     const streamId = await chrome.tabCapture.getMediaStreamId({
       targetTabId: activeTab.id
     });
 
     capturedTabId = activeTab.id;
-    const newSessionId = Date.now().toString();
 
     const response = (await chrome.runtime.sendMessage({
       target: "offscreen",
@@ -521,7 +589,7 @@ async function handleStartTabCapture(
     currentSession.step = "error";
     currentSession.error = reason;
     await persistSession();
-    await closeOffscreenDocument();
+    await releaseOffscreenDocument();
     sendResponse({ success: false, reason });
   } finally {
     isStartingCapture = false;
@@ -573,6 +641,321 @@ async function handleStopTabCapture(
 }
 
 // --------------------------------------------------
+// MEETING CAPTURE CONTROLS
+// --------------------------------------------------
+
+async function handleStartMeetingCapture(
+  targetLanguage: string | undefined,
+  meetingTitle: string | undefined,
+  sendResponse: (res: { success: boolean; reason?: string; sessionId?: string }) => void
+) {
+  await ensureSessionLoaded();
+
+  if (isStartingCapture) {
+    sendResponse({ success: false, reason: "Capture is already starting." });
+    return;
+  }
+
+  if (
+    currentSession.mode === "capturing_meeting" ||
+    currentSession.mode === "recording_mic" ||
+    currentSession.mode === "capturing_tab"
+  ) {
+    sendResponse({
+      success: false,
+      reason: `Another capture mode (${currentSession.mode}) is already active. Stop it first.`
+    });
+    return;
+  }
+
+  if (currentSession.mode === "processing") {
+    sendResponse({ success: false, reason: "Previous audio is still being processed." });
+    return;
+  }
+
+  isStartingCapture = true;
+
+  try {
+    let activeTab: chrome.tabs.Tab | undefined;
+    const currentTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (currentTabs[0]?.id && !currentTabs[0].url?.startsWith("chrome-extension://")) {
+      activeTab = currentTabs[0];
+    }
+    if (!activeTab) {
+      const lastFocusedTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      activeTab = lastFocusedTabs.find((t) => t.id && !t.url?.startsWith("chrome-extension://"));
+    }
+
+    if (!activeTab?.id) {
+      sendResponse({ success: false, reason: "No active browser tab found to capture meeting audio from." });
+      return;
+    }
+
+    if (
+      activeTab.url?.startsWith("chrome://") ||
+      activeTab.url?.startsWith("edge://") ||
+      activeTab.url?.startsWith("about:")
+    ) {
+      sendResponse({
+        success: false,
+        reason: "Chrome cannot capture audio from internal browser pages. Open your meeting tab (e.g. Google Meet, Zoom, Teams)."
+      });
+      return;
+    }
+
+    const newSessionId = Date.now().toString();
+    await ensureOffscreenDocument(newSessionId);
+
+    const streamId = await chrome.tabCapture.getMediaStreamId({
+      targetTabId: activeTab.id
+    });
+
+    capturedTabId = activeTab.id;
+
+    const response = (await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_START_MEETING",
+      streamId,
+      sessionId: newSessionId
+    })) as { success: boolean; reason?: string } | undefined;
+
+    if (!response?.success) {
+      throw new Error(response?.reason || "Failed to start meeting capture in offscreen context.");
+    }
+
+    const title = (meetingTitle && meetingTitle.trim()) || activeTab.title || "Meeting Capture";
+
+    currentSession = {
+      sessionId: newSessionId,
+      mode: "capturing_meeting",
+      step: "recording",
+      targetLanguage: targetLanguage || currentSession.targetLanguage || "English",
+      targetTabId: activeTab.id,
+      meetingTitle: title,
+      transcript: "",
+      finalText: "",
+      error: null,
+      startedAt: Date.now(),
+      isPaused: false
+    };
+
+    await persistSession();
+    sendResponse({ success: true, sessionId: newSessionId });
+  } catch (error) {
+    console.error("VoxFlow: start meeting capture error:", error);
+    capturedTabId = null;
+    const reason = error instanceof Error ? error.message : "Unable to start meeting capture.";
+    currentSession.mode = "idle";
+    currentSession.step = "error";
+    currentSession.error = reason;
+    await persistSession();
+    await releaseOffscreenDocument();
+    sendResponse({ success: false, reason });
+  } finally {
+    isStartingCapture = false;
+  }
+}
+
+async function handleStopMeetingCapture(
+  sendResponse: (res: { success: boolean; reason?: string }) => void
+) {
+  await ensureSessionLoaded();
+
+  if (isStoppingCapture) {
+    sendResponse({ success: false, reason: "Meeting capture is already stopping." });
+    return;
+  }
+
+  if (currentSession.mode !== "capturing_meeting") {
+    sendResponse({ success: false, reason: "Meeting capture is not active." });
+    return;
+  }
+
+  isStoppingCapture = true;
+
+  try {
+    currentSession.step = "finalizing";
+    await persistSession();
+
+    await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_STOP_MEETING"
+    });
+
+    capturedTabId = null;
+    sendResponse({ success: true });
+  } catch (error) {
+    console.error("VoxFlow: stop meeting capture error:", error);
+    capturedTabId = null;
+    sendResponse({
+      success: false,
+      reason: error instanceof Error ? error.message : "Unable to stop meeting capture."
+    });
+  } finally {
+    isStoppingCapture = false;
+  }
+}
+
+async function handlePauseMeetingCapture(
+  sendResponse: (res: { success: boolean; reason?: string }) => void
+) {
+  await ensureSessionLoaded();
+
+  if (currentSession.mode !== "capturing_meeting") {
+    sendResponse({ success: false, reason: "Meeting capture is not currently recording." });
+    return;
+  }
+
+  try {
+    const res = (await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_PAUSE"
+    })) as { success: boolean; reason?: string } | undefined;
+
+    if (!res?.success) {
+      throw new Error(res?.reason || "Could not pause audio capture.");
+    }
+
+    currentSession.isPaused = true;
+    await persistSession();
+    sendResponse({ success: true });
+  } catch (error) {
+    sendResponse({
+      success: false,
+      reason: error instanceof Error ? error.message : "Pause failed."
+    });
+  }
+}
+
+async function handleResumeMeetingCapture(
+  sendResponse: (res: { success: boolean; reason?: string }) => void
+) {
+  await ensureSessionLoaded();
+
+  if (currentSession.mode !== "capturing_meeting") {
+    sendResponse({ success: false, reason: "Meeting capture is not active." });
+    return;
+  }
+
+  try {
+    const res = (await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_RESUME"
+    })) as { success: boolean; reason?: string } | undefined;
+
+    if (!res?.success) {
+      throw new Error(res?.reason || "Could not resume audio capture.");
+    }
+
+    currentSession.isPaused = false;
+    await persistSession();
+    sendResponse({ success: true });
+  } catch (error) {
+    sendResponse({
+      success: false,
+      reason: error instanceof Error ? error.message : "Resume failed."
+    });
+  }
+}
+
+// --------------------------------------------------
+// PROCESS CAPTURED MEETING AUDIO (BACKEND PERSISTENCE)
+// --------------------------------------------------
+
+async function processMeetingCapture(
+  audioBase64: string,
+  mimeType: string,
+  forSessionId: string
+): Promise<void> {
+  await ensureSessionLoaded();
+
+  if (currentSession.sessionId !== forSessionId) {
+    console.log("VoxFlow: ignoring meeting audio from superseded session:", forSessionId);
+    return;
+  }
+
+  currentSession.mode = "processing";
+  currentSession.step = "generating_notes";
+  currentSession.error = null;
+  await persistSession();
+
+  try {
+    const audioBlob = base64ToBlob(audioBase64, mimeType);
+    if (audioBlob.size === 0) {
+      throw new Error("Recorded meeting audio is empty.");
+    }
+
+    // Whisper 25MB limit check
+    if (audioBlob.size > 25 * 1024 * 1024) {
+      console.warn("VoxFlow: Meeting recording exceeds 25MB limit.");
+    }
+
+    const formData = new FormData();
+    formData.append("file", audioBlob, "meeting_recording.webm");
+    if (currentSession.meetingTitle) {
+      formData.append("title", currentSession.meetingTitle);
+    }
+    if (currentSession.targetLanguage && currentSession.targetLanguage !== "Auto") {
+      formData.append("language", currentSession.targetLanguage);
+    }
+
+    console.log("VoxFlow: Submitting meeting audio to backend /meetings/process-recording...");
+    const res = await fetch(`${API_BASE_URL}/meetings/process-recording`, {
+      method: "POST",
+      headers: {
+        "x-user-id": "user_me"
+      },
+      body: formData
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Meeting processing failed (${res.status}): ${errText}`);
+    }
+
+    const data = (await res.json()) as {
+      success: boolean;
+      meetingId: string;
+      meeting: {
+        id: string;
+        title: string;
+        summary: {
+          overview: string;
+        };
+        transcript: {
+          full: string;
+        };
+      };
+    };
+
+    if (currentSession.sessionId !== forSessionId) {
+      return;
+    }
+
+    currentSession.mode = "idle";
+    currentSession.step = "ready";
+    currentSession.meetingId = data.meetingId;
+    currentSession.meetingLink = `http://localhost:5173/#/meetings/${data.meetingId}`;
+    currentSession.transcript = data.meeting?.transcript?.full || "";
+    currentSession.finalText = data.meeting?.summary?.overview || "";
+    currentSession.completedAt = Date.now();
+    currentSession.error = null;
+
+    await persistSession();
+    console.log("VoxFlow: Meeting processed successfully! ID:", data.meetingId);
+  } catch (error) {
+    if (currentSession.sessionId === forSessionId) {
+      const errorMsg = error instanceof Error ? error.message : "Meeting processing failed.";
+      console.warn("VoxFlow meeting processing error:", errorMsg);
+      currentSession.mode = "idle";
+      currentSession.step = "error";
+      currentSession.error = errorMsg;
+      await persistSession();
+    }
+  }
+}
+
+// --------------------------------------------------
 // BASE64 → BLOB
 // --------------------------------------------------
 
@@ -593,12 +976,12 @@ async function runAiPipeline(
   audioBase64: string,
   mimeType: string,
   forSessionId: string
-): Promise<PipelineResult> {
+): Promise<PipelineResult | null> {
   await ensureSessionLoaded();
 
   if (currentSession.sessionId !== forSessionId) {
-    console.warn("VoxFlow: ignoring audio from older session:", forSessionId, "current:", currentSession.sessionId);
-    throw new Error("Session expired.");
+    console.log("VoxFlow: ignoring audio from superseded session:", forSessionId, "active session:", currentSession.sessionId);
+    return null;
   }
 
   currentSession.mode = "processing";
@@ -634,6 +1017,11 @@ async function runAiPipeline(
       throw new Error("Transcription returned empty text.");
     }
 
+    // Check if session changed while transcribing
+    if (currentSession.sessionId !== forSessionId) {
+      return null;
+    }
+
     currentSession.transcript = transcript;
     currentSession.step = "detecting_language";
     await persistSession();
@@ -651,6 +1039,10 @@ async function runAiPipeline(
       languageData = await langRes.json();
     }
 
+    if (currentSession.sessionId !== forSessionId) {
+      return null;
+    }
+
     currentSession.step = "understanding";
     await persistSession();
 
@@ -665,6 +1057,10 @@ async function runAiPipeline(
     let understandData: { meaning?: string; intent?: string } = {};
     if (understandRes.ok) {
       understandData = await understandRes.json();
+    }
+
+    if (currentSession.sessionId !== forSessionId) {
+      return null;
     }
 
     currentSession.step = "detecting_context";
@@ -689,6 +1085,10 @@ async function runAiPipeline(
 
     if (contextRes.ok) {
       contextData = await contextRes.json();
+    }
+
+    if (currentSession.sessionId !== forSessionId) {
+      return null;
     }
 
     currentSession.step = "transforming";
@@ -727,6 +1127,10 @@ async function runAiPipeline(
       transformation: string;
     };
 
+    if (currentSession.sessionId !== forSessionId) {
+      return null;
+    }
+
     const finalResult: PipelineResult = {
       transcript,
       language: languageData,
@@ -745,15 +1149,15 @@ async function runAiPipeline(
 
     return finalResult;
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "AI pipeline encountered an error.";
-    console.error("VoxFlow pipeline error:", error);
-    currentSession.mode = "idle";
-    currentSession.step = "error";
-    currentSession.error = errorMsg;
-    await persistSession();
-    throw error;
-  } finally {
-    void closeOffscreenDocument();
+    if (currentSession.sessionId === forSessionId) {
+      const errorMsg = error instanceof Error ? error.message : "AI pipeline encountered an error.";
+      console.warn("VoxFlow AI pipeline notice:", errorMsg);
+      currentSession.mode = "idle";
+      currentSession.step = "error";
+      currentSession.error = errorMsg;
+      await persistSession();
+    }
+    return null;
   }
 }
 
@@ -796,7 +1200,32 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     return true;
   }
 
-  // 4. Session State Query
+  // 4. Meeting Audio Controls
+  if (msg.type === "START_MEETING_CAPTURE") {
+    void handleStartMeetingCapture(
+      msg.targetLanguage as string | undefined,
+      msg.meetingTitle as string | undefined,
+      sendResponse
+    );
+    return true;
+  }
+
+  if (msg.type === "STOP_MEETING_CAPTURE") {
+    void handleStopMeetingCapture(sendResponse);
+    return true;
+  }
+
+  if (msg.type === "PAUSE_MEETING_CAPTURE") {
+    void handlePauseMeetingCapture(sendResponse);
+    return true;
+  }
+
+  if (msg.type === "RESUME_MEETING_CAPTURE") {
+    void handleResumeMeetingCapture(sendResponse);
+    return true;
+  }
+
+  // 5. Session State Query
   if (msg.type === "GET_SESSION_STATE") {
     void ensureSessionLoaded().then(() => {
       sendResponse({ session: currentSession });
@@ -804,7 +1233,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     return true;
   }
 
-  // 5. Set Target Language
+  // 6. Set Target Language
   if (msg.type === "SET_TARGET_LANGUAGE") {
     void ensureSessionLoaded().then(async () => {
       const lang = (msg.targetLanguage as string) || "Auto";
@@ -815,7 +1244,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     return true;
   }
 
-  // 6. Reset / Clear Session
+  // 7. Reset / Clear Session
   if (msg.type === "RESET_SESSION" || msg.type === "CANCEL_RECORDING") {
     void ensureSessionLoaded().then(async () => {
       currentSession = {
@@ -829,37 +1258,49 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       };
       capturedTabId = null;
       await persistSession();
-      await closeOffscreenDocument();
+      await releaseOffscreenDocument();
       sendResponse({ success: true });
     });
     return true;
   }
 
-  // 7. Offscreen Audio Completion
+  // 8. Offscreen Audio Completion
   if (
     msg.type === "TAB_CAPTURE_COMPLETE" ||
-    msg.type === "MIC_RECORDING_COMPLETE"
+    msg.type === "MIC_RECORDING_COMPLETE" ||
+    msg.type === "MEETING_CAPTURE_COMPLETE"
   ) {
     const sessionId = (msg.sessionId as string) || currentSession.sessionId;
     capturedTabId = null;
 
-    void runAiPipeline(
-      msg.audioBase64 as string,
-      msg.mimeType as string,
-      sessionId
-    ).catch(() => {});
+    // Release offscreen capture document immediately since audio is serialized
+    void releaseOffscreenDocument(sessionId);
+
+    if (msg.type === "MEETING_CAPTURE_COMPLETE") {
+      void processMeetingCapture(
+        msg.audioBase64 as string,
+        msg.mimeType as string,
+        sessionId
+      ).catch(() => {});
+    } else {
+      void runAiPipeline(
+        msg.audioBase64 as string,
+        msg.mimeType as string,
+        sessionId
+      ).catch(() => {});
+    }
 
     return false;
   }
 
-  // 8. Offscreen Error
+  // 9. Offscreen Error
   if (msg.type === "RECORDING_ERROR") {
     capturedTabId = null;
     currentSession.mode = "idle";
     currentSession.step = "error";
     currentSession.error = (msg.error as string) || "Recording error occurred.";
     void persistSession();
-    void closeOffscreenDocument();
+    void releaseOffscreenDocument();
     return false;
   }
 
@@ -871,13 +1312,16 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 // --------------------------------------------------
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  if (tabId === capturedTabId && currentSession.mode === "capturing_tab") {
+  if (
+    tabId === capturedTabId &&
+    (currentSession.mode === "capturing_tab" || currentSession.mode === "capturing_meeting")
+  ) {
     console.log("VoxFlow: captured tab closed.");
     capturedTabId = null;
     currentSession.mode = "idle";
     currentSession.step = "error";
-    currentSession.error = "Captured browser tab was closed.";
+    currentSession.error = "Captured meeting browser tab was closed.";
     void persistSession();
-    void closeOffscreenDocument();
+    void releaseOffscreenDocument();
   }
 });

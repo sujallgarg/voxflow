@@ -1,0 +1,5 @@
+# VoxFlow Robots.txt
+User-agent: *
+Allow: /
+
+Sitemap: https://voxflow.app/sitemap.xml
