@@ -16,9 +16,20 @@
         </div>
       </header>
 
+      <!-- Navigation Mode Tabs -->
+      <nav class="mode-tabs" role="tablist">
+        <button id="tab-btn-voice" type="button" class="tab-btn active" role="tab" aria-selected="true">
+          🎙 Voice Input
+        </button>
+        <button id="tab-btn-meeting" type="button" class="tab-btn" role="tab" aria-selected="false">
+          👥 Meeting Capture
+        </button>
+      </nav>
+
       <div class="status" id="status-bar">
         <span class="status-dot" id="status-dot"></span>
         <span id="status-text">Ready</span>
+        <span id="meeting-timer" class="meeting-timer hidden">00:00</span>
       </div>
 
       <div class="form-group" id="language-group">
@@ -28,46 +39,127 @@
         </select>
       </div>
 
-      <div class="controls">
-        <button id="record-button" type="button" class="btn btn-mic">
-          <span id="record-icon">🎙</span>
-          <span id="record-text">Start speaking</span>
-        </button>
-
-        <button id="tab-audio-button" type="button" class="btn btn-tab">
-          <span id="tab-audio-icon">🔊</span>
-          <span id="tab-audio-text">Listen to Tab</span>
-        </button>
-      </div>
-
-      <p id="message" class="message"></p>
-
-      <div id="transcript-container" class="section-container hidden">
-        <div class="section-header">
-          <span class="section-label">Transcript</span>
-        </div>
-        <div id="transcript" class="transcript"></div>
-      </div>
-
-      <div id="final-text-container" class="section-container hidden">
-        <div class="section-header">
-          <span class="section-label">AI Output</span>
-          <span id="output-language-badge" class="badge"></span>
-        </div>
-        <div id="final-text" class="final-text"></div>
-
-        <div class="action-buttons">
-          <button id="insert-button" type="button" class="btn btn-primary">
-            ↵ Insert into Field
+      <!-- VOICE INPUT VIEW -->
+      <section id="view-voice" class="view-panel">
+        <div class="controls">
+          <button id="record-button" type="button" class="btn btn-mic">
+            <span id="record-icon">🎙</span>
+            <span id="record-text">Start speaking</span>
           </button>
-          <button id="copy-button" type="button" class="btn btn-secondary">
-            📋 Copy
-          </button>
-          <button id="reset-button" type="button" class="btn btn-ghost">
-            ✕ Clear
+
+          <button id="tab-audio-button" type="button" class="btn btn-tab">
+            <span id="tab-audio-icon">🔊</span>
+            <span id="tab-audio-text">Listen to Tab</span>
           </button>
         </div>
-      </div>
+
+        <p id="message" class="message"></p>
+
+        <div id="transcript-container" class="section-container hidden">
+          <div class="section-header">
+            <span class="section-label">Transcript</span>
+          </div>
+          <div id="transcript" class="transcript"></div>
+        </div>
+
+        <div id="final-text-container" class="section-container hidden">
+          <div class="section-header">
+            <span class="section-label">AI Output</span>
+            <span id="output-language-badge" class="badge"></span>
+          </div>
+          <div id="final-text" class="final-text"></div>
+
+          <div class="action-buttons">
+            <button id="insert-button" type="button" class="btn btn-primary">
+              ↵ Insert into Field
+            </button>
+            <button id="copy-button" type="button" class="btn btn-secondary">
+              📋 Copy
+            </button>
+            <button id="reset-button" type="button" class="btn btn-ghost">
+              ✕ Clear
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- MEETING CAPTURE VIEW -->
+      <section id="view-meeting" class="view-panel hidden">
+        <div class="consent-notice" id="consent-notice">
+          <div class="consent-icon">ℹ️</div>
+          <div class="consent-text">
+            <strong>Consent &amp; Privacy:</strong> Captures audio from your meeting tab and your microphone. Ensure all participants have given consent prior to recording.
+          </div>
+        </div>
+
+        <div class="form-group" id="meeting-title-group">
+          <label for="meeting-title-input" class="input-label">Meeting Title (Optional)</label>
+          <input
+            id="meeting-title-input"
+            type="text"
+            class="text-input"
+            placeholder="e.g. Weekly Team Standup"
+          />
+        </div>
+
+        <div class="meeting-controls" id="meeting-idle-controls">
+          <button id="start-meeting-button" type="button" class="btn btn-meeting-start">
+            <span>🔴</span>
+            <span>Start Meeting Capture</span>
+          </button>
+        </div>
+
+        <div class="meeting-active-controls hidden" id="meeting-active-controls">
+          <div class="meeting-recording-card">
+            <div class="meeting-rec-header">
+              <span class="live-rec-indicator"></span>
+              <span id="meeting-status-label">Recording Active</span>
+              <span id="meeting-active-timer" class="meeting-active-timer">00:00</span>
+            </div>
+            <p class="meeting-rec-sub">Capturing tab audio and your microphone simultaneously.</p>
+          </div>
+
+          <div class="meeting-btn-group">
+            <button id="pause-meeting-button" type="button" class="btn btn-secondary">
+              <span id="pause-icon">⏸</span>
+              <span id="pause-text">Pause</span>
+            </button>
+            <button id="stop-meeting-button" type="button" class="btn btn-danger">
+              <span>⏹</span>
+              <span>Stop &amp; Process</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="meeting-processing-card hidden" id="meeting-processing-card">
+          <div class="processing-spinner"></div>
+          <div class="processing-title">Generating Meeting Notes...</div>
+          <div class="processing-sub">
+            Transcribing speech, extracting action items, decisions, and generating AI summary.
+          </div>
+        </div>
+
+        <p id="meeting-message" class="message"></p>
+
+        <div class="meeting-completed-card hidden" id="meeting-completed-card">
+          <div class="completed-badge">✓ Meeting Processed &amp; Saved</div>
+          <h3 id="completed-meeting-title" class="completed-title">Sprint Review</h3>
+          <p id="completed-meeting-summary" class="completed-summary">AI summary preview will appear here...</p>
+
+          <a
+            id="open-meeting-link"
+            href="#"
+            target="_blank"
+            class="btn btn-primary btn-open-meeting"
+          >
+            🌐 Open in VoxFlow Website ↗
+          </a>
+
+          <button id="meeting-reset-btn" type="button" class="btn btn-ghost" style="margin-top: 8px;">
+            Start New Meeting Capture
+          </button>
+        </div>
+      </section>
     </main>
 
     <script type="module" src="popup.js"></script>

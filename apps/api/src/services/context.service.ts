@@ -1,17 +1,4 @@
-import "dotenv/config";
-import Groq from "groq-sdk";
-
-const apiKey = process.env.GROQ_API_KEY;
-
-if (!apiKey) {
-  throw new Error(
-    "GROQ_API_KEY is missing. Add it to apps/api/.env"
-  );
-}
-
-const groq = new Groq({
-  apiKey
-});
+import { groq, DEFAULT_CHAT_MODEL } from "./groq.client";
 
 export interface ContextResult {
   audience: string;
@@ -26,131 +13,72 @@ export interface ContextResult {
 export async function detectContext(
   transcript: string
 ): Promise<ContextResult> {
-  const response = await groq.chat.completions.create({
-    model: "openai/gpt-oss-120b",
-
-    temperature: 0,
-
-    response_format: {
-      type: "json_object"
-    },
-
-    messages: [
-      {
-        role: "system",
-        content: `
-You are VoxFlow's context detection engine.
-
-Your job is to understand the communication context
-behind the user's spoken input.
-
-The user may speak naturally and may mix multiple languages.
-
-Determine:
-
-1. Who is the likely audience?
-2. What type of communication is this?
-3. What tone is appropriate?
-4. How formal should the communication be?
-5. What channel is most likely?
-6. What is the purpose of the message?
-
-Important:
-
-- Do NOT rewrite the user's message.
-- Do NOT translate the message.
-- Do NOT invent facts.
-- Do not assume a specific platform unless there is evidence.
-- If the audience is unclear, use "unknown".
-- If the channel is unclear, use "unknown".
-- Confidence must be between 0 and 1.
-- Return ONLY valid JSON.
-
-Possible audience examples:
-- friend
-- family
-- colleague
-- manager
-- client
-- customer
-- prospect
-- public
-- unknown
-
-Possible communicationType examples:
-- personal
-- professional
-- business
-- customer_support
-- sales
-- marketing
-- social
-- unknown
-
-Possible tone examples:
-- casual
-- friendly
-- professional
-- formal
-- persuasive
-- apologetic
-- informative
-- unknown
-
-Possible formality values:
-- casual
-- neutral
-- professional
-- formal
-- unknown
-
-Possible channel examples:
-- email
-- chat
-- social_media
-- sms
-- meeting
-- unknown
-
-Return exactly:
-
-{
-  "audience": "client",
-  "communicationType": "business",
-  "tone": "professional",
-  "formality": "professional",
-  "likelyChannel": "email",
-  "purpose": "Inform the client about a meeting",
-  "confidence": 0.92
-}
-        `
-      },
-      {
-        role: "user",
-        content: transcript
-      }
-    ]
-  });
-
-  const content =
-    response.choices[0]?.message?.content;
-
-  if (!content) {
-    throw new Error(
-      "Groq returned an empty context response."
-    );
+  if (!transcript || !transcript.trim()) {
+    throw new Error("Transcript is required for context detection.");
   }
 
-  const result = JSON.parse(content);
+  try {
+    const response = await groq.chat.completions.create({
+      model: DEFAULT_CHAT_MODEL,
+      temperature: 0,
+      response_format: {
+        type: "json_object"
+      },
+      messages: [
+        {
+          role: "system",
+          content: `You are VoxFlow's communication context detection engine.
 
-  return {
-    audience: result.audience,
-    communicationType:
-      result.communicationType,
-    tone: result.tone,
-    formality: result.formality,
-    likelyChannel: result.likelyChannel,
-    purpose: result.purpose,
-    confidence: result.confidence
-  };
+Analyze the user's spoken transcript.
+Infer the recipient audience, communication type, tone, formality, likely channel, and purpose.
+
+Rules:
+1. audience: e.g. "colleague", "client", "friend", "executive", "team", "support"
+2. communicationType: e.g. "professional", "casual", "technical", "inquiry", "update"
+3. tone: e.g. "direct", "friendly", "formal", "urgent", "collaborative"
+4. formality: "formal" | "neutral" | "casual"
+5. likelyChannel: "email" | "chat" | "document" | "social" | "ticket"
+6. purpose: Short summary of what this message accomplishes
+7. confidence: float between 0.0 and 1.0
+8. Return ONLY valid JSON in this exact structure:
+
+{
+  "audience": "colleague",
+  "communicationType": "professional",
+  "tone": "friendly",
+  "formality": "neutral",
+  "likelyChannel": "chat",
+  "purpose": "Status update",
+  "confidence": 0.95
+}`
+        },
+        {
+          role: "user",
+          content: transcript
+        }
+      ]
+    });
+
+    const content = response.choices[0]?.message?.content;
+
+    if (!content) {
+      throw new Error("Groq returned an empty context detection response.");
+    }
+
+    const result = JSON.parse(content);
+
+    return {
+      audience: result.audience || "general",
+      communicationType: result.communicationType || "general",
+      tone: result.tone || "neutral",
+      formality: result.formality || "neutral",
+      likelyChannel: result.likelyChannel || "general",
+      purpose: result.purpose || "communication",
+      confidence: typeof result.confidence === "number" ? result.confidence : 0.9
+    };
+  } catch (error: any) {
+    console.error("Context detection error:", error);
+    const msg = error?.message || "Failed to detect communication context.";
+    throw new Error(`Context detection failed: ${msg}`);
+  }
 }

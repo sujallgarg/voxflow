@@ -1,0 +1,31 @@
+services:
+  # VoxFlow API Service (Node.js / Fastify)
+  - type: web
+    name: voxflow-api
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @voxflow/api build
+    startCommand: pnpm --filter @voxflow/api start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: AI_MODEL
+        value: openai/gpt-oss-120b
+      - key: TRANSCRIPTION_MODEL
+        value: whisper-large-v3-turbo
+
+  # VoxFlow Web Client (Vite Static Site)
+  - type: web
+    name: voxflow-web
+    runtime: static
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @voxflow/web build
+    staticPublishPath: ./apps/web/dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false

@@ -28,14 +28,40 @@ interface OffscreenGetStateMessage {
   type: "OFFSCREEN_GET_STATE";
 }
 
+interface OffscreenStartMeetingMessage {
+  target: "offscreen";
+  type: "OFFSCREEN_START_MEETING";
+  streamId: string;
+  sessionId: string;
+}
+
+interface OffscreenStopMeetingMessage {
+  target: "offscreen";
+  type: "OFFSCREEN_STOP_MEETING";
+}
+
+interface OffscreenPauseMessage {
+  target: "offscreen";
+  type: "OFFSCREEN_PAUSE";
+}
+
+interface OffscreenResumeMessage {
+  target: "offscreen";
+  type: "OFFSCREEN_RESUME";
+}
+
 type OffscreenCommand =
   | OffscreenStartTabMessage
   | OffscreenStopTabMessage
   | OffscreenStartMicMessage
   | OffscreenStopMicMessage
+  | OffscreenStartMeetingMessage
+  | OffscreenStopMeetingMessage
+  | OffscreenPauseMessage
+  | OffscreenResumeMessage
   | OffscreenGetStateMessage;
 
-type CaptureMode = "none" | "tab" | "mic";
+type CaptureMode = "none" | "tab" | "mic" | "meeting";
 
 let captureMode: CaptureMode = "none";
 let currentSessionId = "";
@@ -94,13 +120,51 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    // 5. Query State
+    // 5. Meeting Capture Start (Tab Audio + Mixed Mic)
+    if (cmd.type === "OFFSCREEN_START_MEETING" && cmd.streamId) {
+      const sessionId = cmd.sessionId || Date.now().toString();
+      void startMeetingCapture(cmd.streamId, sessionId).then((res) => {
+        sendResponse(res);
+      });
+      return true;
+    }
+
+    // 6. Meeting Capture Stop
+    if (cmd.type === "OFFSCREEN_STOP_MEETING") {
+      stopCapture();
+      sendResponse({ success: true });
+      return true;
+    }
+
+    // 7. Pause & Resume Controls
+    if (cmd.type === "OFFSCREEN_PAUSE") {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.pause();
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, reason: "Recorder not currently recording" });
+      }
+      return true;
+    }
+
+    if (cmd.type === "OFFSCREEN_RESUME") {
+      if (mediaRecorder && mediaRecorder.state === "paused") {
+        mediaRecorder.resume();
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, reason: "Recorder not currently paused" });
+      }
+      return true;
+    }
+
+    // 8. Query State
     if (cmd.type === "OFFSCREEN_GET_STATE") {
       sendResponse({
         isCapturing: captureMode !== "none",
         captureMode,
         sessionId: currentSessionId,
-        isFinishing
+        isFinishing,
+        isPaused: mediaRecorder ? mediaRecorder.state === "paused" : false
       });
       return true;
     }
@@ -236,10 +300,100 @@ async function startMicRecording(
 }
 
 // --------------------------------------------------
+// MEETING CAPTURE (Tab Audio + Mixed Mic Audio)
+// --------------------------------------------------
+
+async function startMeetingCapture(
+  streamId: string,
+  sessionId: string
+): Promise<{ success: boolean; reason?: string }> {
+  if (captureMode !== "none") {
+    console.warn("VoxFlow: capture already active in mode:", captureMode);
+    return {
+      success: false,
+      reason: `Another recording is already active (${captureMode}).`
+    };
+  }
+
+  try {
+    console.log("VoxFlow: initializing meeting capture in offscreen, streamId:", streamId);
+    audioChunks = [];
+    isFinishing = false;
+    currentSessionId = sessionId;
+
+    // 1. Capture meeting tab audio
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        mandatory: {
+          chromeMediaSource: "tab",
+          chromeMediaSourceId: streamId
+        }
+      },
+      video: false
+    } as MediaStreamConstraints);
+
+    const tabTracks = mediaStream.getAudioTracks();
+    if (tabTracks.length === 0) {
+      throw new Error("No audio tracks found in captured meeting tab.");
+    }
+
+    audioContext = new AudioContext();
+    if (audioContext.state === "suspended") {
+      await audioContext.resume();
+    }
+
+    const recordingDestination = audioContext.createMediaStreamDestination();
+    const tabSource = audioContext.createMediaStreamSource(mediaStream);
+
+    // Route tab audio to speakers so user can hear attendees
+    tabSource.connect(audioContext.destination);
+    // Route tab audio to recorder
+    tabSource.connect(recordingDestination);
+
+    // 2. Also attempt to capture microphone to include user's voice
+    try {
+      const micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      const micSource = audioContext.createMediaStreamSource(micStream);
+      // Route microphone ONLY to recorder (NOT to speakers, preventing feedback/echo loop)
+      micSource.connect(recordingDestination);
+      console.log("VoxFlow: microphone successfully mixed into meeting recording.");
+    } catch (micErr) {
+      console.warn("VoxFlow: microphone access unavailable, continuing with tab audio:", micErr);
+    }
+
+    const mimeType = getSupportedMimeType();
+    mediaRecorder = mimeType
+      ? new MediaRecorder(recordingDestination.stream, { mimeType })
+      : new MediaRecorder(recordingDestination.stream);
+
+    setupMediaRecorderListeners("meeting");
+
+    mediaRecorder.start(250);
+    captureMode = "meeting";
+
+    console.log("VoxFlow: meeting capture successfully started.");
+    return { success: true };
+  } catch (error) {
+    console.error("VoxFlow: start meeting capture failed:", error);
+    cleanup();
+    const reason =
+      error instanceof Error ? error.message : "Unable to capture meeting audio.";
+    return { success: false, reason };
+  }
+}
+
+// --------------------------------------------------
 // MEDIARECORDER EVENT LISTENERS
 // --------------------------------------------------
 
-function setupMediaRecorderListeners(mode: "tab" | "mic") {
+function setupMediaRecorderListeners(mode: "tab" | "mic" | "meeting") {
   if (!mediaRecorder) return;
 
   mediaRecorder.ondataavailable = (event) => {
@@ -300,7 +454,7 @@ function stopCapture() {
 // FINALIZE AUDIO & SEND TO BACKGROUND
 // --------------------------------------------------
 
-async function finalizeAndSend(mode: "tab" | "mic") {
+async function finalizeAndSend(mode: "tab" | "mic" | "meeting") {
   if (isFinishing) return;
   isFinishing = true;
 
@@ -329,12 +483,17 @@ async function finalizeAndSend(mode: "tab" | "mic") {
     const base64 = await blobToBase64(audioBlob);
 
     const completeMessageType =
-      mode === "tab" ? "TAB_CAPTURE_COMPLETE" : "MIC_RECORDING_COMPLETE";
+      mode === "meeting"
+        ? "MEETING_CAPTURE_COMPLETE"
+        : mode === "tab"
+        ? "TAB_CAPTURE_COMPLETE"
+        : "MIC_RECORDING_COMPLETE";
 
     await chrome.runtime.sendMessage({
       target: "background",
       type: completeMessageType,
       sessionId,
+      mode,
       audioBase64: base64,
       mimeType
     });

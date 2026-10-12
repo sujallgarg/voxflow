@@ -26,6 +26,10 @@ pnpm-debug.log*
 .env.*.local
 *.local
 
+# Runtime data
+apps/api/data/*.json
+!apps/api/data/.gitkeep
+
 # Editor & System files
 .DS_Store
 Thumbs.db

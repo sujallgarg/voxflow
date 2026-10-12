@@ -1,83 +1,78 @@
-import "dotenv/config";
-import Groq from "groq-sdk";
-
-const apiKey = process.env.GROQ_API_KEY;
-
-if (!apiKey) {
-  throw new Error(
-    "GROQ_API_KEY is missing. Add it to apps/api/.env"
-  );
-}
-
-const groq = new Groq({
-  apiKey
-});
+import { groq, DEFAULT_CHAT_MODEL } from "./groq.client";
 
 export interface LanguageResult {
   primaryLanguage: string;
+  languageCode: string;
   languages: string[];
   mixedLanguage: boolean;
+  confidence: number;
 }
 
 export async function detectLanguage(
   transcript: string
 ): Promise<LanguageResult> {
-  const completion = await groq.chat.completions.create({
-    model: "openai/gpt-oss-120b",
-    messages: [
-      {
-        role: "system",
-        content: `You are VoxFlow's language detection engine.
+  if (!transcript || !transcript.trim()) {
+    throw new Error("Transcript is required for language detection.");
+  }
 
-Analyze the transcript below.
+  try {
+    const completion = await groq.chat.completions.create({
+      model: DEFAULT_CHAT_MODEL,
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content: `You are VoxFlow's multilingual language detection engine.
 
-Your job is ONLY to identify the languages present.
+Analyze the user's spoken transcript.
+Your job is to identify all languages present, the primary language, ISO 639-1 language code, and detection confidence.
 
 Rules:
-
-1. Detect any language in the world.
-2. Do not limit yourself to a predefined language list.
-3. Return the common English name of each language.
-4. If multiple languages are meaningfully used, include all of them.
-5. Set mixedLanguage to true when multiple languages are used.
-6. Do not translate the transcript.
-7. Do not rewrite the transcript.
-8. Do not guess a language if there is not enough evidence.
-9. For code-switching such as Hindi + English, return:
-   ["Hindi", "English"]
-10. Do not create artificial languages such as "Hinglish".
-11. primaryLanguage should be the dominant language.
-12. Return ONLY valid JSON.
-
-Required JSON format:
+1. Detect any world language (English, Hindi, German, French, Spanish, Portuguese, Italian, Japanese, Korean, Chinese, Arabic, etc.).
+2. For mixed-language code-switching (e.g. Hindi mixed with English words, Spanglish, Denglish):
+   - Include all detected languages in "languages" array: e.g. ["Hindi", "English"]
+   - Set "mixedLanguage": true
+3. "primaryLanguage" should be the dominant language.
+4. "languageCode" should be the two-letter ISO 639-1 code of the primary language (e.g. "en", "hi", "es", "de", "fr", "ja", "zh", "ar", "pt", "it", etc.).
+5. "confidence" should be a float between 0.0 and 1.0 (e.g. 0.98).
+6. Return ONLY valid JSON in this exact structure:
 
 {
   "primaryLanguage": "English",
+  "languageCode": "en",
   "languages": ["English"],
-  "mixedLanguage": false
+  "mixedLanguage": false,
+  "confidence": 0.98
 }`
-      },
-      {
-        role: "user",
-        content: transcript
+        },
+        {
+          role: "user",
+          content: transcript
+        }
+      ],
+      response_format: {
+        type: "json_object"
       }
-    ],
-    response_format: {
-      type: "json_object"
+    });
+
+    const content = completion.choices[0]?.message?.content;
+
+    if (!content) {
+      throw new Error("Language detection returned an empty response.");
     }
-  });
 
-  const content = completion.choices[0]?.message?.content;
+    const result = JSON.parse(content);
 
-  if (!content) {
-    throw new Error("Language detection returned an empty response.");
+    return {
+      primaryLanguage: result.primaryLanguage || "English",
+      languageCode: result.languageCode || "en",
+      languages: Array.isArray(result.languages) && result.languages.length ? result.languages : ["English"],
+      mixedLanguage: Boolean(result.mixedLanguage),
+      confidence: typeof result.confidence === "number" ? result.confidence : 0.95
+    };
+  } catch (error: any) {
+    console.error("Language detection error:", error);
+    const msg = error?.message || "Failed to detect language.";
+    throw new Error(`Language detection failed: ${msg}`);
   }
-
-  const result = JSON.parse(content);
-
-  return {
-    primaryLanguage: result.primaryLanguage,
-    languages: result.languages,
-    mixedLanguage: Boolean(result.mixedLanguage)
-  };
 }
