@@ -5,14 +5,14 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 
-import transcriptionRoute from "./routes/transcription";
-import languageRoute from "./routes/language";
-import understandingRoute from "./routes/understanding";
-import contextRoute from "./routes/context";
-import transformationRoute from "./routes/transformation";
-import processRoute from "./routes/process";
-import meetingNotesRoute from "./routes/meeting-notes";
-import meetingsRoute from "./routes/meetings";
+import transcriptionRoute from "./routes/transcription.js";
+import languageRoute from "./routes/language.js";
+import understandingRoute from "./routes/understanding.js";
+import contextRoute from "./routes/context.js";
+import transformationRoute from "./routes/transformation.js";
+import processRoute from "./routes/process.js";
+import meetingNotesRoute from "./routes/meeting-notes.js";
+import meetingsRoute from "./routes/meetings.js";
 
 export function buildServer() {
   const app = Fastify({

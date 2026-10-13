@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { generateMeetingNotes } from "../services/meeting-notes.service";
+import { generateMeetingNotes } from "../services/meeting-notes.service.js";
 
 const meetingNotesRoute: FastifyPluginAsync = async (app) => {
   app.post("/meeting-notes", async (request, reply) => {

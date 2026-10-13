@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { detectLanguage } from "../services/language.service";
+import { detectLanguage } from "../services/language.service.js";
 
 const languageRoute: FastifyPluginAsync = async (app) => {
   app.post("/detect-language", async (request, reply) => {

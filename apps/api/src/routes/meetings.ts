@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
-import { meetingStore, type MeetingRecord } from "../services/meeting-store.service";
-import { transcribeAudio } from "../services/transcription.service";
-import { generateMeetingNotes } from "../services/meeting-notes.service";
+import { meetingStore, type MeetingRecord } from "../services/meeting-store.service.js";
+import { transcribeAudio } from "../services/transcription.service.js";
+import { generateMeetingNotes } from "../services/meeting-notes.service.js";
 
 const meetingsRoute: FastifyPluginAsync = async (app) => {
   // 1. GET /meetings — List all meetings for the user

@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { detectContext } from "../services/context.service";
+import { detectContext } from "../services/context.service.js";
 
 const contextRoute: FastifyPluginAsync =
   async (app) => {

@@ -1,7 +1,7 @@
-import { detectLanguage, LanguageResult } from "./language.service";
-import { understandTranscript, UnderstandingResult } from "./understanding.service";
-import { detectContext, ContextResult } from "./context.service";
-import { transformTranscript, TransformationResult } from "./transformation.service";
+import { detectLanguage, LanguageResult } from "./language.service.js";
+import { understandTranscript, UnderstandingResult } from "./understanding.service.js";
+import { detectContext, ContextResult } from "./context.service.js";
+import { transformTranscript, TransformationResult } from "./transformation.service.js";
 
 export interface ProcessPipelineInput {
   transcript: string;

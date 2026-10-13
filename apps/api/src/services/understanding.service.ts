@@ -1,4 +1,4 @@
-import { groq, DEFAULT_CHAT_MODEL } from "./groq.client";
+import { groq, DEFAULT_CHAT_MODEL } from "./groq.client.js";
 
 export interface UnderstandingResult {
   meaning: string;

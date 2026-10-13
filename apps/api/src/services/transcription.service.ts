@@ -1,5 +1,5 @@
 import { toFile } from "groq-sdk";
-import { groq, DEFAULT_TRANSCRIPTION_MODEL } from "./groq.client";
+import { groq, DEFAULT_TRANSCRIPTION_MODEL } from "./groq.client.js";
 
 export interface TranscribeOptions {
   filename?: string;

@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { transcribeAudio } from "../services/transcription.service";
+import { transcribeAudio } from "../services/transcription.service.js";
 
 const ALLOWED_MIME_TYPES = new Set([
   "audio/webm",

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
   transformTranscript
-} from "../services/transformation.service";
+} from "../services/transformation.service.js";
 
 const transformationRoute: FastifyPluginAsync =
   async (app) => {
