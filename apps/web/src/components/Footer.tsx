@@ -3,11 +3,23 @@ import { Logo } from "./Logo";
 
 interface FooterProps {
   onOpenBetaModal: () => void;
+  onNavigateToPrivacy?: () => void;
+  onNavigateToTerms?: () => void;
+  onNavigateToRefunds?: () => void;
+  onNavigateToCookies?: () => void;
+  onOpenCookieSettings?: () => void;
 }
 
 const currentYear = new Date().getFullYear();
 
-export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
+export const Footer: React.FC<FooterProps> = ({
+  onOpenBetaModal,
+  onNavigateToPrivacy,
+  onNavigateToTerms,
+  onNavigateToRefunds,
+  onNavigateToCookies,
+  onOpenCookieSettings
+}) => {
   const handleScroll = (href: string) => {
     const el = document.querySelector(href);
     if (el) el.scrollIntoView({ behavior: "smooth" });
@@ -17,7 +29,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
     <footer
       style={{
         background: "#ffffff",
-        borderTop: "1px solid var(--border-subtle)",
+        borderTop: "1px solid #e5e5e5",
         paddingTop: "48px",
         paddingBottom: "36px"
       }}
@@ -36,12 +48,12 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
         >
           {/* Brand Col */}
           <div style={{ maxWidth: "340px" }}>
-            <Logo size={32} />
+            <Logo size={28} />
             <p
               style={{
                 marginTop: "14px",
-                fontSize: "0.9375rem",
-                color: "#64748b",
+                fontSize: "0.875rem",
+                color: "#666666",
                 lineHeight: 1.6
               }}
             >
@@ -53,9 +65,9 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
                 type="button"
                 className="btn-primary"
                 onClick={onOpenBetaModal}
-                style={{ fontSize: "0.85rem", padding: "8px 18px" }}
+                style={{ fontSize: "0.8125rem", padding: "8px 16px", borderRadius: "6px" }}
               >
-                Get Early Access →
+                Get Started
               </button>
             </div>
           </div>
@@ -64,11 +76,11 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
           <div>
             <h4
               style={{
-                fontSize: "0.8125rem",
+                fontSize: "0.75rem",
                 fontWeight: 700,
-                color: "#0f172a",
+                color: "#111111",
                 textTransform: "uppercase",
-                letterSpacing: "0.06em",
+                letterSpacing: "0.05em",
                 marginBottom: "14px"
               }}
             >
@@ -82,9 +94,11 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
                     e.preventDefault();
                     handleScroll("#features");
                   }}
-                  style={{ fontSize: "0.9rem", color: "#64748b" }}
+                  style={{ fontSize: "0.875rem", color: "#666666", textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
                 >
-                  Features
+                  Product
                 </a>
               </li>
               <li>
@@ -94,9 +108,25 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
                     e.preventDefault();
                     handleScroll("#how-it-works");
                   }}
-                  style={{ fontSize: "0.9rem", color: "#64748b" }}
+                  style={{ fontSize: "0.875rem", color: "#666666", textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
                 >
                   How It Works
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#pricing"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleScroll("#pricing");
+                  }}
+                  style={{ fontSize: "0.875rem", color: "#666666", textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+                >
+                  Pricing
                 </a>
               </li>
               <li>
@@ -106,7 +136,9 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
                     e.preventDefault();
                     handleScroll("#demo");
                   }}
-                  style={{ fontSize: "0.9rem", color: "#64748b" }}
+                  style={{ fontSize: "0.875rem", color: "#666666", textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
                 >
                   Interactive Demo
                 </a>
@@ -118,10 +150,113 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
                     e.preventDefault();
                     handleScroll("#faq");
                   }}
-                  style={{ fontSize: "0.9rem", color: "#64748b" }}
+                  style={{ fontSize: "0.875rem", color: "#666666", textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
                 >
                   FAQ
                 </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Legal & Compliance Col */}
+          <div>
+            <h4
+              style={{
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                color: "#111111",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                marginBottom: "14px"
+              }}
+            >
+              Legal & Privacy
+            </h4>
+            <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "10px", margin: 0, padding: 0 }}>
+              <li>
+                <a
+                  href="#/privacy"
+                  onClick={(e) => {
+                    if (onNavigateToPrivacy) {
+                      e.preventDefault();
+                      onNavigateToPrivacy();
+                    }
+                  }}
+                  style={{ fontSize: "0.875rem", color: "#666666", textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+                >
+                  Privacy Policy
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#/terms"
+                  onClick={(e) => {
+                    if (onNavigateToTerms) {
+                      e.preventDefault();
+                      onNavigateToTerms();
+                    }
+                  }}
+                  style={{ fontSize: "0.875rem", color: "#666666", textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+                >
+                  Terms of Service
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#/cookies"
+                  onClick={(e) => {
+                    if (onNavigateToCookies) {
+                      e.preventDefault();
+                      onNavigateToCookies();
+                    }
+                  }}
+                  style={{ fontSize: "0.875rem", color: "#666666", textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+                >
+                  Cookie Policy
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#/refunds"
+                  onClick={(e) => {
+                    if (onNavigateToRefunds) {
+                      e.preventDefault();
+                      onNavigateToRefunds();
+                    }
+                  }}
+                  style={{ fontSize: "0.875rem", color: "#666666", textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+                >
+                  Refund Policy
+                </a>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={onOpenCookieSettings}
+                  style={{
+                    fontSize: "0.875rem",
+                    color: "#111111",
+                    fontWeight: 500,
+                    textAlign: "left",
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    textDecoration: "underline"
+                  }}
+                >
+                  Cookie Settings
+                </button>
               </li>
             </ul>
           </div>
@@ -130,27 +265,27 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
           <div>
             <h4
               style={{
-                fontSize: "0.8125rem",
+                fontSize: "0.75rem",
                 fontWeight: 700,
-                color: "#0f172a",
+                color: "#111111",
                 textTransform: "uppercase",
-                letterSpacing: "0.06em",
+                letterSpacing: "0.05em",
                 marginBottom: "14px"
               }}
             >
-              Contact & Inquiries
+              Contact
             </h4>
             <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "10px", margin: 0, padding: 0 }}>
               <li>
                 <a
                   href="mailto:support@voxflow.ai?subject=VoxFlow%20Inquiry"
-                  style={{ fontSize: "0.9rem", color: "#7e14ff", fontWeight: 600 }}
+                  style={{ fontSize: "0.875rem", color: "#111111", fontWeight: 500, textDecoration: "none" }}
                 >
                   support@voxflow.ai
                 </a>
               </li>
-              <li style={{ fontSize: "0.85rem", color: "#94a3b8", maxWidth: "220px", lineHeight: 1.5 }}>
-                Questions, bug reports or feedback? Email our team directly.
+              <li style={{ fontSize: "0.8125rem", color: "#666666", maxWidth: "220px", lineHeight: 1.5 }}>
+                Product inquiries, bug reports, and beta feedback.
               </li>
             </ul>
           </div>
@@ -160,22 +295,75 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBetaModal }) => {
         <div
           style={{
             paddingTop: "24px",
-            borderTop: "1px solid #f1edf8",
+            borderTop: "1px solid #e5e5e5",
             display: "flex",
             flexWrap: "wrap",
             alignItems: "center",
             justifyContent: "space-between",
             gap: "14px",
             fontSize: "0.8125rem",
-            color: "#94a3b8"
+            color: "#666666"
           }}
         >
           <div>
             © {currentYear} VoxFlow. Speak naturally. Write everywhere.
           </div>
 
-          <div>
-            <span>Privacy Policy and Terms of Service will be published upon general release.</span>
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+            <a
+              href="#/privacy"
+              onClick={(e) => {
+                if (onNavigateToPrivacy) {
+                  e.preventDefault();
+                  onNavigateToPrivacy();
+                }
+              }}
+              style={{ color: "#666666", textDecoration: "none" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+            >
+              Privacy Policy
+            </a>
+            <span>•</span>
+            <a
+              href="#/terms"
+              onClick={(e) => {
+                if (onNavigateToTerms) {
+                  e.preventDefault();
+                  onNavigateToTerms();
+                }
+              }}
+              style={{ color: "#666666", textDecoration: "none" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+            >
+              Terms of Service
+            </a>
+            <span>•</span>
+            <a
+              href="#/cookies"
+              onClick={(e) => {
+                if (onNavigateToCookies) {
+                  e.preventDefault();
+                  onNavigateToCookies();
+                }
+              }}
+              style={{ color: "#666666", textDecoration: "none" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+            >
+              Cookies
+            </a>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={onOpenCookieSettings}
+              style={{ color: "#666666", fontSize: "0.8125rem", padding: 0, background: "none", border: "none", cursor: "pointer" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+            >
+              Cookie Settings
+            </button>
           </div>
         </div>
       </div>

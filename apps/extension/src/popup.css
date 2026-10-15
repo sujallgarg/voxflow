@@ -561,3 +561,11 @@ body {
   text-decoration: none;
   font-size: 12px;
 }
+
+.mvp-limit-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #a1a1aa;
+  text-align: center;
+  font-weight: 500;
+}

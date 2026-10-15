@@ -28,7 +28,7 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
     const currentUser = getCurrentUser();
     const newId = `meeting_${Date.now()}`;
     const languages = [primaryLang];
-    if (secondaryLang && secondaryLang !== primaryLang) {
+    if (secondaryLang && secondaryLang !== primaryLang && secondaryLang !== "None") {
       languages.push(secondaryLang);
     }
 
@@ -71,9 +71,7 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        background: "rgba(15, 23, 42, 0.5)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
+        background: "rgba(0, 0, 0, 0.4)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -87,13 +85,13 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
       <div
         style={{
           width: "100%",
-          maxWidth: "520px",
+          maxWidth: "480px",
           background: "#ffffff",
-          borderRadius: "24px",
-          padding: "32px",
-          boxShadow: "0 25px 60px -15px rgba(126, 20, 255, 0.25)",
+          borderRadius: "8px",
+          padding: "28px",
+          boxShadow: "0 10px 30px rgba(0, 0, 0, 0.08)",
           position: "relative",
-          border: "1px solid rgba(126, 20, 255, 0.16)"
+          border: "1px solid #e5e5e5"
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -103,32 +101,34 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
           aria-label="Close dialog"
           style={{
             position: "absolute",
-            top: "20px",
-            right: "20px",
+            top: "16px",
+            right: "16px",
             width: "30px",
             height: "30px",
-            borderRadius: "50%",
-            background: "#f1f5f9",
-            color: "#64748b",
-            fontSize: "16px",
+            borderRadius: "6px",
+            background: "#ffffff",
+            border: "1px solid #e5e5e5",
+            color: "#111111",
+            fontSize: "14px",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center"
+            justifyContent: "center",
+            cursor: "pointer"
           }}
         >
           ✕
         </button>
 
-        <h3 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a", marginBottom: "6px" }}>
-          Create New Meeting Record
+        <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#111111", marginBottom: "6px" }}>
+          Create Meeting Record
         </h3>
-        <p style={{ fontSize: "0.875rem", color: "#64748b", marginBottom: "22px" }}>
-          Add your meeting to start taking multilingual notes, extracting action items, or uploading transcripts.
+        <p style={{ fontSize: "0.8125rem", color: "#666666", marginBottom: "20px" }}>
+          Set up a meeting to capture audio notes, extract action items, and store transcripts.
         </p>
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
-            <label htmlFor="meeting-title-input" style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
+            <label htmlFor="meeting-title-input" style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "#111111", marginBottom: "6px" }}>
               Meeting Title *
             </label>
             <input
@@ -140,18 +140,20 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
               onChange={(e) => setMeetingTitle(e.target.value)}
               style={{
                 width: "100%",
-                padding: "10px 14px",
-                borderRadius: "10px",
-                border: "1px solid #cbd5e1",
-                fontSize: "0.9rem",
-                outline: "none"
+                padding: "9px 12px",
+                borderRadius: "6px",
+                border: "1px solid #e5e5e5",
+                fontSize: "0.875rem",
+                outline: "none",
+                background: "#ffffff",
+                color: "#111111"
               }}
             />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
             <div>
-              <label htmlFor="primary-lang-select" style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
+              <label htmlFor="primary-lang-select" style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "#111111", marginBottom: "6px" }}>
                 Primary Language
               </label>
               <select
@@ -160,11 +162,13 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
                 onChange={(e) => setPrimaryLang(e.target.value)}
                 style={{
                   width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "10px",
-                  border: "1px solid #cbd5e1",
-                  fontSize: "0.875rem",
-                  background: "#ffffff"
+                  padding: "9px 10px",
+                  borderRadius: "6px",
+                  border: "1px solid #e5e5e5",
+                  fontSize: "0.8125rem",
+                  background: "#ffffff",
+                  color: "#111111",
+                  cursor: "pointer"
                 }}
               >
                 <option value="English">English</option>
@@ -176,7 +180,7 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
             </div>
 
             <div>
-              <label htmlFor="secondary-lang-select" style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
+              <label htmlFor="secondary-lang-select" style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "#111111", marginBottom: "6px" }}>
                 Secondary Language
               </label>
               <select
@@ -185,11 +189,13 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
                 onChange={(e) => setSecondaryLang(e.target.value)}
                 style={{
                   width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "10px",
-                  border: "1px solid #cbd5e1",
-                  fontSize: "0.875rem",
-                  background: "#ffffff"
+                  padding: "9px 10px",
+                  borderRadius: "6px",
+                  border: "1px solid #e5e5e5",
+                  fontSize: "0.8125rem",
+                  background: "#ffffff",
+                  color: "#111111",
+                  cursor: "pointer"
                 }}
               >
                 <option value="None">None (Single Language)</option>
@@ -203,7 +209,7 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
           </div>
 
           <div>
-            <label htmlFor="meeting-status-select" style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
+            <label htmlFor="meeting-status-select" style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "#111111", marginBottom: "6px" }}>
               Meeting Status
             </label>
             <select
@@ -212,11 +218,13 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
               onChange={(e) => setStatus(e.target.value as "completed" | "upcoming")}
               style={{
                 width: "100%",
-                padding: "10px 12px",
-                borderRadius: "10px",
-                border: "1px solid #cbd5e1",
-                fontSize: "0.875rem",
-                background: "#ffffff"
+                padding: "9px 10px",
+                borderRadius: "6px",
+                border: "1px solid #e5e5e5",
+                fontSize: "0.8125rem",
+                background: "#ffffff",
+                color: "#111111",
+                cursor: "pointer"
               }}
             >
               <option value="completed">Completed / In Progress</option>
@@ -225,7 +233,7 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
           </div>
 
           <div>
-            <label htmlFor="initial-notes-input" style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
+            <label htmlFor="initial-notes-input" style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "#111111", marginBottom: "6px" }}>
               Initial Notes or Agenda (Optional)
             </label>
             <textarea
@@ -236,22 +244,28 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
               onChange={(e) => setInitialNotes(e.target.value)}
               style={{
                 width: "100%",
-                padding: "10px 14px",
-                borderRadius: "10px",
-                border: "1px solid #cbd5e1",
+                padding: "10px 12px",
+                borderRadius: "6px",
+                border: "1px solid #e5e5e5",
                 fontSize: "0.875rem",
                 fontFamily: "inherit",
-                resize: "vertical"
+                resize: "vertical",
+                background: "#ffffff",
+                color: "#111111"
               }}
             />
           </div>
 
-          <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+          <div style={{ background: "#fafafa", border: "1px solid #e5e5e5", borderRadius: "6px", padding: "10px 12px", fontSize: "0.75rem", color: "#666666", lineHeight: 1.5 }}>
+            <strong>Notice:</strong> Ensure you have notified all participants and secured any legally required recording consents prior to capturing audio in your meetings.
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", marginTop: "6px" }}>
             <button
               type="button"
               className="btn-secondary"
               onClick={onClose}
-              style={{ flex: 1, padding: "11px" }}
+              style={{ flex: 1, padding: "10px", borderRadius: "6px" }}
             >
               Cancel
             </button>
@@ -259,9 +273,9 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
             <button
               type="submit"
               className="btn-primary"
-              style={{ flex: 1, padding: "11px" }}
+              style={{ flex: 1, padding: "10px", borderRadius: "6px" }}
             >
-              Create Meeting →
+              Create Meeting
             </button>
           </div>
         </form>

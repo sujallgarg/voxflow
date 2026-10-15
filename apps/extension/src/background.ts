@@ -874,6 +874,12 @@ async function processMeetingCapture(
     return;
   }
 
+  // Prevent duplicate processing if session is already completed or in-progress
+  if (currentSession.mode === "processing" || (currentSession.step === "ready" && currentSession.meetingId)) {
+    console.log("VoxFlow: session is already processed or in-flight:", forSessionId);
+    return;
+  }
+
   currentSession.mode = "processing";
   currentSession.step = "generating_notes";
   currentSession.error = null;
@@ -885,9 +891,9 @@ async function processMeetingCapture(
       throw new Error("Recorded meeting audio is empty.");
     }
 
-    // Whisper 25MB limit check
+    // Transcription provider 25MB limit check
     if (audioBlob.size > 25 * 1024 * 1024) {
-      console.warn("VoxFlow: Meeting recording exceeds 25MB limit.");
+      throw new Error("Meeting recording exceeds the 25MB limit. Please keep recordings under 20 minutes.");
     }
 
     const formData = new FormData();
@@ -919,12 +925,12 @@ async function processMeetingCapture(
       meeting: {
         id: string;
         title: string;
-        summary: {
-          overview: string;
+        fullSummary?: string;
+        summaryPreview?: string;
+        summary?: {
+          overview?: string;
         };
-        transcript: {
-          full: string;
-        };
+        transcript?: Array<{ originalText?: string }> | { full?: string } | string;
       };
     };
 
@@ -932,12 +938,31 @@ async function processMeetingCapture(
       return;
     }
 
+    const meetingData = data.meeting;
+    const meetingSummary =
+      meetingData?.fullSummary ||
+      meetingData?.summaryPreview ||
+      meetingData?.summary?.overview ||
+      "";
+
+    let meetingTranscript = "";
+    if (Array.isArray(meetingData?.transcript)) {
+      meetingTranscript = meetingData.transcript
+        .map((u) => u.originalText || "")
+        .filter(Boolean)
+        .join("\n");
+    } else if (typeof meetingData?.transcript === "string") {
+      meetingTranscript = meetingData.transcript;
+    } else if (meetingData?.transcript && "full" in meetingData.transcript) {
+      meetingTranscript = meetingData.transcript.full || "";
+    }
+
     currentSession.mode = "idle";
     currentSession.step = "ready";
     currentSession.meetingId = data.meetingId;
     currentSession.meetingLink = `http://localhost:5173/#/meetings/${data.meetingId}`;
-    currentSession.transcript = data.meeting?.transcript?.full || "";
-    currentSession.finalText = data.meeting?.summary?.overview || "";
+    currentSession.transcript = meetingTranscript;
+    currentSession.finalText = meetingSummary;
     currentSession.completedAt = Date.now();
     currentSession.error = null;
 
@@ -945,7 +970,19 @@ async function processMeetingCapture(
     console.log("VoxFlow: Meeting processed successfully! ID:", data.meetingId);
   } catch (error) {
     if (currentSession.sessionId === forSessionId) {
-      const errorMsg = error instanceof Error ? error.message : "Meeting processing failed.";
+      let errorMsg = error instanceof Error ? error.message : "Meeting processing failed.";
+      if (
+        errorMsg.includes("429") ||
+        errorMsg.toLowerCase().includes("rate limit")
+      ) {
+        errorMsg = "VoxFlow API rate limit reached. Please wait a moment before trying again.";
+      } else if (
+        errorMsg.includes("Failed to fetch") ||
+        errorMsg.includes("NetworkError") ||
+        (error instanceof TypeError && error.message.includes("fetch"))
+      ) {
+        errorMsg = `Could not connect to VoxFlow API at ${API_BASE_URL}. Please ensure the backend server is running.`;
+      }
       console.warn("VoxFlow meeting processing error:", errorMsg);
       currentSession.mode = "idle";
       currentSession.step = "error";
@@ -984,6 +1021,12 @@ async function runAiPipeline(
     return null;
   }
 
+  // Prevent duplicate processing if session is already completed or in-progress
+  if (currentSession.mode === "processing" || (currentSession.step === "ready" && currentSession.finalText)) {
+    console.log("VoxFlow: voice session is already processed or in-flight:", forSessionId);
+    return null;
+  }
+
   currentSession.mode = "processing";
   currentSession.step = "transcribing";
   currentSession.error = null;
@@ -994,6 +1037,10 @@ async function runAiPipeline(
     const audioBlob = base64ToBlob(audioBase64, mimeType);
     if (audioBlob.size === 0) {
       throw new Error("Recorded audio is empty.");
+    }
+
+    if (audioBlob.size > 25 * 1024 * 1024) {
+      throw new Error("Voice recording exceeds the 25MB limit. Please keep recordings under 20 minutes.");
     }
 
     const formData = new FormData();
@@ -1150,7 +1197,19 @@ async function runAiPipeline(
     return finalResult;
   } catch (error) {
     if (currentSession.sessionId === forSessionId) {
-      const errorMsg = error instanceof Error ? error.message : "AI pipeline encountered an error.";
+      let errorMsg = error instanceof Error ? error.message : "AI pipeline encountered an error.";
+      if (
+        errorMsg.includes("429") ||
+        errorMsg.toLowerCase().includes("rate limit")
+      ) {
+        errorMsg = "VoxFlow API rate limit reached. Please wait a moment before trying again.";
+      } else if (
+        errorMsg.includes("Failed to fetch") ||
+        errorMsg.includes("NetworkError") ||
+        (error instanceof TypeError && error.message.includes("fetch"))
+      ) {
+        errorMsg = `Could not connect to VoxFlow API at ${API_BASE_URL}. Please ensure the backend server is running.`;
+      }
       console.warn("VoxFlow AI pipeline notice:", errorMsg);
       currentSession.mode = "idle";
       currentSession.step = "error";

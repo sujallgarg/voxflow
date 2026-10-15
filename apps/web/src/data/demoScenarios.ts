@@ -55,7 +55,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
         formality: "Professional",
         channel: "Email"
       },
-      transformation: "Hi Sarah,\n\nThanks for sending over the Q3 report—the retention metrics look fantastic. Could you please double-check the figures on Slide 8 ahead of our sync tomorrow morning?\n\nBest regards,"
+      transformation: "Hi Sarah,\n\nThanks for sending over the Q3 report; the retention metrics look fantastic. Could you please double-check the figures on Slide 8 ahead of our sync tomorrow morning?\n\nBest regards,"
     }
   },
   {
@@ -113,7 +113,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
         formality: "Technical Summary",
         channel: "Notion / Doc"
       },
-      transformation: "Key Takeaway: The primary constraint in vector search extends beyond query latency—index construction speed and RAM consumption become the dominant bottlenecks when scaling beyond tens of millions of documents."
+      transformation: "Key Takeaway: The primary constraint in vector search extends beyond query latency: index construction speed and RAM consumption become the dominant bottlenecks when scaling beyond tens of millions of documents."
     }
   },
   {

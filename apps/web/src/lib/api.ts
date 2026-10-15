@@ -1,3 +1,5 @@
+import { supabase } from "./supabase";
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -203,9 +205,24 @@ class VoxFlowApiClient {
     return res.json();
   }
 
+  private async getAuthHeaders(): Promise<Record<string, string>> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        return {
+          Authorization: `Bearer ${session.access_token}`
+        };
+      }
+    } catch {
+      // Ignored: fallback to unauthenticated or dev identifier
+    }
+    return {};
+  }
+
   async getMeetings(userId = "user_me"): Promise<{ meetings: any[] }> {
+    const authHeaders = await this.getAuthHeaders();
     const res = await fetch(`${this.baseUrl}/meetings`, {
-      headers: { "x-user-id": userId }
+      headers: { ...authHeaders, "x-user-id": userId }
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -215,8 +232,9 @@ class VoxFlowApiClient {
   }
 
   async getMeeting(id: string, userId = "user_me"): Promise<{ meeting: any }> {
+    const authHeaders = await this.getAuthHeaders();
     const res = await fetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
-      headers: { "x-user-id": userId }
+      headers: { ...authHeaders, "x-user-id": userId }
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -226,10 +244,12 @@ class VoxFlowApiClient {
   }
 
   async saveMeeting(meeting: any, userId = "user_me"): Promise<{ success: boolean; meeting: any }> {
+    const authHeaders = await this.getAuthHeaders();
     const res = await fetch(`${this.baseUrl}/meetings`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
         "x-user-id": userId
       },
       body: JSON.stringify(meeting)
@@ -242,10 +262,12 @@ class VoxFlowApiClient {
   }
 
   async updateMeeting(id: string, updates: any, userId = "user_me"): Promise<{ success: boolean; meeting: any }> {
+    const authHeaders = await this.getAuthHeaders();
     const res = await fetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
         "x-user-id": userId
       },
       body: JSON.stringify(updates)
@@ -258,9 +280,10 @@ class VoxFlowApiClient {
   }
 
   async deleteMeeting(id: string, userId = "user_me"): Promise<{ success: boolean }> {
+    const authHeaders = await this.getAuthHeaders();
     const res = await fetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
       method: "DELETE",
-      headers: { "x-user-id": userId }
+      headers: { ...authHeaders, "x-user-id": userId }
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -275,6 +298,7 @@ class VoxFlowApiClient {
     targetLanguage = "Auto",
     userId = "user_me"
   ): Promise<{ success: boolean; meetingId: string; meeting: any }> {
+    const authHeaders = await this.getAuthHeaders();
     const formData = new FormData();
     formData.append("file", audioBlob, "meeting-audio.webm");
     if (title) formData.append("title", title);
@@ -282,13 +306,35 @@ class VoxFlowApiClient {
 
     const res = await fetch(`${this.baseUrl}/meetings/process-recording`, {
       method: "POST",
-      headers: { "x-user-id": userId },
+      headers: { ...authHeaders, "x-user-id": userId },
       body: formData
     });
 
     if (!res.ok) {
+      if (res.status === 429) {
+        throw new Error("Rate limit exceeded. Please wait a moment before trying again.");
+      }
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.error || `Meeting recording processing failed (${res.status})`);
+    }
+
+    return res.json();
+  }
+
+  async joinWaitlist(
+    email: string,
+    source = "website_modal",
+    marketingConsent = false
+  ): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${this.baseUrl}/waitlist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, source, marketingConsent })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Waitlist registration failed (${res.status})`);
     }
 
     return res.json();

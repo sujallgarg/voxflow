@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { buildServer } from "./server.js";
+import { generateAuthToken, verifyAuthToken, setSupabaseClientForTesting } from "./services/auth.service.js";
+import { resetRateLimits } from "./middleware/rate-limiter.js";
 
 describe("VoxFlow API Server Endpoints", () => {
   const app = buildServer();
@@ -310,6 +312,375 @@ describe("VoxFlow API Server Endpoints", () => {
         }
       });
       expect(finalGetResA.statusCode).toBe(404);
+    });
+
+    it("should reject non-multipart requests to /meetings/process-recording", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/meetings/process-recording",
+        headers: {
+          "content-type": "application/json",
+          "x-user-id": "test_user_alice"
+        },
+        payload: { title: "Test" }
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("NOT_MULTIPART");
+    });
+
+    it("should preserve full meeting structure for web workspace direct navigation", async () => {
+      const user = "test_user_workspace_nav";
+      const meetingId = `direct_nav_${Date.now()}`;
+
+      const createRes = await app.inject({
+        method: "POST",
+        url: "/meetings",
+        headers: { "x-user-id": user },
+        payload: {
+          id: meetingId,
+          title: "Sprint Review Direct Navigation",
+          fullSummary: "Discussed frontend release and extension stabilization.",
+          summaryPreview: "Discussed frontend release...",
+          initialNotes: "Key Discussion Points:\n• Release on schedule",
+          actionItems: [
+            { id: "act_1", task: "Deploy staging build", assignee: "Dev", dueDate: "Friday", completed: false }
+          ],
+          decisions: [
+            { id: "dec_1", decision: "Proceed with controlled beta", context: "All tests passing" }
+          ],
+          topics: [
+            { id: "top_1", title: "Release Plan", timeRange: "Session", summary: "Beta roadmap" }
+          ],
+          transcript: [
+            {
+              id: "utt_1",
+              speakerId: "spk_1",
+              speakerName: "Alex",
+              speakerRole: "Host",
+              isCurrentUser: true,
+              timestamp: "00:00",
+              originalLanguage: "English",
+              originalText: "Welcome to sprint review."
+            }
+          ]
+        }
+      });
+
+      expect(createRes.statusCode).toBe(201);
+
+      const getRes = await app.inject({
+        method: "GET",
+        url: `/meetings/${meetingId}`,
+        headers: { "x-user-id": user }
+      });
+
+      expect(getRes.statusCode).toBe(200);
+      const data = JSON.parse(getRes.body);
+      expect(data.meeting.id).toBe(meetingId);
+      expect(data.meeting.title).toBe("Sprint Review Direct Navigation");
+      expect(data.meeting.fullSummary).toContain("Discussed frontend release");
+      expect(data.meeting.actionItems.length).toBe(1);
+      expect(data.meeting.decisions.length).toBe(1);
+      expect(data.meeting.topics.length).toBe(1);
+      expect(data.meeting.transcript.length).toBe(1);
+    });
+  });
+
+  describe("Authentication, Cryptographic Signing & Anti-Impersonation", () => {
+    it("should generate and verify valid cryptographic tokens", () => {
+      const token = generateAuthToken("user_alice_test");
+      expect(typeof token).toBe("string");
+      const verified = verifyAuthToken(token);
+      expect(verified).not.toBeNull();
+      expect(verified?.id).toBe("user_alice_test");
+    });
+
+    it("should reject tampered or forged tokens", () => {
+      const token = generateAuthToken("user_alice_test");
+      const parts = token.split(".");
+      // Tamper with payload
+      const tampered = `user_hacker.${parts[1]}.${parts[2]}`;
+      expect(verifyAuthToken(tampered)).toBeNull();
+      expect(verifyAuthToken("malformed-token-string")).toBeNull();
+    });
+
+    it("should reject impersonation when client-supplied x-user-id mismatches authenticated token", async () => {
+      const aliceToken = generateAuthToken("user_alice_verified");
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/meetings",
+        headers: {
+          authorization: `Bearer ${aliceToken}`,
+          "x-user-id": "user_bob_target" // Attacker trying to spoof Bob
+        }
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("IMPERSONATION_FORBIDDEN");
+    });
+
+    it("should accept valid authenticated token matching x-user-id or standalone token", async () => {
+      const aliceToken = generateAuthToken("user_alice_verified");
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/meetings",
+        headers: {
+          authorization: `Bearer ${aliceToken}`
+        }
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(Array.isArray(body.meetings)).toBe(true);
+    });
+  });
+
+  describe("Waitlist API (/waitlist)", () => {
+    it("should reject submission without email", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/waitlist",
+        payload: {}
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("MISSING_EMAIL");
+    });
+
+    it("should reject invalid email format", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/waitlist",
+        payload: { email: "not-an-email" }
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("INVALID_EMAIL");
+    });
+
+    it("should accept valid email and register for private beta", async () => {
+      const uniqueEmail = `beta_tester_${Date.now()}@example.com`;
+      const res = await app.inject({
+        method: "POST",
+        url: "/waitlist",
+        payload: { email: uniqueEmail, source: "website_modal_test", marketingConsent: true }
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(true);
+      expect(body.email).toBe(uniqueEmail.toLowerCase());
+    });
+
+    it("should sanitize and never leak environment secrets in error responses", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/meetings",
+        headers: { "x-user-id": "test_leak_check" },
+        payload: { invalid: "schema_payload_triggering_validation" }
+      });
+
+      const bodyStr = res.body;
+      expect(bodyStr).not.toContain(process.env.AUTH_SECRET || "default_auth_secret_never_leak");
+      expect(bodyStr).not.toContain(process.env.GEMINI_API_KEY || "never_leak_gemini_key");
+      expect(bodyStr).not.toContain(process.env.GROQ_API_KEY || "never_leak_groq_key");
+    });
+  });
+
+  describe("API Rate Limiting Protection", () => {
+    beforeEach(() => {
+      resetRateLimits();
+    });
+
+    it("should include x-ratelimit headers on responses", async () => {
+      const res = await app.inject({
+        method: "GET",
+        url: "/waitlist/count"
+      });
+
+      expect(res.headers["x-ratelimit-limit"]).toBeDefined();
+      expect(res.headers["x-ratelimit-remaining"]).toBeDefined();
+    });
+
+    it("should return 429 when client exceeds request limit", async () => {
+      const spammerUser = "user_spammer_test_999";
+
+      // Send 125 requests in rapid sequence to trigger the 120 limit
+      let lastRes;
+      for (let i = 0; i < 125; i++) {
+        lastRes = await app.inject({
+          method: "GET",
+          url: "/waitlist/count",
+          headers: { "x-user-id": spammerUser }
+        });
+        if (lastRes.statusCode === 429) {
+          break;
+        }
+      }
+
+      expect(lastRes?.statusCode).toBe(429);
+      const body = JSON.parse(lastRes?.body || "{}");
+      expect(body.code).toBe("RATE_LIMIT_EXCEEDED");
+      expect(lastRes?.headers["retry-after"]).toBeDefined();
+    });
+  });
+
+  describe("Authentication, Authorization & Data Isolation", () => {
+    const userA = "user_auth_a_123";
+    const userB = "user_auth_b_456";
+    const tokenA = generateAuthToken(userA);
+    const tokenB = generateAuthToken(userB);
+
+    it("should reject requests with invalid or malformed bearer tokens", async () => {
+      const res = await app.inject({
+        method: "GET",
+        url: "/meetings",
+        headers: {
+          authorization: "Bearer invalid.malformed.token.xyz"
+        }
+      });
+
+      expect(res.statusCode).toBe(401);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("INVALID_AUTH_TOKEN");
+    });
+
+    it("should reject requests attempting to spoof x-user-id that does not match authenticated token", async () => {
+      const res = await app.inject({
+        method: "GET",
+        url: "/meetings",
+        headers: {
+          authorization: `Bearer ${tokenA}`,
+          "x-user-id": userB // Client attempting to impersonate userB while presenting userA's token
+        }
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("IMPERSONATION_FORBIDDEN");
+    });
+
+    it("should enforce cross-user meeting isolation (User B cannot access or delete User A's meeting)", async () => {
+      const meetingId = `meeting_isolation_${Date.now()}`;
+
+      // 1. User A creates a meeting
+      const createRes = await app.inject({
+        method: "POST",
+        url: "/meetings",
+        headers: {
+          authorization: `Bearer ${tokenA}`
+        },
+        payload: {
+          id: meetingId,
+          title: "Confidential Strategy Session",
+          duration: "30m"
+        }
+      });
+
+      expect(createRes.statusCode).toBe(201);
+
+      // 2. User A can retrieve it
+      const getResA = await app.inject({
+        method: "GET",
+        url: `/meetings/${meetingId}`,
+        headers: {
+          authorization: `Bearer ${tokenA}`
+        }
+      });
+      expect(getResA.statusCode).toBe(200);
+
+      // 3. User B cannot retrieve it (returns 404)
+      const getResB = await app.inject({
+        method: "GET",
+        url: `/meetings/${meetingId}`,
+        headers: {
+          authorization: `Bearer ${tokenB}`
+        }
+      });
+      expect(getResB.statusCode).toBe(404);
+      const bodyB = JSON.parse(getResB.body);
+      expect(bodyB.code).toBe("MEETING_NOT_FOUND");
+
+      // 4. User B cannot delete it (returns 404)
+      const deleteResB = await app.inject({
+        method: "DELETE",
+        url: `/meetings/${meetingId}`,
+        headers: {
+          authorization: `Bearer ${tokenB}`
+        }
+      });
+      expect(deleteResB.statusCode).toBe(404);
+
+      // 5. User A can delete their own meeting
+      const deleteResA = await app.inject({
+        method: "DELETE",
+        url: `/meetings/${meetingId}`,
+        headers: {
+          authorization: `Bearer ${tokenA}`
+        }
+      });
+      expect(deleteResA.statusCode).toBe(200);
+    });
+
+    it("should authenticate Supabase JWT tokens via Supabase Auth client", async () => {
+      const mockSupabaseUserId = "550e8400-e29b-41d4-a716-446655440000";
+
+      // Mock Supabase client returning valid user for mock token
+      const mockSupabase = {
+        auth: {
+          getUser: async (jwt: string) => {
+            if (jwt === "valid-supabase-jwt") {
+              return {
+                data: {
+                  user: {
+                    id: mockSupabaseUserId,
+                    email: "testuser@voxflow.ai",
+                    role: "authenticated"
+                  }
+                },
+                error: null
+              };
+            }
+            return {
+              data: { user: null },
+              error: new Error("Invalid JWT")
+            };
+          }
+        }
+      } as any;
+
+      setSupabaseClientForTesting(mockSupabase);
+
+      try {
+        // Successful verification with valid Supabase JWT
+        const resValid = await app.inject({
+          method: "GET",
+          url: "/meetings",
+          headers: {
+            authorization: "Bearer valid-supabase-jwt"
+          }
+        });
+        expect(resValid.statusCode).toBe(200);
+
+        // Rejection with invalid Supabase JWT
+        const resInvalid = await app.inject({
+          method: "GET",
+          url: "/meetings",
+          headers: {
+            authorization: "Bearer invalid-supabase-jwt"
+          }
+        });
+        expect(resInvalid.statusCode).toBe(401);
+      } finally {
+        setSupabaseClientForTesting(null);
+      }
     });
   });
 });

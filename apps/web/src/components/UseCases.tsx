@@ -20,7 +20,7 @@ export const UseCases: React.FC = () => {
       rawSpeech:
         "Hey team running 5 mins late to the standup go ahead and start without me, I'll update on the billing bug as soon as I hop on.",
       transformedText:
-        "Hey team, running about 5 minutes late to standup! Please feel free to kick off without me—I'll share an update on the billing bug as soon as I join."
+        "Hey team, running about 5 minutes late to standup! Please feel free to kick off without me; I'll share an update on the billing bug as soon as I join."
     },
     {
       id: "social",

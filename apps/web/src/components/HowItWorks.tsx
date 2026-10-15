@@ -7,26 +7,26 @@ export const HowItWorks: React.FC = () => {
     {
       num: "1",
       title: "Speak Naturally",
-      desc: "Click record and speak your thoughts aloud in your preferred language or mix languages naturally."
+      desc: "Activate the extension and speak your thoughts aloud in your preferred language or mix languages freely."
     },
     {
       num: "2",
-      title: "VoxFlow Processes & Understands",
-      desc: "Our engine transcribes your speech, extracts the core intent, and adapts tone and formatting for your context."
+      title: "Process & Contextualize",
+      desc: "VoxFlow transcribes speech, extracts intent, and formats the output with appropriate tone for your recipient."
     },
     {
       num: "3",
-      title: "Review & Insert the Text",
-      desc: "Receive clear, polished writing placed directly into your input field or copied to your clipboard in seconds."
+      title: "Review & Insert",
+      desc: "Receive clean, polished prose placed directly into your input field or copied to your clipboard in seconds."
     }
   ];
 
   const pipelineStages = [
-    { name: "Transcribe", desc: "High-accuracy audio transcription." },
-    { name: "Detect Language", desc: "Recognizes primary language and code-switching." },
-    { name: "Understand", desc: "Extracts underlying meaning and key details." },
-    { name: "Detect Context", desc: "Identifies channel, formality, and audience." },
-    { name: "Transform", desc: "Generates formatted, ready-to-use prose." }
+    { name: "Transcribe", desc: "Speech-to-text transcription engine." },
+    { name: "Detect Language", desc: "Identifies primary language and code-switching." },
+    { name: "Understand Intent", desc: "Extracts underlying meaning and key details." },
+    { name: "Detect Context", desc: "Identifies destination, formality, and audience." },
+    { name: "Transform", desc: "Generates formatted, ready-to-use writing." }
   ];
 
   return (
@@ -34,13 +34,13 @@ export const HowItWorks: React.FC = () => {
       id="how-it-works"
       className="section-spacing"
       style={{
-        background: "linear-gradient(180deg, rgba(251, 249, 254, 0.4) 0%, #f6f3fc 50%, rgba(251, 249, 254, 0.4) 100%)",
+        background: "#ffffff",
         position: "relative"
       }}
     >
       <div className="container">
         <div className="section-title-wrap">
-          <span className="badge badge-glow">Simple Workflow</span>
+          <span className="badge">Workflow</span>
           <h2>How It Works</h2>
           <p>
             Three simple steps between your spoken words and polished writing on the web.
@@ -52,7 +52,7 @@ export const HowItWorks: React.FC = () => {
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: "24px",
+            gap: "20px",
             marginBottom: "32px"
           }}
         >
@@ -62,22 +62,23 @@ export const HowItWorks: React.FC = () => {
               className="card-premium"
               style={{
                 background: "#ffffff",
-                padding: "32px 24px",
+                padding: "28px 24px",
                 display: "flex",
                 flexDirection: "column",
                 gap: "14px",
-                position: "relative"
+                border: "1px solid #e5e5e5",
+                borderRadius: "8px"
               }}
             >
               <div
                 style={{
-                  width: "40px",
-                  height: "40px",
-                  borderRadius: "50%",
-                  background: "#f3e8ff",
-                  color: "#7e14ff",
-                  fontWeight: 800,
-                  fontSize: "1.1rem",
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "6px",
+                  background: "#111111",
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: "0.95rem",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -89,9 +90,9 @@ export const HowItWorks: React.FC = () => {
 
               <h3
                 style={{
-                  fontSize: "1.15rem",
-                  fontWeight: 700,
-                  color: "#0f172a",
+                  fontSize: "1.1rem",
+                  fontWeight: 600,
+                  color: "#111111",
                   margin: 0
                 }}
               >
@@ -100,9 +101,9 @@ export const HowItWorks: React.FC = () => {
 
               <p
                 style={{
-                  fontSize: "0.925rem",
+                  fontSize: "0.875rem",
                   lineHeight: 1.6,
-                  color: "#64748b",
+                  color: "#666666",
                   margin: 0
                 }}
               >
@@ -112,23 +113,26 @@ export const HowItWorks: React.FC = () => {
           ))}
         </div>
 
-        {/* Secondary Technical Pipeline Toggle */}
+        {/* Technical Pipeline Toggle */}
         <div style={{ textAlign: "center", maxWidth: "800px", margin: "0 auto" }}>
           <button
             type="button"
             onClick={() => setShowTechnicalPipeline(!showTechnicalPipeline)}
             style={{
-              background: "transparent",
-              border: "1px solid #e2d9f3",
-              borderRadius: "8px",
-              padding: "8px 16px",
+              background: "#ffffff",
+              border: "1px solid #e5e5e5",
+              borderRadius: "6px",
+              padding: "9px 18px",
               fontSize: "0.85rem",
-              fontWeight: 600,
-              color: "#7e14ff",
-              cursor: "pointer"
+              fontWeight: 500,
+              color: "#111111",
+              cursor: "pointer",
+              transition: "background 0.15s ease"
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f5f5f5")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
           >
-            {showTechnicalPipeline ? "Hide Technical Pipeline Details ↑" : "See Technical Architecture (5-Stage Pipeline) ↓"}
+            {showTechnicalPipeline ? "Hide Pipeline Architecture ↑" : "View Pipeline Architecture (5 Stages) ↓"}
           </button>
 
           {showTechnicalPipeline && (
@@ -136,11 +140,11 @@ export const HowItWorks: React.FC = () => {
               style={{
                 marginTop: "20px",
                 padding: "20px",
-                background: "#ffffff",
-                borderRadius: "16px",
-                border: "1px solid var(--border-subtle)",
+                background: "#fafafa",
+                borderRadius: "8px",
+                border: "1px solid #e5e5e5",
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
                 gap: "12px",
                 textAlign: "left"
               }}
@@ -149,19 +153,19 @@ export const HowItWorks: React.FC = () => {
                 <div
                   key={stage.name}
                   style={{
-                    background: "#faf9fd",
+                    background: "#ffffff",
                     padding: "12px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid #ece5f8"
+                    borderRadius: "6px",
+                    border: "1px solid #e5e5e5"
                   }}
                 >
-                  <span style={{ fontSize: "0.75rem", color: "#7e14ff", fontWeight: 700 }}>
+                  <span style={{ fontSize: "0.75rem", color: "#666666", fontWeight: 700 }}>
                     Stage 0{idx + 1}
                   </span>
-                  <strong style={{ display: "block", fontSize: "0.875rem", color: "#0f172a", marginTop: "2px" }}>
+                  <strong style={{ display: "block", fontSize: "0.875rem", color: "#111111", marginTop: "2px" }}>
                     {stage.name}
                   </strong>
-                  <span style={{ fontSize: "0.75rem", color: "#64748b", lineHeight: 1.4, display: "block", marginTop: "4px" }}>
+                  <span style={{ fontSize: "0.75rem", color: "#666666", lineHeight: 1.4, display: "block", marginTop: "4px" }}>
                     {stage.desc}
                   </span>
                 </div>

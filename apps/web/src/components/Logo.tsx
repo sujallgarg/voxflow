@@ -25,38 +25,37 @@ export const Logo: React.FC<LogoProps> = ({
         style={{
           width: size,
           height: size,
-          borderRadius: Math.round(size * 0.32),
-          background: "linear-gradient(135deg, #7e14ff 0%, #a855f7 100%)",
+          borderRadius: "7px",
+          background: "#111111",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          boxShadow: "0 4px 12px rgba(126, 20, 255, 0.28)",
           flexShrink: 0,
-          position: "relative",
-          overflow: "hidden"
+          position: "relative"
         }}
         aria-hidden="true"
       >
         <svg
-          width={Math.round(size * 0.65)}
-          height={Math.round(size * 0.65)}
+          width={Math.round(size * 0.62)}
+          height={Math.round(size * 0.62)}
           viewBox="0 0 24 24"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
-          {/* Stylized 'V' waveform mark */}
+          {/* Stylized 'V' waveform mark in clean white */}
           <path
             d="M4 6L10.5 19C10.9 19.8 12.1 19.8 12.5 19L20 4"
-            stroke="white"
+            stroke="#ffffff"
             strokeWidth="3.2"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
           <path
             d="M12 9L15 15"
-            stroke="#38bdf8"
+            stroke="#ffffff"
             strokeWidth="2.5"
             strokeLinecap="round"
+            opacity="0.7"
           />
         </svg>
       </div>
@@ -65,16 +64,15 @@ export const Logo: React.FC<LogoProps> = ({
         <span
           style={{
             fontFamily: "var(--font-heading)",
-            fontWeight: 800,
-            fontSize: `${size * 0.65}px`,
+            fontWeight: 700,
+            fontSize: `${size * 0.62}px`,
             letterSpacing: "-0.03em",
-            color: "#0f172a",
+            color: "#111111",
             display: "flex",
-            alignItems: "center",
-            gap: "2px"
+            alignItems: "center"
           }}
         >
-          Vox<span style={{ color: "#7e14ff" }}>Flow</span>
+          VoxFlow
         </span>
       )}
     </div>

@@ -13,6 +13,8 @@ import transformationRoute from "./routes/transformation.js";
 import processRoute from "./routes/process.js";
 import meetingNotesRoute from "./routes/meeting-notes.js";
 import meetingsRoute from "./routes/meetings.js";
+import waitlistRoute from "./routes/waitlist.js";
+import { createRateLimiter } from "./middleware/rate-limiter.js";
 
 export function buildServer() {
   const app = Fastify({
@@ -45,6 +47,9 @@ export function buildServer() {
     credentials: true
   });
 
+  // Rate Limiter PreHandler Hook (120 req/min sliding window)
+  app.addHook("preHandler", createRateLimiter({ windowMs: 60 * 1000, maxRequests: 120 }));
+
   // 50MB file size limit for audio / meeting recordings
   app.register(multipart, {
     limits: {
@@ -70,6 +75,7 @@ export function buildServer() {
   app.register(processRoute);
   app.register(meetingNotesRoute);
   app.register(meetingsRoute);
+  app.register(waitlistRoute);
 
   return app;
 }
