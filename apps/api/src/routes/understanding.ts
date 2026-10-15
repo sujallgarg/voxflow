@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { understandTranscript } from "../services/understanding.service";
+import { understandTranscript } from "../services/understanding.service.js";
 
 const understandingRoute: FastifyPluginAsync =
   async (app) => {

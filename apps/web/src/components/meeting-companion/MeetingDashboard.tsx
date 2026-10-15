@@ -31,7 +31,6 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
   const [statusTab, setStatusTab] = useState<"all" | "upcoming" | "completed">("all");
 
   useEffect(() => {
-    // Initial sync from backend API
     void syncMeetingsFromBackend(currentUser.id);
 
     const handleSync = () => {
@@ -51,14 +50,11 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
 
   const stats = calculateUserStats(currentUser.id);
 
-  // Filter user's real meetings
   const displayedMeetingsList: MeetingRecord[] = meetings.filter((m) => {
-    // Status filter
     if (statusTab !== "all" && m.status !== statusTab) {
       return false;
     }
 
-    // Search filter
     const query = searchQuery.toLowerCase().trim();
     const matchesSearch =
       !query ||
@@ -66,7 +62,6 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
       m.summaryPreview.toLowerCase().includes(query) ||
       m.participants.some((p) => p.name.toLowerCase().includes(query));
 
-    // Language filter
     const matchesLang =
       selectedLanguageFilter === "all" ||
       m.primaryLanguages.some((l) => l.toLowerCase() === selectedLanguageFilter.toLowerCase());
@@ -92,87 +87,83 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#fbf9fe", paddingBottom: "80px" }}>
+    <div style={{ minHeight: "100vh", background: "#ffffff", paddingBottom: "80px" }}>
       {/* Top Header / Breadcrumbs */}
       <header
         style={{
           background: "#ffffff",
-          borderBottom: "1px solid var(--border-subtle)",
+          borderBottom: "1px solid #e5e5e5",
           position: "sticky",
           top: 0,
-          zIndex: 40
+          zIndex: 40,
+          height: "68px"
         }}
       >
         <div
           className="container"
           style={{
-            height: "70px",
+            height: "100%",
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between"
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "12px"
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button
               type="button"
+              className="btn-secondary"
               onClick={onBackToHome}
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                fontSize: "0.875rem",
-                color: "#64748b",
-                fontWeight: 600,
+                fontSize: "0.8125rem",
                 padding: "6px 12px",
-                borderRadius: "8px",
-                background: "#f8f6fc",
-                border: "1px solid #ece5f8",
-                cursor: "pointer"
+                borderRadius: "6px"
               }}
             >
-              ← Back to Main Website
+              ← Back to Website
             </button>
 
-            <span style={{ color: "#cbd5e1" }}>/</span>
+            <span style={{ color: "#d4d4d4" }}>/</span>
 
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <div
                 style={{
-                  width: "28px",
-                  height: "28px",
-                  borderRadius: "8px",
-                  background: "linear-gradient(135deg, #7e14ff 0%, #a855f7 100%)",
+                  width: "24px",
+                  height: "24px",
+                  borderRadius: "5px",
+                  background: "#111111",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   color: "#ffffff",
-                  fontSize: "12px",
-                  fontWeight: 800
+                  fontSize: "11px",
+                  fontWeight: 700
                 }}
               >
                 V
               </div>
-              <strong style={{ fontSize: "1rem", color: "#0f172a" }}>
-                Meeting Companion Workspace
+              <strong style={{ fontSize: "0.95rem", color: "#111111", fontWeight: 600 }}>
+                Meeting Companion
               </strong>
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* User Account Indicator & Testing Switcher */}
+            {/* User Account Switcher */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                background: "#f8f6fc",
+                background: "#fafafa",
                 padding: "4px 10px",
-                borderRadius: "10px",
-                border: "1px solid #ece5f8",
-                fontSize: "0.8rem"
+                borderRadius: "6px",
+                border: "1px solid #e5e5e5",
+                fontSize: "0.8125rem"
               }}
             >
-              <span style={{ color: "#64748b" }}>User:</span>
+              <span style={{ color: "#666666" }}>Account:</span>
               <select
                 aria-label="Active User Account"
                 value={currentUser.id}
@@ -186,14 +177,15 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
                 style={{
                   border: "none",
                   background: "transparent",
-                  fontWeight: 700,
-                  color: "#7e14ff",
+                  fontWeight: 600,
+                  color: "#111111",
                   outline: "none",
-                  cursor: "pointer"
+                  cursor: "pointer",
+                  fontSize: "0.8125rem"
                 }}
               >
                 <option value="user_me">Primary Account ({currentUser.id === "user_me" ? "Active" : "user@voxflow.ai"})</option>
-                <option value="user_tester">Test Account 2 ({currentUser.id === "user_tester" ? "Active" : "Empty Account"})</option>
+                <option value="user_tester">Test Account 2 ({currentUser.id === "user_tester" ? "Active" : "tester@company.com"})</option>
               </select>
             </div>
 
@@ -201,51 +193,49 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
               type="button"
               className="btn-primary"
               onClick={onOpenNewMeetingModal}
-              style={{ padding: "9px 20px", fontSize: "0.875rem" }}
+              style={{ padding: "8px 16px", fontSize: "0.8125rem", borderRadius: "6px" }}
             >
-              <span>+ New Meeting</span>
+              + New Meeting
             </button>
           </div>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="container" style={{ paddingTop: "36px" }}>
-        {/* Transparent Storage & Privacy Notice */}
+      <main className="container" style={{ paddingTop: "32px" }}>
+        {/* Storage Notice */}
         <div
           style={{
-            background: "#fbfaff",
-            border: "1px solid #e9d5ff",
-            borderRadius: "14px",
-            padding: "12px 18px",
+            background: "#fafafa",
+            border: "1px solid #e5e5e5",
+            borderRadius: "6px",
+            padding: "12px 16px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
             gap: "10px",
-            marginBottom: "28px",
-            fontSize: "0.85rem",
-            color: "#6b21a8"
+            marginBottom: "24px",
+            fontSize: "0.8125rem",
+            color: "#666666"
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "16px" }}>🔒</span>
-            <span>
-              <strong>User Data Isolation:</strong> Showing records belonging strictly to <strong>{currentUser.email}</strong>. Records are saved in your local browser profile. Backend cloud sync is scheduled for public release.
-            </span>
+          <div>
+            Showing meeting records for <strong>{currentUser.email}</strong>. Audio transcripts and action items are saved locally in your browser session.
           </div>
 
           <span
             style={{
-              background: "#ede9fe",
-              color: "#7e14ff",
+              background: "#ffffff",
+              color: "#111111",
+              border: "1px solid #e5e5e5",
               padding: "2px 8px",
-              borderRadius: "6px",
+              borderRadius: "4px",
               fontSize: "0.75rem",
-              fontWeight: 700
+              fontWeight: 600
             }}
           >
-            Local Workspace
+            Local Session
           </span>
         </div>
 
@@ -257,63 +247,66 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
             justifyContent: "space-between",
             flexWrap: "wrap",
             gap: "16px",
-            marginBottom: "28px"
+            marginBottom: "24px"
           }}
         >
           <div>
-            <h1 style={{ fontSize: "1.85rem", fontWeight: 800, color: "#0f172a", marginBottom: "6px" }}>
+            <h1 style={{ fontSize: "1.65rem", fontWeight: 700, color: "#111111", marginBottom: "4px" }}>
               Meeting Dashboard
             </h1>
-            <p style={{ fontSize: "0.95rem", color: "#64748b" }}>
-              Your personal meeting records, multilingual notes, and action items.
+            <p style={{ fontSize: "0.875rem", color: "#666666", margin: 0 }}>
+              Review meeting notes, action items, and multilingual transcripts.
             </p>
           </div>
 
-          {/* Quick Metrics - Calculated strictly from user's actual data */}
-          <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
+          {/* Quick Metrics */}
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <div
               style={{
                 background: "#ffffff",
-                border: "1px solid var(--border-subtle)",
-                borderRadius: "12px",
-                padding: "8px 18px",
-                textAlign: "center"
+                border: "1px solid #e5e5e5",
+                borderRadius: "6px",
+                padding: "8px 16px",
+                textAlign: "center",
+                minWidth: "90px"
               }}
             >
-              <span style={{ display: "block", fontSize: "1.35rem", fontWeight: 800, color: "#7e14ff" }}>
+              <span style={{ display: "block", fontSize: "1.25rem", fontWeight: 700, color: "#111111" }}>
                 {stats.totalMeetings}
               </span>
-              <span style={{ fontSize: "0.75rem", color: "#64748b" }}>Total Records</span>
+              <span style={{ fontSize: "0.75rem", color: "#666666" }}>Total</span>
             </div>
 
             <div
               style={{
                 background: "#ffffff",
-                border: "1px solid var(--border-subtle)",
-                borderRadius: "12px",
-                padding: "8px 18px",
-                textAlign: "center"
+                border: "1px solid #e5e5e5",
+                borderRadius: "6px",
+                padding: "8px 16px",
+                textAlign: "center",
+                minWidth: "90px"
               }}
             >
-              <span style={{ display: "block", fontSize: "1.35rem", fontWeight: 800, color: "#3b82f6" }}>
+              <span style={{ display: "block", fontSize: "1.25rem", fontWeight: 700, color: "#111111" }}>
                 {stats.upcomingMeetings}
               </span>
-              <span style={{ fontSize: "0.75rem", color: "#64748b" }}>Upcoming</span>
+              <span style={{ fontSize: "0.75rem", color: "#666666" }}>Upcoming</span>
             </div>
 
             <div
               style={{
                 background: "#ffffff",
-                border: "1px solid var(--border-subtle)",
-                borderRadius: "12px",
-                padding: "8px 18px",
-                textAlign: "center"
+                border: "1px solid #e5e5e5",
+                borderRadius: "6px",
+                padding: "8px 16px",
+                textAlign: "center",
+                minWidth: "90px"
               }}
             >
-              <span style={{ display: "block", fontSize: "1.35rem", fontWeight: 800, color: "#10b981" }}>
+              <span style={{ display: "block", fontSize: "1.25rem", fontWeight: 700, color: "#111111" }}>
                 {stats.completedMeetings}
               </span>
-              <span style={{ fontSize: "0.75rem", color: "#64748b" }}>Completed</span>
+              <span style={{ fontSize: "0.75rem", color: "#666666" }}>Completed</span>
             </div>
           </div>
         </div>
@@ -322,25 +315,26 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
         <div
           style={{
             background: "#ffffff",
-            borderRadius: "16px",
-            border: "1px solid var(--border-subtle)",
-            padding: "16px 20px",
-            marginBottom: "24px",
+            borderRadius: "6px",
+            border: "1px solid #e5e5e5",
+            padding: "14px 16px",
+            marginBottom: "20px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: "14px"
+            gap: "12px"
           }}
         >
           {/* Status Tabs */}
           <div
             style={{
               display: "inline-flex",
-              background: "#f1edf8",
-              padding: "4px",
-              borderRadius: "10px",
-              gap: "4px"
+              background: "#f5f5f5",
+              padding: "3px",
+              borderRadius: "6px",
+              gap: "4px",
+              border: "1px solid #e5e5e5"
             }}
           >
             {(["all", "upcoming", "completed"] as const).map((tab) => (
@@ -349,13 +343,14 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
                 type="button"
                 onClick={() => setStatusTab(tab)}
                 style={{
-                  padding: "6px 14px",
-                  borderRadius: "8px",
-                  fontSize: "0.85rem",
+                  padding: "5px 12px",
+                  borderRadius: "4px",
+                  fontSize: "0.8125rem",
                   fontWeight: 600,
-                  background: statusTab === tab ? "#ffffff" : "transparent",
-                  color: statusTab === tab ? "#7e14ff" : "#64748b",
-                  boxShadow: statusTab === tab ? "0 2px 6px rgba(0,0,0,0.05)" : "none",
+                  background: statusTab === tab ? "#111111" : "transparent",
+                  color: statusTab === tab ? "#ffffff" : "#666666",
+                  border: "none",
+                  cursor: "pointer",
                   textTransform: "capitalize"
                 }}
               >
@@ -368,17 +363,19 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flex: 1, justifyContent: "flex-end" }}>
             <input
               type="text"
-              placeholder="Search meetings by title or keywords..."
+              placeholder="Search meetings by title..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
-                padding: "8px 14px",
-                borderRadius: "10px",
-                border: "1px solid #e2e8f0",
-                fontSize: "0.875rem",
+                padding: "7px 12px",
+                borderRadius: "6px",
+                border: "1px solid #e5e5e5",
+                fontSize: "0.8125rem",
                 width: "100%",
-                maxWidth: "320px",
-                outline: "none"
+                maxWidth: "280px",
+                outline: "none",
+                background: "#ffffff",
+                color: "#111111"
               }}
             />
 
@@ -387,12 +384,13 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
               value={selectedLanguageFilter}
               onChange={(e) => setSelectedLanguageFilter(e.target.value)}
               style={{
-                padding: "8px 12px",
-                borderRadius: "10px",
-                border: "1px solid #e2e8f0",
-                fontSize: "0.875rem",
+                padding: "7px 10px",
+                borderRadius: "6px",
+                border: "1px solid #e5e5e5",
+                fontSize: "0.8125rem",
                 background: "#ffffff",
-                color: "#334155"
+                color: "#111111",
+                cursor: "pointer"
               }}
             >
               <option value="all">All Languages</option>
@@ -407,41 +405,23 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
 
         {/* Content Body: Empty State or Meeting Cards */}
         {displayedMeetingsList.length === 0 ? (
-          /* Empty State */
           <div
             style={{
-              padding: "72px 24px",
+              padding: "56px 20px",
               textAlign: "center",
               background: "#ffffff",
-              borderRadius: "20px",
-              border: "1px dashed #d8b4fe"
+              borderRadius: "8px",
+              border: "1px dashed #e5e5e5"
             }}
           >
-            <div
-              style={{
-                width: "64px",
-                height: "64px",
-                borderRadius: "50%",
-                background: "#f3e8ff",
-                color: "#7e14ff",
-                fontSize: "28px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                margin: "0 auto 16px auto"
-              }}
-            >
-              📋
-            </div>
-
-            <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>
-              No meetings yet
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 600, color: "#111111", marginBottom: "6px" }}>
+              No meetings found
             </h3>
 
-            <p style={{ fontSize: "0.9375rem", color: "#64748b", maxWidth: "460px", margin: "0 auto 24px auto", lineHeight: 1.6 }}>
+            <p style={{ fontSize: "0.875rem", color: "#666666", maxWidth: "420px", margin: "0 auto 20px auto", lineHeight: 1.6 }}>
               {searchQuery || selectedLanguageFilter !== "all" || statusTab !== "all"
-                ? "No meeting records match your search filters. Try clearing your search parameters."
-                : "Your meeting notes, multilingual transcripts, and action items will appear here when you create your first meeting."}
+                ? "No meeting records match your search parameters. Try clearing your filters."
+                : "Your meeting notes, transcripts, and action items will appear here."}
             </p>
 
             {searchQuery || selectedLanguageFilter !== "all" || statusTab !== "all" ? (
@@ -453,6 +433,7 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
                   setSelectedLanguageFilter("all");
                   setStatusTab("all");
                 }}
+                style={{ padding: "8px 16px", fontSize: "0.8125rem" }}
               >
                 Clear Filters
               </button>
@@ -461,15 +442,14 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
                 type="button"
                 className="btn-primary"
                 onClick={onOpenNewMeetingModal}
-                style={{ padding: "12px 28px" }}
+                style={{ padding: "10px 20px", fontSize: "0.875rem" }}
               >
-                + Create Your First Meeting
+                Create New Meeting
               </button>
             )}
           </div>
         ) : (
-          /* Meetings Grid */
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             {displayedMeetingsList.map((meeting) => (
               <div
                 key={meeting.id}
@@ -477,51 +457,54 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
                 className="card-premium"
                 style={{
                   background: "#ffffff",
-                  padding: "24px 28px",
+                  padding: "20px",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e5e5",
                   cursor: "pointer",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "14px"
+                  gap: "12px"
                 }}
               >
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "14px", flexWrap: "wrap" }}>
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
                       <span
                         style={{
                           fontSize: "0.75rem",
-                          fontWeight: 700,
-                          padding: "3px 8px",
-                          borderRadius: "6px",
-                          background: meeting.status === "completed" ? "#ecfdf5" : "#eff6ff",
-                          color: meeting.status === "completed" ? "#059669" : "#2563eb",
+                          fontWeight: 600,
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          background: "#f5f5f5",
+                          color: "#111111",
+                          border: "1px solid #e5e5e5",
                           textTransform: "capitalize"
                         }}
                       >
                         {meeting.status}
                       </span>
 
-                      <span style={{ fontSize: "0.8125rem", color: "#64748b" }}>
+                      <span style={{ fontSize: "0.8125rem", color: "#666666" }}>
                         {meeting.date} • {meeting.time} ({meeting.duration})
                       </span>
                     </div>
 
-                    <h3 style={{ fontSize: "1.15rem", fontWeight: 700, color: "#0f172a" }}>
+                    <h3 style={{ fontSize: "1.05rem", fontWeight: 600, color: "#111111", margin: 0 }}>
                       {meeting.title}
                     </h3>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
                       type="button"
                       onClick={(e) => handleDeleteMeeting(e, meeting.id, meeting.title)}
                       style={{
-                        padding: "6px 12px",
-                        borderRadius: "8px",
-                        fontSize: "0.8rem",
-                        color: "#ef4444",
-                        background: "#fef2f2",
-                        border: "1px solid #fee2e2",
+                        padding: "4px 10px",
+                        borderRadius: "4px",
+                        fontSize: "0.75rem",
+                        color: "#666666",
+                        background: "#ffffff",
+                        border: "1px solid #e5e5e5",
                         cursor: "pointer"
                       }}
                       title="Delete this meeting"
@@ -529,29 +512,30 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
                       Delete
                     </button>
 
-                    <span style={{ fontSize: "0.875rem", color: "#7e14ff", fontWeight: 600 }}>
+                    <span style={{ fontSize: "0.8125rem", color: "#111111", fontWeight: 600 }}>
                       Open Workspace →
                     </span>
                   </div>
                 </div>
 
-                <p style={{ fontSize: "0.9375rem", color: "#475569", lineHeight: 1.6, margin: 0 }}>
+                <p style={{ fontSize: "0.875rem", color: "#666666", lineHeight: 1.6, margin: 0 }}>
                   {meeting.summaryPreview || meeting.fullSummary || "No summary recorded yet."}
                 </p>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", paddingTop: "10px", borderTop: "1px solid #f8f6fc" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "0.8rem", color: "#64748b" }}>Languages:</span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", paddingTop: "10px", borderTop: "1px solid #f5f5f5" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "0.75rem", color: "#666666" }}>Languages:</span>
                     {meeting.primaryLanguages.map((lang) => (
                       <span
                         key={lang}
                         style={{
                           fontSize: "0.75rem",
-                          background: "#f3e8ff",
-                          color: "#7e14ff",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontWeight: 600
+                          background: "#fafafa",
+                          color: "#111111",
+                          border: "1px solid #e5e5e5",
+                          padding: "1px 6px",
+                          borderRadius: "4px",
+                          fontWeight: 500
                         }}
                       >
                         {lang}
@@ -559,8 +543,8 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
                     ))}
                   </div>
 
-                  <div style={{ fontSize: "0.8125rem", color: "#64748b" }}>
-                    {meeting.actionItems.length} Action Items • {meeting.transcript.length} Utterances
+                  <div style={{ fontSize: "0.75rem", color: "#666666" }}>
+                    {meeting.actionItems.length} Tasks • {meeting.transcript.length} Utterances
                   </div>
                 </div>
               </div>

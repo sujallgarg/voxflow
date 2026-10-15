@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type {
   MeetingRecord,
   ActionItem,
@@ -36,8 +36,15 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
 
   // Notes state
   const [notesContent, setNotesContent] = useState<string>(
-    meeting.initialNotes || meeting.fullSummary || ""
+    initialMeeting.initialNotes || initialMeeting.fullSummary || ""
   );
+
+  // Sync state when selected meeting changes
+  useEffect(() => {
+    setMeeting(initialMeeting);
+    setNotesContent(initialMeeting.initialNotes || initialMeeting.fullSummary || "");
+  }, [initialMeeting]);
+
   const [isSavingNotes, setIsSavingNotes] = useState<boolean>(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
@@ -70,14 +77,14 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
     };
     persistMeeting(updated);
     setIsSavingNotes(false);
-    setSaveSuccessMsg("Notes saved successfully!");
+    setSaveSuccessMsg("Notes saved successfully.");
     setTimeout(() => setSaveSuccessMsg(null), 2500);
   };
 
   const handleCopyNotes = async () => {
     try {
       await navigator.clipboard.writeText(notesContent);
-      setSaveSuccessMsg("Copied notes to clipboard!");
+      setSaveSuccessMsg("Copied notes to clipboard.");
       setTimeout(() => setSaveSuccessMsg(null), 2000);
     } catch (e) {
       console.warn("Clipboard copy failed:", e);
@@ -140,7 +147,7 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
       };
 
       persistMeeting(updated);
-      setSaveSuccessMsg("AI analysis complete! Summary, decisions, and action items updated.");
+      setSaveSuccessMsg("AI analysis complete. Summary, decisions, and action items updated.");
       setTimeout(() => setSaveSuccessMsg(null), 3500);
     } catch (err: any) {
       console.error("AI meeting notes error:", err);
@@ -204,21 +211,22 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#fbf9fe", paddingBottom: "80px" }}>
+    <div style={{ minHeight: "100vh", background: "#ffffff", paddingBottom: "80px" }}>
       {/* Top Header */}
       <header
         style={{
           background: "#ffffff",
-          borderBottom: "1px solid var(--border-subtle)",
+          borderBottom: "1px solid #e5e5e5",
           position: "sticky",
           top: 0,
-          zIndex: 40
+          zIndex: 40,
+          height: "68px"
         }}
       >
         <div
           className="container"
           style={{
-            height: "70px",
+            height: "100%",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -229,27 +237,20 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button
               type="button"
+              className="btn-secondary"
               onClick={onBackToDashboard}
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                fontSize: "0.875rem",
-                color: "#64748b",
-                fontWeight: 600,
+                fontSize: "0.8125rem",
                 padding: "6px 12px",
-                borderRadius: "8px",
-                background: "#f8f6fc",
-                border: "1px solid #ece5f8",
-                cursor: "pointer"
+                borderRadius: "6px"
               }}
             >
               ← Back to Meetings
             </button>
 
-            <span style={{ color: "#cbd5e1" }}>/</span>
+            <span style={{ color: "#d4d4d4" }}>/</span>
 
-            <strong style={{ fontSize: "1.05rem", color: "#0f172a" }}>
+            <strong style={{ fontSize: "1rem", color: "#111111", fontWeight: 600 }}>
               {meeting.title}
             </strong>
           </div>
@@ -258,11 +259,12 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
             <span
               style={{
                 fontSize: "0.75rem",
-                fontWeight: 700,
-                padding: "4px 10px",
-                borderRadius: "6px",
-                background: meeting.status === "completed" ? "#ecfdf5" : "#eff6ff",
-                color: meeting.status === "completed" ? "#059669" : "#2563eb",
+                fontWeight: 600,
+                padding: "3px 8px",
+                borderRadius: "4px",
+                background: "#f5f5f5",
+                color: "#111111",
+                border: "1px solid #e5e5e5",
                 textTransform: "capitalize"
               }}
             >
@@ -274,9 +276,9 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
               className="btn-primary"
               onClick={handleGenerateAiNotes}
               disabled={isGeneratingNotes}
-              style={{ padding: "8px 18px", fontSize: "0.85rem" }}
+              style={{ padding: "8px 16px", fontSize: "0.8125rem", borderRadius: "6px" }}
             >
-              {isGeneratingNotes ? "Analyzing Speech..." : "✨ Run AI Summary"}
+              {isGeneratingNotes ? "Analyzing Speech..." : "Run AI Summary"}
             </button>
           </div>
         </div>
@@ -284,18 +286,18 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
 
       {/* Main Workspace Body */}
       <main className="container" style={{ paddingTop: "28px" }}>
-        {/* Success / Error Toast Notifications */}
+        {/* Toast Notifications */}
         {saveSuccessMsg && (
           <div
             style={{
-              padding: "12px 18px",
-              background: "#ecfdf5",
-              border: "1px solid #a7f3d0",
-              color: "#065f46",
-              borderRadius: "12px",
+              padding: "10px 16px",
+              background: "#fafafa",
+              border: "1px solid #111111",
+              color: "#111111",
+              borderRadius: "6px",
               marginBottom: "20px",
               fontSize: "0.875rem",
-              fontWeight: 600
+              fontWeight: 500
             }}
           >
             ✓ {saveSuccessMsg}
@@ -305,17 +307,17 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
         {aiError && (
           <div
             style={{
-              padding: "12px 18px",
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              color: "#b91c1c",
-              borderRadius: "12px",
+              padding: "10px 16px",
+              background: "#fafafa",
+              border: "1px solid #111111",
+              color: "#111111",
+              borderRadius: "6px",
               marginBottom: "20px",
               fontSize: "0.875rem",
-              fontWeight: 600
+              fontWeight: 500
             }}
           >
-            ⚠️ {aiError}
+            Error: {aiError}
           </div>
         )}
 
@@ -325,9 +327,8 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
             display: "flex",
             alignItems: "center",
             gap: "8px",
-            borderBottom: "1px solid #e2e8f0",
-            marginBottom: "28px",
-            paddingBottom: "4px"
+            borderBottom: "1px solid #e5e5e5",
+            marginBottom: "28px"
           }}
         >
           {(
@@ -343,14 +344,15 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
               type="button"
               onClick={() => setActiveTab(tab.id as WorkspaceTabType)}
               style={{
-                padding: "10px 18px",
-                fontSize: "0.9rem",
-                fontWeight: 700,
-                color: activeTab === tab.id ? "#7e14ff" : "#64748b",
-                borderBottom: activeTab === tab.id ? "2px solid #7e14ff" : "2px solid transparent",
+                padding: "10px 16px",
+                fontSize: "0.875rem",
+                fontWeight: activeTab === tab.id ? 600 : 500,
+                color: activeTab === tab.id ? "#111111" : "#666666",
+                borderBottom: activeTab === tab.id ? "2px solid #111111" : "2px solid transparent",
                 background: "transparent",
                 cursor: "pointer",
-                transition: "all 0.15s ease"
+                transition: "color 0.15s ease",
+                marginBottom: "-1px"
               }}
             >
               {tab.label}
@@ -362,40 +364,41 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
             TAB 1: OVERVIEW & DECISIONS
         ========================================================= */}
         {activeTab === "overview" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "24px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }}>
             {/* Executive Summary Card */}
-            <div className="card-premium" style={{ padding: "28px", background: "#ffffff" }}>
-              <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#0f172a", marginBottom: "12px" }}>
+            <div className="card-premium" style={{ padding: "24px", background: "#ffffff", borderRadius: "8px", border: "1px solid #e5e5e5" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 600, color: "#111111", marginBottom: "12px" }}>
                 Meeting Summary
               </h3>
               {meeting.fullSummary ? (
-                <p style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "#334155", whiteSpace: "pre-line", margin: 0 }}>
+                <p style={{ fontSize: "0.9375rem", lineHeight: 1.65, color: "#111111", whiteSpace: "pre-line", margin: 0 }}>
                   {meeting.fullSummary}
                 </p>
               ) : (
-                <div style={{ padding: "24px 0", textAlign: "center", color: "#64748b" }}>
-                  <p style={{ margin: "0 0 12px 0", fontSize: "0.95rem" }}>
+                <div style={{ padding: "24px 0", textAlign: "center", color: "#666666" }}>
+                  <p style={{ margin: "0 0 14px 0", fontSize: "0.9375rem" }}>
                     No automated summary generated yet for this session.
                   </p>
                   <button
                     type="button"
-                    className="btn-outline"
+                    className="btn-secondary"
                     onClick={handleGenerateAiNotes}
                     disabled={isGeneratingNotes}
+                    style={{ fontSize: "0.875rem", padding: "8px 16px" }}
                   >
-                    ✨ Generate Summary from Notes
+                    Generate Summary from Notes
                   </button>
                 </div>
               )}
             </div>
 
             {/* Decisions Card */}
-            <div className="card-premium" style={{ padding: "28px", background: "#ffffff" }}>
-              <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#0f172a", marginBottom: "14px" }}>
+            <div className="card-premium" style={{ padding: "24px", background: "#ffffff", borderRadius: "8px", border: "1px solid #e5e5e5" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 600, color: "#111111", marginBottom: "14px" }}>
                 Decisions Made ({meeting.decisions.length})
               </h3>
               {meeting.decisions.length === 0 ? (
-                <p style={{ fontSize: "0.9rem", color: "#94a3b8", margin: 0 }}>
+                <p style={{ fontSize: "0.875rem", color: "#666666", margin: 0 }}>
                   No decisions recorded yet. Run AI Summary on your notes to extract key decisions.
                 </p>
               ) : (
@@ -405,16 +408,16 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                       key={d.id}
                       style={{
                         padding: "14px 16px",
-                        borderRadius: "10px",
-                        background: "#faf9fd",
-                        border: "1px solid #ece5f8"
+                        borderRadius: "6px",
+                        background: "#fafafa",
+                        border: "1px solid #e5e5e5"
                       }}
                     >
-                      <strong style={{ display: "block", color: "#0f172a", fontSize: "0.95rem", marginBottom: "4px" }}>
+                      <strong style={{ display: "block", color: "#111111", fontSize: "0.9375rem", marginBottom: "4px" }}>
                         ✓ {d.decision}
                       </strong>
                       {d.context && (
-                        <span style={{ fontSize: "0.85rem", color: "#64748b" }}>{d.context}</span>
+                        <span style={{ fontSize: "0.8125rem", color: "#666666" }}>{d.context}</span>
                       )}
                     </div>
                   ))}
@@ -428,10 +431,10 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
             TAB 2: TRANSCRIPT
         ========================================================= */}
         {activeTab === "transcript" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             {/* Add Utterance Form */}
-            <div className="card-premium" style={{ padding: "20px 24px", background: "#ffffff" }}>
-              <h4 style={{ fontSize: "1rem", fontWeight: 700, color: "#0f172a", marginBottom: "12px" }}>
+            <div className="card-premium" style={{ padding: "20px", background: "#ffffff", borderRadius: "8px", border: "1px solid #e5e5e5" }}>
+              <h4 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#111111", marginBottom: "12px" }}>
                 Add Spoken Utterance or Speech Fragment
               </h4>
               <form onSubmit={handleAddUtterance} style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -443,9 +446,11 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                   style={{
                     width: "160px",
                     padding: "8px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "0.875rem"
+                    borderRadius: "6px",
+                    border: "1px solid #e5e5e5",
+                    fontSize: "0.875rem",
+                    color: "#111111",
+                    background: "#ffffff"
                   }}
                 />
                 <input
@@ -456,13 +461,15 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                   style={{
                     flex: 1,
                     minWidth: "240px",
-                    padding: "8px 14px",
-                    borderRadius: "8px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "0.875rem"
+                    padding: "8px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid #e5e5e5",
+                    fontSize: "0.875rem",
+                    color: "#111111",
+                    background: "#ffffff"
                   }}
                 />
-                <button type="submit" className="btn-primary" style={{ padding: "8px 18px", fontSize: "0.85rem" }}>
+                <button type="submit" className="btn-primary" style={{ padding: "8px 16px", fontSize: "0.8125rem", borderRadius: "6px" }}>
                   Add Line
                 </button>
               </form>
@@ -472,30 +479,31 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
             {meeting.transcript.length === 0 ? (
               <div
                 style={{
-                  padding: "56px 20px",
+                  padding: "48px 20px",
                   textAlign: "center",
                   background: "#ffffff",
-                  borderRadius: "16px",
-                  border: "1px dashed #d8b4fe"
+                  borderRadius: "8px",
+                  border: "1px dashed #e5e5e5"
                 }}
               >
-                <div style={{ fontSize: "28px", marginBottom: "10px" }}>🎙️</div>
-                <h4 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a", marginBottom: "6px" }}>
+                <h4 style={{ fontSize: "1rem", fontWeight: 600, color: "#111111", marginBottom: "6px" }}>
                   No transcript recorded yet
                 </h4>
-                <p style={{ fontSize: "0.9rem", color: "#64748b", maxWidth: "440px", margin: "0 auto", lineHeight: 1.6 }}>
+                <p style={{ fontSize: "0.875rem", color: "#666666", maxWidth: "420px", margin: "0 auto", lineHeight: 1.6 }}>
                   Add speech utterances using the form above or paste raw notes in the Notes tab to run AI extraction.
                 </p>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 {meeting.transcript.map((u) => (
                   <div
                     key={u.id}
                     className="card-premium"
                     style={{
-                      padding: "16px 20px",
+                      padding: "14px 18px",
                       background: "#ffffff",
+                      borderRadius: "6px",
+                      border: "1px solid #e5e5e5",
                       display: "flex",
                       alignItems: "flex-start",
                       justifyContent: "space-between",
@@ -503,15 +511,15 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                     }}
                   >
                     <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                        <strong style={{ fontSize: "0.9rem", color: "#7e14ff" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                        <strong style={{ fontSize: "0.875rem", color: "#111111" }}>
                           {u.speakerName}
                         </strong>
-                        <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                        <span style={{ fontSize: "0.75rem", color: "#666666" }}>
                           {u.timestamp}
                         </span>
                       </div>
-                      <p style={{ fontSize: "0.9375rem", color: "#334155", lineHeight: 1.6, margin: 0 }}>
+                      <p style={{ fontSize: "0.9375rem", color: "#111111", lineHeight: 1.6, margin: 0 }}>
                         "{u.originalText}"
                       </p>
                     </div>
@@ -521,11 +529,11 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                       onClick={() => handleDeleteUtterance(u.id)}
                       style={{
                         padding: "4px 8px",
-                        borderRadius: "6px",
+                        borderRadius: "4px",
                         fontSize: "0.75rem",
-                        color: "#ef4444",
+                        color: "#666666",
                         background: "transparent",
-                        border: "1px solid #fee2e2",
+                        border: "1px solid #e5e5e5",
                         cursor: "pointer"
                       }}
                       title="Delete utterance"
@@ -543,10 +551,10 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
             TAB 3: ACTION ITEMS
         ========================================================= */}
         {activeTab === "action-items" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             {/* Add Action Item Form */}
-            <div className="card-premium" style={{ padding: "20px 24px", background: "#ffffff" }}>
-              <h4 style={{ fontSize: "1rem", fontWeight: 700, color: "#0f172a", marginBottom: "12px" }}>
+            <div className="card-premium" style={{ padding: "20px", background: "#ffffff", borderRadius: "8px", border: "1px solid #e5e5e5" }}>
+              <h4 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#111111", marginBottom: "12px" }}>
                 Add New Action Item
               </h4>
               <form onSubmit={handleAddActionItem} style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -559,9 +567,11 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                     flex: 2,
                     minWidth: "220px",
                     padding: "8px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "0.875rem"
+                    borderRadius: "6px",
+                    border: "1px solid #e5e5e5",
+                    fontSize: "0.875rem",
+                    color: "#111111",
+                    background: "#ffffff"
                   }}
                 />
                 <input
@@ -572,9 +582,11 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                   style={{
                     width: "140px",
                     padding: "8px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "0.875rem"
+                    borderRadius: "6px",
+                    border: "1px solid #e5e5e5",
+                    fontSize: "0.875rem",
+                    color: "#111111",
+                    background: "#ffffff"
                   }}
                 />
                 <input
@@ -585,13 +597,15 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                   style={{
                     width: "130px",
                     padding: "8px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "0.875rem"
+                    borderRadius: "6px",
+                    border: "1px solid #e5e5e5",
+                    fontSize: "0.875rem",
+                    color: "#111111",
+                    background: "#ffffff"
                   }}
                 />
-                <button type="submit" className="btn-primary" style={{ padding: "8px 18px", fontSize: "0.85rem" }}>
-                  + Add Item
+                <button type="submit" className="btn-primary" style={{ padding: "8px 16px", fontSize: "0.8125rem", borderRadius: "6px" }}>
+                  Add Item
                 </button>
               </form>
             </div>
@@ -600,47 +614,48 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
             {meeting.actionItems.length === 0 ? (
               <div
                 style={{
-                  padding: "56px 20px",
+                  padding: "48px 20px",
                   textAlign: "center",
                   background: "#ffffff",
-                  borderRadius: "16px",
-                  border: "1px dashed #d8b4fe"
+                  borderRadius: "8px",
+                  border: "1px dashed #e5e5e5"
                 }}
               >
-                <div style={{ fontSize: "28px", marginBottom: "10px" }}>✓</div>
-                <h4 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a", marginBottom: "6px" }}>
+                <h4 style={{ fontSize: "1rem", fontWeight: 600, color: "#111111", marginBottom: "6px" }}>
                   No action items yet
                 </h4>
-                <p style={{ fontSize: "0.9rem", color: "#64748b", maxWidth: "420px", margin: "0 auto", lineHeight: 1.6 }}>
+                <p style={{ fontSize: "0.875rem", color: "#666666", maxWidth: "420px", margin: "0 auto", lineHeight: 1.6 }}>
                   Create tasks above or run AI summary to extract action items automatically from your discussion.
                 </p>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {meeting.actionItems.map((item) => (
                   <div
                     key={item.id}
                     className="card-premium"
                     style={{
-                      padding: "16px 20px",
+                      padding: "14px 18px",
                       background: "#ffffff",
+                      borderRadius: "6px",
+                      border: "1px solid #e5e5e5",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
                       gap: "14px"
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                       <input
                         type="checkbox"
                         checked={item.completed}
                         onChange={() => handleToggleAction(item.id)}
-                        style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#7e14ff" }}
+                        style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#111111" }}
                       />
                       <span
                         style={{
-                          fontSize: "0.95rem",
-                          color: item.completed ? "#94a3b8" : "#0f172a",
+                          fontSize: "0.9375rem",
+                          color: item.completed ? "#888888" : "#111111",
                           textDecoration: item.completed ? "line-through" : "none",
                           fontWeight: 500
                         }}
@@ -650,7 +665,7 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
+                      <span style={{ fontSize: "0.8125rem", color: "#666666" }}>
                         Assignee: <strong>{item.assignee}</strong> • Due: {item.dueDate}
                       </span>
 
@@ -660,7 +675,7 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                         style={{
                           background: "none",
                           border: "none",
-                          color: "#ef4444",
+                          color: "#666666",
                           cursor: "pointer",
                           fontSize: "14px"
                         }}
@@ -680,26 +695,26 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
             TAB 4: NOTES & AGENDA
         ========================================================= */}
         {activeTab === "notes" && (
-          <div className="card-premium" style={{ padding: "28px", background: "#ffffff" }}>
+          <div className="card-premium" style={{ padding: "24px", background: "#ffffff", borderRadius: "8px", border: "1px solid #e5e5e5" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
-              <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#0f172a" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 600, color: "#111111" }}>
                 Meeting Notes & Discussion Outline
               </h3>
 
               <div style={{ display: "flex", gap: "8px" }}>
                 <button
                   type="button"
-                  className="btn-outline"
+                  className="btn-secondary"
                   onClick={handleCopyNotes}
-                  style={{ fontSize: "0.85rem", padding: "6px 14px" }}
+                  style={{ fontSize: "0.8125rem", padding: "6px 12px" }}
                 >
                   Copy Notes
                 </button>
                 <button
                   type="button"
-                  className="btn-outline"
+                  className="btn-secondary"
                   onClick={handleDownloadNotes}
-                  style={{ fontSize: "0.85rem", padding: "6px 14px" }}
+                  style={{ fontSize: "0.8125rem", padding: "6px 12px" }}
                 >
                   Download (.txt)
                 </button>
@@ -708,7 +723,7 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                   className="btn-primary"
                   onClick={handleSaveNotes}
                   disabled={isSavingNotes}
-                  style={{ fontSize: "0.85rem", padding: "6px 18px" }}
+                  style={{ fontSize: "0.8125rem", padding: "6px 14px" }}
                 >
                   Save Notes
                 </button>
@@ -722,19 +737,20 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
               placeholder="Record notes, talking points, decisions, or raw speech transcript here..."
               style={{
                 width: "100%",
-                padding: "16px",
-                borderRadius: "12px",
-                border: "1px solid #cbd5e1",
-                fontSize: "0.95rem",
+                padding: "14px",
+                borderRadius: "6px",
+                border: "1px solid #e5e5e5",
+                fontSize: "0.9375rem",
                 fontFamily: "inherit",
-                lineHeight: 1.7,
+                lineHeight: 1.65,
                 outline: "none",
                 resize: "vertical",
-                background: "#fbfaff"
+                background: "#fafafa",
+                color: "#111111"
               }}
             />
 
-            <div style={{ marginTop: "14px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: "#94a3b8" }}>
+            <div style={{ marginTop: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem", color: "#666666" }}>
               <span>Saved locally in browser session</span>
               <span>{notesContent.length} characters</span>
             </div>

@@ -19,9 +19,9 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
     <section
       style={{
         position: "relative",
-        paddingTop: "56px",
+        paddingTop: "64px",
         paddingBottom: "80px",
-        overflow: "hidden"
+        background: "#ffffff"
       }}
     >
       <div className="container">
@@ -29,47 +29,29 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
         <div
           style={{
             textAlign: "center",
-            maxWidth: "800px",
-            margin: "0 auto 44px auto"
+            maxWidth: "760px",
+            margin: "0 auto 48px auto"
           }}
         >
-          {/* Subtle Product Badge */}
-          <div style={{ display: "inline-block", marginBottom: "18px" }}>
-            <span className="badge badge-glow">
-              <span
-                style={{
-                  width: "8px",
-                  height: "8px",
-                  borderRadius: "50%",
-                  background: "#10b981",
-                  display: "inline-block"
-                }}
-              />
-              AI Voice Typing for Modern Browsers
+          {/* Product Badge */}
+          <div style={{ display: "inline-block", marginBottom: "20px" }}>
+            <span className="badge">
+              AI Voice Typing for Web Browsers
             </span>
           </div>
 
           {/* Single H1 per page */}
           <h1
             style={{
-              fontSize: "clamp(2.4rem, 5vw, 3.85rem)",
-              fontWeight: 800,
+              fontSize: "clamp(2.4rem, 5vw, 3.75rem)",
+              fontWeight: 700,
               letterSpacing: "-0.035em",
-              lineHeight: 1.14,
+              lineHeight: 1.12,
               marginBottom: "20px",
-              color: "#0f172a"
+              color: "#111111"
             }}
           >
-            Speak Naturally.{" "}
-            <span
-              style={{
-                background: "linear-gradient(135deg, #7e14ff 0%, #9333ea 50%, #2563eb 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent"
-              }}
-            >
-              Write Everywhere.
-            </span>
+            Speak naturally. Write everywhere.
           </h1>
 
           {/* Supporting Copy */}
@@ -77,13 +59,13 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
             style={{
               fontSize: "clamp(1.05rem, 1.8vw, 1.2rem)",
               lineHeight: 1.6,
-              color: "#475569",
-              maxWidth: "660px",
+              color: "#666666",
+              maxWidth: "620px",
               margin: "0 auto 32px auto"
             }}
           >
-            Turn your speech into clear, context-aware text in your preferred language.
-            VoxFlow helps you write across the web without typing every word.
+            Convert natural speech into clear, structured text in your preferred language.
+            VoxFlow adapts to your context so you can write across the web without typing every word.
           </p>
 
           {/* Action CTAs */}
@@ -93,30 +75,30 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
               alignItems: "center",
               justifyContent: "center",
               flexWrap: "wrap",
-              gap: "14px",
-              marginBottom: "32px"
+              gap: "12px",
+              marginBottom: "36px"
             }}
           >
             <button
               type="button"
               className="btn-primary"
               onClick={onOpenBetaModal}
-              style={{ padding: "14px 28px", fontSize: "1rem" }}
+              style={{ padding: "12px 24px", fontSize: "0.9375rem" }}
             >
-              Get Early Access
+              Get Started
             </button>
 
             <button
               type="button"
               className="btn-secondary"
               onClick={handleScrollToHowItWorks}
-              style={{ padding: "14px 26px", fontSize: "1rem" }}
+              style={{ padding: "12px 22px", fontSize: "0.9375rem" }}
             >
-              See How It Works ↓
+              How It Works
             </button>
           </div>
 
-          {/* Key Value Points */}
+          {/* Value Points */}
           <div
             style={{
               display: "flex",
@@ -124,35 +106,33 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
               justifyContent: "center",
               flexWrap: "wrap",
               gap: "24px",
-              fontSize: "0.85rem",
-              color: "#64748b"
+              fontSize: "0.875rem",
+              color: "#666666"
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
-              <span>Works directly in your browser</span>
+              <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
+              <span>Runs in your browser</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
-              <span>Multilingual & mixed-language speech</span>
+              <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
+              <span>Multilingual speech & code-switching</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
-              <span>Polished, formatted text</span>
+              <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
+              <span>Context-aware text formatting</span>
             </div>
           </div>
         </div>
 
-        {/* Single Focused Product Visual: Clean Browser Experience */}
+        {/* Focused Product Visual: Clean Desktop Browser Experience */}
         <div
           style={{
-            maxWidth: "960px",
+            maxWidth: "920px",
             margin: "0 auto",
-            borderRadius: "20px",
-            border: "1px solid rgba(126, 20, 255, 0.15)",
+            borderRadius: "8px",
+            border: "1px solid #e5e5e5",
             background: "#ffffff",
-            boxShadow:
-              "0 20px 50px -15px rgba(126, 20, 255, 0.1), 0 6px 20px -5px rgba(15, 23, 42, 0.05)",
             overflow: "hidden"
           }}
         >
@@ -162,35 +142,38 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              padding: "12px 18px",
-              background: "#faf9fd",
-              borderBottom: "1px solid #ece7f6"
+              padding: "10px 16px",
+              background: "#fafafa",
+              borderBottom: "1px solid #e5e5e5"
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#f87171" }} />
-              <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#fbbf24" }} />
-              <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#34d399" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ width: "9px", height: "9px", borderRadius: "50%", background: "#d4d4d4" }} />
+              <span style={{ width: "9px", height: "9px", borderRadius: "50%", background: "#d4d4d4" }} />
+              <span style={{ width: "9px", height: "9px", borderRadius: "50%", background: "#d4d4d4" }} />
             </div>
 
             {/* Address bar */}
             <div
               style={{
                 flex: "1",
-                maxWidth: "420px",
-                margin: "0 14px",
+                maxWidth: "380px",
+                margin: "0 12px",
                 background: "#ffffff",
-                padding: "5px 12px",
-                borderRadius: "6px",
-                border: "1px solid #e2e0ed",
-                fontSize: "0.8rem",
-                color: "#64748b",
+                padding: "4px 10px",
+                borderRadius: "4px",
+                border: "1px solid #e5e5e5",
+                fontSize: "0.75rem",
+                color: "#666666",
                 display: "flex",
                 alignItems: "center",
                 gap: "6px"
               }}
             >
-              <span>🔒</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 mail.google.com/mail/u/0/#inbox/compose
               </span>
@@ -200,10 +183,11 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
               style={{
                 fontSize: "0.75rem",
                 fontWeight: 600,
-                color: "#7e14ff",
-                background: "#f3e8ff",
+                color: "#111111",
+                background: "#f5f5f5",
                 padding: "3px 8px",
-                borderRadius: "6px"
+                borderRadius: "4px",
+                border: "1px solid #e5e5e5"
               }}
             >
               VoxFlow Active
@@ -213,7 +197,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
           {/* Visual Workspace Content */}
           <div
             style={{
-              padding: "24px 28px",
+              padding: "24px",
               background: "#ffffff",
               display: "flex",
               flexDirection: "column",
@@ -221,14 +205,14 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
             }}
           >
             {/* Email Header Fields */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", borderBottom: "1px solid #f1edf8", paddingBottom: "14px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", borderBottom: "1px solid #e5e5e5", paddingBottom: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.875rem" }}>
-                <span style={{ color: "#64748b", width: "40px" }}>To:</span>
-                <span style={{ color: "#0f172a", fontWeight: 500 }}>sarah@company.com</span>
+                <span style={{ color: "#666666", width: "40px" }}>To:</span>
+                <span style={{ color: "#111111", fontWeight: 500 }}>sarah@company.com</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.875rem" }}>
-                <span style={{ color: "#64748b", width: "40px" }}>Subject:</span>
-                <span style={{ color: "#0f172a", fontWeight: 500 }}>Q3 Retention Report & Slide 8 Review</span>
+                <span style={{ color: "#666666", width: "40px" }}>Subject:</span>
+                <span style={{ color: "#111111", fontWeight: 500 }}>Q3 Retention Report & Slide 8 Review</span>
               </div>
             </div>
 
@@ -237,32 +221,29 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: "18px",
-                padding: "16px 0"
+                gap: "16px",
+                padding: "8px 0"
               }}
             >
               {/* Spoken Input */}
               <div
                 style={{
-                  background: "#faf9fd",
-                  border: "1px solid #ece5f8",
-                  borderRadius: "14px",
-                  padding: "18px",
+                  background: "#fafafa",
+                  border: "1px solid #e5e5e5",
+                  borderRadius: "6px",
+                  padding: "16px",
                   display: "flex",
                   flexDirection: "column",
                   gap: "8px"
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ fontSize: "16px" }}>🎙</span>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", color: "#7e14ff" }}>
-                    What You Speak Naturally
-                  </span>
-                </div>
-                <p style={{ margin: 0, fontSize: "0.925rem", color: "#475569", lineHeight: 1.6, fontStyle: "italic" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "#666666" }}>
+                  What You Speak Naturally
+                </span>
+                <p style={{ margin: 0, fontSize: "0.9375rem", color: "#666666", lineHeight: 1.6, fontStyle: "italic" }}>
                   "Sarah ko bolo q3 metrics are looking great, send over the slide eight review by tomorrow morning so we can sync."
                 </p>
-                <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                <span style={{ fontSize: "0.75rem", color: "#666666" }}>
                   Language: Hindi + English (Hinglish)
                 </span>
               </div>
@@ -271,26 +252,22 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal, onScrollToDemo }) =
               <div
                 style={{
                   background: "#ffffff",
-                  border: "1px solid rgba(126, 20, 255, 0.25)",
-                  borderRadius: "14px",
-                  padding: "18px",
-                  boxShadow: "0 4px 14px rgba(126, 20, 255, 0.05)",
+                  border: "1px solid #111111",
+                  borderRadius: "6px",
+                  padding: "16px",
                   display: "flex",
                   flexDirection: "column",
                   gap: "8px"
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ fontSize: "16px" }}>✨</span>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", color: "#059669" }}>
-                    What VoxFlow Writes
-                  </span>
-                </div>
-                <p style={{ margin: 0, fontSize: "0.925rem", color: "#0f172a", lineHeight: 1.6, fontWeight: 500 }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "#111111" }}>
+                  What VoxFlow Writes
+                </span>
+                <p style={{ margin: 0, fontSize: "0.9375rem", color: "#111111", lineHeight: 1.6, fontWeight: 500 }}>
                   "Hi Sarah, The Q3 retention metrics look great. Could you please send over your review of Slide 8 by tomorrow morning ahead of our sync?"
                 </p>
-                <span style={{ fontSize: "0.75rem", color: "#059669", fontWeight: 600 }}>
-                  ✓ Polished, professional tone • Formatted for email
+                <span style={{ fontSize: "0.75rem", color: "#666666", fontWeight: 500 }}>
+                  Polished for email • Professional tone
                 </span>
               </div>
             </div>

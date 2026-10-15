@@ -1,19 +1,24 @@
 import type { FastifyPluginAsync } from "fastify";
-import { meetingStore, type MeetingRecord } from "../services/meeting-store.service";
-import { transcribeAudio } from "../services/transcription.service";
-import { generateMeetingNotes } from "../services/meeting-notes.service";
+import { meetingStore, type MeetingRecord } from "../services/meeting-store.service.js";
+import { transcribeAudio } from "../services/transcription.service.js";
+import { generateMeetingNotes } from "../services/meeting-notes.service.js";
+import { authenticateRequest } from "../services/auth.service.js";
 
 const meetingsRoute: FastifyPluginAsync = async (app) => {
   // 1. GET /meetings — List all meetings for the user
   app.get("/meetings", async (request, reply) => {
-    const userId = (request.headers["x-user-id"] as string) || "user_me";
+    const user = await authenticateRequest(request, reply);
+    if (!user) return;
+    const userId = user.id;
     const meetings = meetingStore.getMeetings(userId);
     return { meetings };
   });
 
   // 2. GET /meetings/:id — Get single meeting
   app.get("/meetings/:id", async (request, reply) => {
-    const userId = (request.headers["x-user-id"] as string) || "user_me";
+    const user = await authenticateRequest(request, reply);
+    if (!user) return;
+    const userId = user.id;
     const { id } = request.params as { id: string };
     const meeting = meetingStore.getMeetingById(userId, id);
 
@@ -29,7 +34,9 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
 
   // 3. POST /meetings — Create or replace meeting
   app.post("/meetings", async (request, reply) => {
-    const userId = (request.headers["x-user-id"] as string) || "user_me";
+    const user = await authenticateRequest(request, reply);
+    if (!user) return;
+    const userId = user.id;
     const body = request.body as Partial<MeetingRecord>;
 
     if (!body || !body.title) {
@@ -51,7 +58,9 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
 
   // 4. PATCH /meetings/:id — Update meeting
   app.patch("/meetings/:id", async (request, reply) => {
-    const userId = (request.headers["x-user-id"] as string) || "user_me";
+    const user = await authenticateRequest(request, reply);
+    if (!user) return;
+    const userId = user.id;
     const { id } = request.params as { id: string };
     const existing = meetingStore.getMeetingById(userId, id);
 
@@ -75,7 +84,9 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
 
   // 5. DELETE /meetings/:id — Delete meeting
   app.delete("/meetings/:id", async (request, reply) => {
-    const userId = (request.headers["x-user-id"] as string) || "user_me";
+    const user = await authenticateRequest(request, reply);
+    if (!user) return;
+    const userId = user.id;
     const { id } = request.params as { id: string };
     const deleted = meetingStore.deleteMeeting(userId, id);
 
@@ -90,11 +101,11 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
   });
 
   // 6. POST /meetings/process-recording — Complete end-to-end meeting processing
-  // Accepts audio file + optional metadata, transcribes speech, generates structured notes,
-  // creates and saves the meeting record directly to user's account.
   app.post("/meetings/process-recording", async (request, reply) => {
     try {
-      const userId = (request.headers["x-user-id"] as string) || "user_me";
+      const user = await authenticateRequest(request, reply);
+      if (!user) return;
+      const userId = user.id;
 
       if (!request.isMultipart()) {
         return reply.code(400).send({

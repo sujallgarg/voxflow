@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { processVoicePipeline } from "../services/process.service";
+import { processVoicePipeline } from "../services/process.service.js";
 
 const processRoute: FastifyPluginAsync = async (app) => {
   app.post("/process", async (request, reply) => {

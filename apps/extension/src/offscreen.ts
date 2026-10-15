@@ -72,6 +72,16 @@ let audioContext: AudioContext | null = null;
 let audioChunks: Blob[] = [];
 let isFinishing = false;
 
+// MVP Safe Recording Limits:
+// Chrome extension IPC is limited to ~32MB, and Groq Whisper max file size is 25MB.
+// Base64 encoding inflates binary size by ~33%. A 22MB binary WebM file yields ~29.3MB Base64,
+// safely fitting within both Chrome messaging and transcription limits.
+const MAX_SAFE_RECORDING_BYTES = 22 * 1024 * 1024; // 22MB binary
+const MAX_RECORDING_DURATION_MS = 20 * 60 * 1000; // 20 minutes MVP ceiling
+let totalRecordedBytes = 0;
+let maxDurationTimer: number | null = null;
+let autoStopNotice: string | null = null;
+
 // --------------------------------------------------
 // MESSAGE DISPATCHER (Strictly filters for offscreen)
 // --------------------------------------------------
@@ -232,6 +242,7 @@ async function startTabCapture(
 
     mediaRecorder.start(250);
     captureMode = "tab";
+    startDurationTimer();
 
     console.log("VoxFlow: tab audio recording successfully started.");
     return { success: true };
@@ -287,6 +298,7 @@ async function startMicRecording(
 
     mediaRecorder.start(250);
     captureMode = "mic";
+    startDurationTimer();
 
     console.log("VoxFlow: microphone recording successfully started.");
     return { success: true };
@@ -377,6 +389,7 @@ async function startMeetingCapture(
 
     mediaRecorder.start(250);
     captureMode = "meeting";
+    startDurationTimer();
 
     console.log("VoxFlow: meeting capture successfully started.");
     return { success: true };
@@ -390,8 +403,23 @@ async function startMeetingCapture(
 }
 
 // --------------------------------------------------
-// MEDIARECORDER EVENT LISTENERS
+// MEDIARECORDER EVENT LISTENERS & LIMIT GUARDS
 // --------------------------------------------------
+
+function startDurationTimer() {
+  if (maxDurationTimer) {
+    clearTimeout(maxDurationTimer);
+    maxDurationTimer = null;
+  }
+  totalRecordedBytes = 0;
+  maxDurationTimer = window.setTimeout(() => {
+    if (captureMode !== "none" && !isFinishing) {
+      autoStopNotice = "Maximum recording duration reached (20 minutes). Audio saved and processing...";
+      console.warn("VoxFlow: Maximum recording duration reached (20 minutes). Auto-finalizing safely.");
+      stopCapture();
+    }
+  }, MAX_RECORDING_DURATION_MS);
+}
 
 function setupMediaRecorderListeners(mode: "tab" | "mic" | "meeting") {
   if (!mediaRecorder) return;
@@ -399,6 +427,12 @@ function setupMediaRecorderListeners(mode: "tab" | "mic" | "meeting") {
   mediaRecorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) {
       audioChunks.push(event.data);
+      totalRecordedBytes += event.data.size;
+      if (totalRecordedBytes >= MAX_SAFE_RECORDING_BYTES && !isFinishing) {
+        autoStopNotice = "Maximum safe recording size reached (22MB). Audio saved and processing...";
+        console.warn("VoxFlow: Maximum safe recording size reached (22MB). Auto-finalizing safely.");
+        stopCapture();
+      }
     }
   };
 
@@ -495,7 +529,8 @@ async function finalizeAndSend(mode: "tab" | "mic" | "meeting") {
       sessionId,
       mode,
       audioBase64: base64,
-      mimeType
+      mimeType,
+      autoStopNotice
     });
 
     console.log(`VoxFlow: sent ${completeMessageType} to background.`);
@@ -523,6 +558,12 @@ async function finalizeAndSend(mode: "tab" | "mic" | "meeting") {
 // --------------------------------------------------
 
 function cleanup() {
+  if (maxDurationTimer) {
+    clearTimeout(maxDurationTimer);
+    maxDurationTimer = null;
+  }
+  totalRecordedBytes = 0;
+  autoStopNotice = null;
   captureMode = "none";
   isFinishing = false;
   currentSessionId = "";

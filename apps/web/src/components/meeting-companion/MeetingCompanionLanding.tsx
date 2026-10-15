@@ -3,19 +3,34 @@ import React from "react";
 export const MeetingCompanionLanding: React.FC = () => {
   const upcomingCapabilities = [
     {
-      icon: "📋",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+        </svg>
+      ),
       title: "Automated Meeting Summaries",
-      desc: "Structured overviews distilling long discussions into concise executive summaries."
+      desc: "Structured overviews distilling conversations into clear, readable notes."
     },
     {
-      icon: "🌐",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+      ),
       title: "Multilingual Understanding",
-      desc: "Follow discussions where participants speak and switch between multiple languages."
+      desc: "Follow discussions where team members converse and switch across multiple languages."
     },
     {
-      icon: "✓",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ),
       title: "Action Items & Decisions",
-      desc: "Identify decisions made and extract actionable follow-ups with assigned owners."
+      desc: "Identify key outcomes and extract assigned follow-ups automatically."
     }
   ];
 
@@ -24,17 +39,17 @@ export const MeetingCompanionLanding: React.FC = () => {
       id="meeting-companion"
       className="section-spacing"
       style={{
-        background: "linear-gradient(180deg, #fbf9fe 0%, #f6effe 50%, #fbf9fe 100%)",
+        background: "#ffffff",
         position: "relative"
       }}
     >
-      <div className="container" style={{ maxWidth: "900px" }}>
+      <div className="container" style={{ maxWidth: "860px" }}>
         <div className="section-title-wrap">
-          <span className="badge badge-glow">Planned Feature • Coming Soon</span>
-          <h2>Multilingual Meeting Notes</h2>
+          <span className="badge">Feature Preview</span>
+          <h2>Meeting Notes & Summaries</h2>
           <p>
-            We are currently developing VoxFlow Meeting Companion to help international teams
-            capture conversations across languages and leave every sync with clear notes, decisions, and action items.
+            VoxFlow Meeting Companion is in active preview to help capture browser-based audio
+            and produce clear transcripts, decisions, and action items.
           </p>
         </div>
 
@@ -55,20 +70,20 @@ export const MeetingCompanionLanding: React.FC = () => {
                 display: "flex",
                 flexDirection: "column",
                 gap: "10px",
-                border: "1px solid var(--border-subtle)"
+                border: "1px solid #e5e5e5",
+                borderRadius: "8px"
               }}
             >
               <div
                 style={{
-                  width: "40px",
-                  height: "40px",
-                  borderRadius: "10px",
-                  background: "#faf8ff",
-                  border: "1px solid #ece5f8",
+                  width: "38px",
+                  height: "38px",
+                  borderRadius: "6px",
+                  background: "#fafafa",
+                  border: "1px solid #e5e5e5",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "18px"
+                  justifyContent: "center"
                 }}
               >
                 {item.icon}
@@ -76,9 +91,9 @@ export const MeetingCompanionLanding: React.FC = () => {
 
               <h3
                 style={{
-                  fontSize: "1.05rem",
-                  fontWeight: 700,
-                  color: "#0f172a",
+                  fontSize: "1rem",
+                  fontWeight: 600,
+                  color: "#111111",
                   margin: 0
                 }}
               >
@@ -89,7 +104,7 @@ export const MeetingCompanionLanding: React.FC = () => {
                 style={{
                   fontSize: "0.875rem",
                   lineHeight: 1.55,
-                  color: "#64748b",
+                  color: "#666666",
                   margin: 0
                 }}
               >
@@ -99,13 +114,13 @@ export const MeetingCompanionLanding: React.FC = () => {
           ))}
         </div>
 
-        <div style={{ textAlign: "center", marginTop: "36px" }}>
+        <div style={{ textAlign: "center", marginTop: "32px" }}>
           <a
             href="#/meetings"
-            className="btn-outline"
-            style={{ fontSize: "0.9rem", padding: "11px 24px" }}
+            className="btn-secondary"
+            style={{ fontSize: "0.875rem", padding: "10px 20px" }}
           >
-            Launch Meeting Workspace (Local Beta) →
+            Open Meeting Workspace →
           </a>
         </div>
       </div>

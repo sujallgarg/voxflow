@@ -6,12 +6,12 @@ export const Features: React.FC = () => {
       id: "voice-to-text",
       icon: (
         <svg
-          width="24"
-          height="24"
+          width="22"
+          height="22"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#7e14ff"
-          strokeWidth="2.2"
+          stroke="#111111"
+          strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
@@ -23,18 +23,18 @@ export const Features: React.FC = () => {
       ),
       title: "Voice-to-Text",
       description:
-        "High-accuracy speech transcription directly from your microphone into clean text without manual typing."
+        "Accurate speech transcription directly from your microphone into clean text without manual typing."
     },
     {
       id: "multilingual-input",
       icon: (
         <svg
-          width="24"
-          height="24"
+          width="22"
+          height="22"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#7e14ff"
-          strokeWidth="2.2"
+          stroke="#111111"
+          strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
@@ -52,12 +52,12 @@ export const Features: React.FC = () => {
       id: "context-aware",
       icon: (
         <svg
-          width="24"
-          height="24"
+          width="22"
+          height="22"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#7e14ff"
-          strokeWidth="2.2"
+          stroke="#111111"
+          strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
@@ -74,12 +74,12 @@ export const Features: React.FC = () => {
       id: "text-insertion",
       icon: (
         <svg
-          width="24"
-          height="24"
+          width="22"
+          height="22"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#7e14ff"
-          strokeWidth="2.2"
+          stroke="#111111"
+          strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
@@ -89,17 +89,18 @@ export const Features: React.FC = () => {
           <line x1="12" y1="17" x2="12" y2="21" />
         </svg>
       ),
-      title: "Text Insertion into Supported Websites",
+      title: "In-Browser Text Insertion",
       description:
-        "Easily draft messages, emails, documents, and form replies across the browser pages you use every day."
+        "Quickly draft messages, emails, documents, and form replies across the browser pages you use every day."
     }
   ];
 
   return (
     <section id="features" className="section-spacing">
+      <div id="product" style={{ position: "relative", top: "-80px" }} aria-hidden="true" />
       <div className="container">
         <div className="section-title-wrap">
-          <span className="badge badge-glow">Core Features</span>
+          <span className="badge">Product Features</span>
           <h2>Everything You Need to Voice-Type Clearly</h2>
           <p>
             Designed to turn everyday spoken thoughts into well-structured, ready-to-use writing.
@@ -119,20 +120,21 @@ export const Features: React.FC = () => {
               className="card-premium"
               style={{
                 background: "#ffffff",
-                padding: "26px 22px",
+                padding: "24px 20px",
                 display: "flex",
                 flexDirection: "column",
                 gap: "12px",
-                border: "1px solid var(--border-subtle)"
+                border: "1px solid #e5e5e5",
+                borderRadius: "8px"
               }}
             >
               <div
                 style={{
-                  width: "44px",
-                  height: "44px",
-                  borderRadius: "12px",
-                  background: "#faf8ff",
-                  border: "1px solid #ece5f8",
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "6px",
+                  background: "#fafafa",
+                  border: "1px solid #e5e5e5",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center"
@@ -144,8 +146,8 @@ export const Features: React.FC = () => {
               <h3
                 style={{
                   fontSize: "1.05rem",
-                  fontWeight: 700,
-                  color: "#0f172a",
+                  fontWeight: 600,
+                  color: "#111111",
                   margin: 0
                 }}
               >
@@ -154,9 +156,9 @@ export const Features: React.FC = () => {
 
               <p
                 style={{
-                  fontSize: "0.9rem",
+                  fontSize: "0.875rem",
                   lineHeight: 1.6,
-                  color: "#64748b",
+                  color: "#666666",
                   margin: 0
                 }}
               >

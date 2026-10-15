@@ -9,43 +9,39 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal }) => {
     <section id="pricing" className="section-spacing">
       <div className="container">
         <div className="section-title-wrap">
-          <span className="badge badge-glow">Access & Pricing</span>
+          <span className="badge">Access & Pricing</span>
           <h2>Free During Public Beta</h2>
           <p>
-            We are currently in active public beta testing. Experience all core
-            features today with early access privileges.
+            VoxFlow is currently in open public beta. All voice input capabilities are free to use.
           </p>
         </div>
 
-        {/* Single Transparent Beta Access Card */}
+        {/* Transparent Beta Access Card */}
         <div
           className="card-premium"
           style={{
-            maxWidth: "520px",
+            maxWidth: "480px",
             margin: "0 auto",
-            padding: "44px 36px",
+            padding: "40px 32px",
             textAlign: "center",
             background: "#ffffff",
-            position: "relative",
-            border: "1px solid rgba(126, 20, 255, 0.25)",
-            boxShadow:
-              "0 20px 45px -10px rgba(126, 20, 255, 0.12), 0 4px 16px rgba(15, 23, 42, 0.04)"
+            border: "1px solid #e5e5e5",
+            borderRadius: "8px"
           }}
         >
-          {/* Badge */}
-          <div style={{ marginBottom: "16px" }}>
-            <span className="badge badge-emerald">Early Access Beta Pass</span>
+          <div style={{ marginBottom: "14px" }}>
+            <span className="badge">Public Beta Pass</span>
           </div>
 
           <h3
             style={{
-              fontSize: "1.75rem",
-              fontWeight: 800,
-              color: "#0f172a",
+              fontSize: "1.5rem",
+              fontWeight: 700,
+              color: "#111111",
               marginBottom: "8px"
             }}
           >
-            VoxFlow Public Beta
+            VoxFlow Early Access
           </h3>
 
           <div
@@ -54,20 +50,20 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal }) => {
               alignItems: "baseline",
               justifyContent: "center",
               gap: "6px",
-              margin: "20px 0"
+              margin: "18px 0"
             }}
           >
             <span
               style={{
-                fontSize: "3.25rem",
-                fontWeight: 800,
-                color: "#7e14ff",
+                fontSize: "3rem",
+                fontWeight: 700,
+                color: "#111111",
                 fontFamily: "var(--font-heading)"
               }}
             >
               $0
             </span>
-            <span style={{ fontSize: "1rem", color: "#64748b" }}>
+            <span style={{ fontSize: "0.9375rem", color: "#666666" }}>
               / free during beta
             </span>
           </div>
@@ -75,13 +71,12 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal }) => {
           <p
             style={{
               fontSize: "0.9375rem",
-              color: "#64748b",
+              color: "#666666",
               lineHeight: 1.6,
               marginBottom: "28px"
             }}
           >
-            Pricing and commercial subscription tiers will be announced soon as
-            we approach general availability. Beta testers receive priority access.
+            Commercial plans will be announced prior to general release. Beta participants receive uninterrupted access and priority updates.
           </p>
 
           {/* Included Features List */}
@@ -91,36 +86,36 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal }) => {
               display: "flex",
               flexDirection: "column",
               gap: "12px",
-              marginBottom: "32px",
-              background: "#faf9fd",
-              padding: "20px",
-              borderRadius: "16px",
-              border: "1px solid #f1edf8"
+              marginBottom: "28px",
+              background: "#fafafa",
+              padding: "18px 20px",
+              borderRadius: "6px",
+              border: "1px solid #e5e5e5"
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#334155" }}>
-              <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
-              <span>Full microphone voice-to-text dictation</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#111111" }}>
+              <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
+              <span>Microphone voice-to-text dictation</span>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#334155" }}>
-              <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
-              <span>Browser-tab audio recording & processing</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#111111" }}>
+              <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
+              <span>Multilingual speech & natural code-switching</span>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#334155" }}>
-              <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
-              <span>5-step AI pipeline (meaning, context, tone)</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#111111" }}>
+              <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
+              <span>Contextual tone and grammar refinement</span>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#334155" }}>
-              <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
-              <span>50+ languages + mixed conversational modes</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#111111" }}>
+              <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
+              <span>Direct input field insertion across supported sites</span>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#334155" }}>
-              <span style={{ color: "#10b981", fontWeight: 700 }}>✓</span>
-              <span>One-click input field insertion</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.875rem", color: "#111111" }}>
+              <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
+              <span>Meeting notes & companion preview access</span>
             </div>
           </div>
 
@@ -128,10 +123,9 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal }) => {
             type="button"
             className="btn-primary"
             onClick={onOpenBetaModal}
-            style={{ width: "100%", padding: "14px", fontSize: "1rem" }}
+            style={{ width: "100%", padding: "13px", fontSize: "0.9375rem" }}
           >
-            <span>Request Early Beta Access</span>
-            <span>→</span>
+            Request Beta Access
           </button>
         </div>
       </div>

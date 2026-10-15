@@ -105,7 +105,9 @@ class MeetingStoreService {
         fs.mkdirSync(DATA_DIR, { recursive: true });
       }
       const list = Array.from(this.meetings.values());
-      fs.writeFileSync(MEETINGS_FILE, JSON.stringify(list, null, 2), "utf-8");
+      const tempFile = `${MEETINGS_FILE}.${Date.now()}.tmp`;
+      fs.writeFileSync(tempFile, JSON.stringify(list, null, 2), "utf-8");
+      fs.renameSync(tempFile, MEETINGS_FILE);
     } catch (err) {
       console.error("MeetingStoreService: Error saving meetings to disk:", err);
     }

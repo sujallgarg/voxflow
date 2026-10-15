@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { Logo } from "./Logo";
+import { api } from "../lib/api";
 
 interface EarlyAccessModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onNavigateToPrivacy?: () => void;
 }
 
 export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
   isOpen,
-  onClose
+  onClose,
+  onNavigateToPrivacy
 }) => {
   const [email, setEmail] = useState("");
+  const [marketingUpdates, setMarketingUpdates] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isBackendSynced, setIsBackendSynced] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -27,8 +33,31 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (email.trim()) {
-      setIsSubmitted(true);
+    const cleanEmail = email.trim();
+    if (cleanEmail) {
+      setIsSyncing(true);
+      try {
+        const stored = JSON.parse(localStorage.getItem("voxflow_waitlist_emails") || "[]");
+        if (Array.isArray(stored) && !stored.includes(cleanEmail)) {
+          stored.push(cleanEmail);
+          localStorage.setItem("voxflow_waitlist_emails", JSON.stringify(stored));
+        }
+      } catch (err) {
+        console.warn("Could not save waitlist email:", err);
+      }
+
+      api.joinWaitlist(cleanEmail, "website_modal", marketingUpdates)
+        .then(() => {
+          setIsBackendSynced(true);
+        })
+        .catch((err) => {
+          console.warn("Backend waitlist sync notice:", err);
+          setIsBackendSynced(false);
+        })
+        .finally(() => {
+          setIsSyncing(false);
+          setIsSubmitted(true);
+        });
     }
   };
 
@@ -40,9 +69,7 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        background: "rgba(15, 23, 42, 0.5)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
+        background: "rgba(0, 0, 0, 0.4)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -57,14 +84,13 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
       <div
         style={{
           width: "100%",
-          maxWidth: "480px",
+          maxWidth: "460px",
           background: "#ffffff",
-          borderRadius: "24px",
-          padding: "36px 32px",
-          boxShadow:
-            "0 25px 60px -15px rgba(126, 20, 255, 0.25), 0 8px 30px rgba(0, 0, 0, 0.12)",
+          borderRadius: "8px",
+          padding: "32px 28px",
           position: "relative",
-          border: "1px solid rgba(126, 20, 255, 0.16)"
+          border: "1px solid #e5e5e5",
+          boxShadow: "0 10px 30px rgba(0, 0, 0, 0.08)"
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -75,17 +101,19 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
           aria-label="Close modal"
           style={{
             position: "absolute",
-            top: "20px",
-            right: "20px",
-            width: "32px",
-            height: "32px",
-            borderRadius: "50%",
-            background: "#f1f5f9",
-            color: "#64748b",
-            fontSize: "18px",
+            top: "16px",
+            right: "16px",
+            width: "30px",
+            height: "30px",
+            borderRadius: "6px",
+            background: "#ffffff",
+            border: "1px solid #e5e5e5",
+            color: "#111111",
+            fontSize: "14px",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center"
+            justifyContent: "center",
+            cursor: "pointer"
           }}
         >
           ✕
@@ -93,33 +121,31 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
 
         {!isSubmitted ? (
           <div>
-            <div style={{ marginBottom: "20px" }}>
-              <Logo size={36} />
+            <div style={{ marginBottom: "18px" }}>
+              <Logo size={32} />
             </div>
 
             <h3
               id="modal-title"
               style={{
-                fontSize: "1.5rem",
-                fontWeight: 800,
-                color: "#0f172a",
+                fontSize: "1.35rem",
+                fontWeight: 700,
+                color: "#111111",
                 marginBottom: "8px"
               }}
             >
-              Join the VoxFlow Beta
+              Get Started with VoxFlow
             </h3>
 
             <p
               style={{
-                fontSize: "0.9375rem",
-                color: "#64748b",
+                fontSize: "0.875rem",
+                color: "#666666",
                 lineHeight: 1.6,
-                marginBottom: "24px"
+                marginBottom: "20px"
               }}
             >
-              The VoxFlow Chrome Extension is currently in developer preview and
-              active beta testing. Sign up to receive the direct installation package
-              and early access to the upcoming Chrome Web Store launch.
+              Sign up to receive the VoxFlow Chrome extension package and early access notifications for the upcoming Chrome Web Store release.
             </p>
 
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -130,11 +156,11 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
                     display: "block",
                     fontSize: "0.8125rem",
                     fontWeight: 600,
-                    color: "#334155",
+                    color: "#111111",
                     marginBottom: "6px"
                   }}
                 >
-                  Work or Personal Email
+                  Email Address
                 </label>
                 <input
                   id="beta-email"
@@ -145,21 +171,41 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
                   onChange={(e) => setEmail(e.target.value)}
                   style={{
                     width: "100%",
-                    padding: "12px 16px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "0.9375rem",
-                    outline: "none"
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid #e5e5e5",
+                    fontSize: "0.875rem",
+                    outline: "none",
+                    color: "#111111",
+                    background: "#ffffff"
                   }}
                 />
+              </div>
+
+              {/* Optional Marketing Consent */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                <input
+                  id="marketing-consent"
+                  type="checkbox"
+                  checked={marketingUpdates}
+                  onChange={(e) => setMarketingUpdates(e.target.checked)}
+                  style={{ marginTop: "3px", width: "15px", height: "15px", cursor: "pointer", accentColor: "#111111" }}
+                />
+                <label
+                  htmlFor="marketing-consent"
+                  style={{ fontSize: "0.8125rem", color: "#666666", lineHeight: 1.5, cursor: "pointer" }}
+                >
+                  Send me product announcements and beta release updates.
+                </label>
               </div>
 
               <button
                 type="submit"
                 className="btn-primary"
-                style={{ width: "100%", padding: "14px", fontSize: "0.95rem" }}
+                disabled={isSyncing}
+                style={{ width: "100%", padding: "12px", fontSize: "0.875rem", borderRadius: "6px" }}
               >
-                Request Beta Invitation →
+                {isSyncing ? "Registering..." : "Join Public Beta"}
               </button>
             </form>
 
@@ -167,27 +213,48 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
               style={{
                 marginTop: "16px",
                 fontSize: "0.75rem",
-                color: "#94a3b8",
-                textAlign: "center"
+                color: "#666666",
+                textAlign: "center",
+                lineHeight: 1.5
               }}
             >
-              Zero spam. We'll only contact you with release builds and feedback requests.
+              By submitting your email, you acknowledge that your information will be processed in accordance with our{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  if (onNavigateToPrivacy) onNavigateToPrivacy();
+                  else window.location.hash = "#/privacy";
+                }}
+                style={{
+                  color: "#111111",
+                  textDecoration: "underline",
+                  fontSize: "0.75rem",
+                  padding: 0,
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer"
+                }}
+              >
+                Privacy Policy
+              </button>
+              .
             </p>
           </div>
         ) : (
-          <div style={{ textAlign: "center", padding: "16px 0" }}>
+          <div style={{ textAlign: "center", padding: "12px 0" }}>
             <div
               style={{
-                width: "56px",
-                height: "56px",
+                width: "48px",
+                height: "48px",
                 borderRadius: "50%",
-                background: "#ecfdf5",
-                color: "#10b981",
-                fontSize: "28px",
+                background: "#111111",
+                color: "#ffffff",
+                fontSize: "22px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                margin: "0 auto 18px auto"
+                margin: "0 auto 16px auto"
               }}
             >
               ✓
@@ -195,33 +262,37 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
 
             <h3
               style={{
-                fontSize: "1.4rem",
-                fontWeight: 800,
-                color: "#0f172a",
+                fontSize: "1.3rem",
+                fontWeight: 700,
+                color: "#111111",
                 marginBottom: "8px"
               }}
             >
-              You're on the Beta List!
+              You're on the Beta List
             </h3>
 
             <p
               style={{
-                fontSize: "0.9375rem",
-                color: "#64748b",
+                fontSize: "0.875rem",
+                color: "#666666",
                 lineHeight: 1.6,
-                marginBottom: "24px"
+                marginBottom: "20px"
               }}
             >
-              Thanks for your interest in VoxFlow. We've reserved your spot for <strong>{email}</strong> and will email you installation instructions as new slots open.
+              {isBackendSynced ? (
+                <>Your email <strong>{email}</strong> has been registered. You will receive private beta release notifications.</>
+              ) : (
+                <>Your email <strong>{email}</strong> has been saved for this session.</>
+              )}
             </p>
 
             <button
               type="button"
               className="btn-secondary"
               onClick={onClose}
-              style={{ width: "100%", padding: "12px" }}
+              style={{ width: "100%", padding: "10px", fontSize: "0.875rem", borderRadius: "6px" }}
             >
-              Back to Website
+              Close
             </button>
           </div>
         )}
