@@ -87,12 +87,16 @@ class VoxFlowApiClient {
     }
   }
 
-  async transcribeAudio(audioBlob: Blob, filename = "voxflow-recording.webm"): Promise<{ text: string }> {
+  async transcribeAudio(audioBlob: Blob, filename = "voxflow-recording.webm", userId?: string): Promise<{ text: string }> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const formData = new FormData();
     formData.append("audio", audioBlob, filename);
 
     const res = await fetch(`${this.baseUrl}/transcribe`, {
       method: "POST",
+      headers: {
+        ...authHeaders
+      },
       body: formData
     });
 
@@ -101,6 +105,9 @@ class VoxFlowApiClient {
       throw new Error(errData.error || `Transcription failed with HTTP ${res.status}`);
     }
 
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
+    }
     return res.json();
   }
 
@@ -160,10 +167,14 @@ class VoxFlowApiClient {
     likelyChannel?: string;
     purpose?: string;
     targetLanguage?: string;
-  }): Promise<TransformationResult> {
+  }, userId?: string): Promise<TransformationResult> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/transform`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify(input)
     });
 
@@ -172,13 +183,20 @@ class VoxFlowApiClient {
       throw new Error(errData.error || `Transformation failed with HTTP ${res.status}`);
     }
 
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
+    }
     return res.json();
   }
 
-  async processVoice(transcript: string, targetLanguage?: string): Promise<ProcessPipelineResult> {
+  async processVoice(transcript: string, targetLanguage?: string, userId?: string): Promise<ProcessPipelineResult> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/process`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({ transcript, targetLanguage })
     });
 
@@ -187,13 +205,20 @@ class VoxFlowApiClient {
       throw new Error(errData.error || `Pipeline failed with HTTP ${res.status}`);
     }
 
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
+    }
     return res.json();
   }
 
-  async generateMeetingNotes(transcript: string, title?: string): Promise<MeetingNotesResult> {
+  async generateMeetingNotes(transcript: string, title?: string, userId?: string): Promise<MeetingNotesResult> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/meeting-notes`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({ transcript, title })
     });
 
@@ -202,6 +227,9 @@ class VoxFlowApiClient {
       throw new Error(errData.error || `Meeting notes failed with HTTP ${res.status}`);
     }
 
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
+    }
     return res.json();
   }
 
@@ -258,6 +286,9 @@ class VoxFlowApiClient {
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.error || `Failed to save meeting (${res.status})`);
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
     }
     return res.json();
   }
@@ -372,6 +403,9 @@ class VoxFlowApiClient {
       throw new Error(errData.error || `Meeting recording processing failed (${res.status})`);
     }
 
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
+    }
     return res.json();
   }
 

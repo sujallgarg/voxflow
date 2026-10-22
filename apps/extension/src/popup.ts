@@ -738,10 +738,55 @@ copyButton.addEventListener("click", async () => {
 resetButton.addEventListener("click", async () => {
   try {
     await chrome.runtime.sendMessage({ type: "RESET_SESSION" });
+    void refreshUsageDisplay();
   } catch (err) {
     console.error("Reset error:", err);
   }
 });
+
+// --------------------------------------------------
+// AUTHORITATIVE QUOTA SYNCHRONIZATION
+// --------------------------------------------------
+
+async function refreshUsageDisplay() {
+  try {
+    chrome.runtime.sendMessage({ type: "GET_USAGE" }, (response) => {
+      if (response?.success && response.entitlements) {
+        const ent = response.entitlements;
+        const isPro = Boolean(ent.isPremium);
+        const planBadge = document.getElementById("quota-plan-badge");
+        const voiceSummary = document.getElementById("quota-voice-summary");
+        const meetingSummary = document.getElementById("quota-meeting-summary");
+        const upgradeLink = document.getElementById("quota-upgrade-link") as HTMLAnchorElement;
+
+        if (planBadge) {
+          planBadge.textContent = isPro ? "Pro" : "Free";
+          if (isPro) planBadge.classList.add("pro");
+          else planBadge.classList.remove("pro");
+        }
+
+        if (voiceSummary) {
+          const usedVoice = ent.breakdown?.voiceTyping?.used ?? ent.usage?.voiceTypingUsed ?? 0;
+          const limitVoice = ent.breakdown?.voiceTyping?.limit ?? ent.limits?.voiceTypingRequests ?? (isPro ? 1000 : 100);
+          voiceSummary.textContent = `Voice: ${usedVoice}/${limitVoice}`;
+        }
+
+        if (meetingSummary) {
+          const usedMtg = ent.breakdown?.meetings?.used ?? ent.usage?.meetingsUsed ?? 0;
+          const limitMtg = ent.breakdown?.meetings?.limit ?? ent.limits?.monthlyMeetings ?? (isPro ? 25 : 3);
+          meetingSummary.textContent = `Meetings: ${usedMtg}/${limitMtg}`;
+        }
+
+        if (upgradeLink) {
+          upgradeLink.textContent = isPro ? "Manage ↗" : "Upgrade ↗";
+          upgradeLink.href = isPro ? "http://localhost:5173/#/billing" : "http://localhost:5173/#/pricing";
+        }
+      }
+    });
+  } catch {
+    // Ignore error
+  }
+}
 
 // --------------------------------------------------
 // INITIALIZATION
@@ -749,3 +794,4 @@ resetButton.addEventListener("click", async () => {
 
 populateLanguageSelector();
 void syncState();
+void refreshUsageDisplay();

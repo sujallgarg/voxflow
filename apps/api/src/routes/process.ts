@@ -51,8 +51,13 @@ const processRoute: FastifyPluginAsync = async (app) => {
       // Commit usage only after successful pipeline outcome
       await entitlementService.consumeQuota(user.id, "voice_typing", 1);
       await entitlementService.consumeQuota(user.id, "text_correction", 1);
+      const entitlements = await entitlementService.getUserEntitlements(user.id);
 
-      return result;
+      return {
+        ...result,
+        usage: entitlements.usage,
+        entitlements
+      };
     } catch (error: any) {
       app.log.error(error);
       const message = error instanceof Error ? error.message : "Pipeline processing error";

@@ -87,9 +87,12 @@ const transcriptionRoute: FastifyPluginAsync = async (app) => {
 
       // Commit quota only after successful transcription outcome
       await entitlementService.consumeQuota(user.id, "voice_typing", 1);
+      const entitlements = await entitlementService.getUserEntitlements(user.id);
 
       return {
-        text
+        text,
+        usage: entitlements.usage,
+        entitlements
       };
     } catch (error: any) {
       app.log.error(error);
