@@ -60,6 +60,26 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
   // Transcript input state
   const [newTranscriptSpeaker, setNewTranscriptSpeaker] = useState(currentUser.name);
   const [newTranscriptText, setNewTranscriptText] = useState("");
+  const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
+
+  const handleRefreshStatus = async () => {
+    try {
+      setIsRefreshingStatus(true);
+      const res = await api.getMeeting(meeting.id, currentUser.id);
+      if (res && res.meeting) {
+        setMeeting(res.meeting);
+        setNotesContent(res.meeting.initialNotes || res.meeting.fullSummary || "");
+        saveUserMeeting(currentUser.id, res.meeting, false);
+        if (onUpdateMeeting) onUpdateMeeting(res.meeting);
+        setSaveSuccessMsg("Meeting refreshed with latest updates.");
+        setTimeout(() => setSaveSuccessMsg(null), 2500);
+      }
+    } catch (err) {
+      console.warn("Refresh meeting error:", err);
+    } finally {
+      setIsRefreshingStatus(false);
+    }
+  };
 
   const persistMeeting = (updated: MeetingRecord) => {
     setMeeting(updated);
@@ -262,13 +282,13 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                 fontWeight: 600,
                 padding: "3px 8px",
                 borderRadius: "4px",
-                background: "#f5f5f5",
-                color: "#111111",
-                border: "1px solid #e5e5e5",
+                background: meeting.status === "processing" ? "#fef3c7" : "#f5f5f5",
+                color: meeting.status === "processing" ? "#92400e" : "#111111",
+                border: meeting.status === "processing" ? "1px solid #fde68a" : "1px solid #e5e5e5",
                 textTransform: "capitalize"
               }}
             >
-              {meeting.status}
+              {meeting.status === "processing" ? "⏳ Processing..." : meeting.status}
             </span>
 
             <button
@@ -286,6 +306,39 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
 
       {/* Main Workspace Body */}
       <main className="container" style={{ paddingTop: "28px" }}>
+        {/* Processing Banner */}
+        {meeting.status === "processing" && (
+          <div
+            style={{
+              padding: "14px 18px",
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              color: "#92400e",
+              borderRadius: "6px",
+              marginBottom: "20px",
+              fontSize: "0.875rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "12px"
+            }}
+          >
+            <div>
+              <strong>Processing in Progress:</strong> Meeting audio transcription or structured notes are still generating. You can view available sections now or refresh when ready.
+            </div>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleRefreshStatus}
+              disabled={isRefreshingStatus}
+              style={{ fontSize: "0.8125rem", padding: "6px 12px" }}
+            >
+              {isRefreshingStatus ? "Checking..." : "↻ Refresh Status"}
+            </button>
+          </div>
+        )}
+
         {/* Toast Notifications */}
         {saveSuccessMsg && (
           <div
@@ -307,17 +360,37 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
         {aiError && (
           <div
             style={{
-              padding: "10px 16px",
+              padding: "12px 18px",
               background: "#fafafa",
               border: "1px solid #111111",
               color: "#111111",
               borderRadius: "6px",
               marginBottom: "20px",
               fontSize: "0.875rem",
-              fontWeight: 500
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "12px"
             }}
           >
-            Error: {aiError}
+            <div>
+              <strong>Notice:</strong> {aiError}
+            </div>
+            {(aiError.includes("limit") || aiError.includes("quota") || aiError.includes("Upgrade")) && (
+              <a
+                href="#/pricing"
+                className="btn-primary"
+                style={{
+                  fontSize: "0.8125rem",
+                  padding: "6px 14px",
+                  textDecoration: "none",
+                  borderRadius: "4px"
+                }}
+              >
+                Upgrade to Premium ($9/mo)
+              </a>
+            )}
           </div>
         )}
 
@@ -334,8 +407,8 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
           {(
             [
               { id: "overview", label: "Overview & Decisions" },
-              { id: "transcript", label: `Transcript (${meeting.transcript.length})` },
-              { id: "action-items", label: `Action Items (${meeting.actionItems.length})` },
+              { id: "transcript", label: `Transcript (${(meeting.transcript || []).length})` },
+              { id: "action-items", label: `Action Items (${(meeting.actionItems || []).length})` },
               { id: "notes", label: "Notes & Agenda" }
             ] as const
           ).map((tab) => (

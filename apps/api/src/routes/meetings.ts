@@ -1,8 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
 import { meetingStore, type MeetingRecord } from "../services/meeting-store.service.js";
-import { transcribeAudio } from "../services/transcription.service.js";
+import { transcribeAudio, transcribeAudioDetailed } from "../services/transcription.service.js";
 import { generateMeetingNotes } from "../services/meeting-notes.service.js";
 import { authenticateRequest } from "../services/auth.service.js";
+import { entitlementService } from "../services/entitlement.service.js";
 
 const meetingsRoute: FastifyPluginAsync = async (app) => {
   // 1. GET /meetings — List all meetings for the user
@@ -10,7 +11,7 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
     const user = await authenticateRequest(request, reply);
     if (!user) return;
     const userId = user.id;
-    const meetings = meetingStore.getMeetings(userId);
+    const meetings = await meetingStore.getMeetings(userId);
     return { meetings };
   });
 
@@ -20,7 +21,18 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
     if (!user) return;
     const userId = user.id;
     const { id } = request.params as { id: string };
-    const meeting = meetingStore.getMeetingById(userId, id);
+    let meeting = await meetingStore.getMeetingById(userId, id);
+
+    // If not found for current user, check if this is an unassigned / extension-created meeting
+    if (!meeting) {
+      const rawMeeting = await meetingStore.getMeetingByIdRaw(id);
+      if (rawMeeting && rawMeeting.userId === "user_me" && userId !== "user_me") {
+        // Associate / claim guest meeting to authenticated user
+        rawMeeting.userId = userId;
+        rawMeeting.updatedAt = new Date().toISOString();
+        meeting = await meetingStore.saveMeeting(userId, rawMeeting);
+      }
+    }
 
     if (!meeting) {
       return reply.code(404).send({
@@ -47,7 +59,37 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
     }
 
     const meetingId = body.id || `meeting_${Date.now()}`;
-    const meeting = meetingStore.saveMeeting(userId, {
+    const conflict = await meetingStore.getMeetingByIdRaw(meetingId);
+    if (conflict && conflict.userId !== userId) {
+      return reply.code(409).send({
+        error: "Meeting record conflict with existing identifier.",
+        code: "MEETING_ID_CONFLICT"
+      });
+    }
+
+    // If this is a new meeting (not an existing update), check and consume meeting quota
+    if (!conflict) {
+      const quotaCheck = await entitlementService.consumeQuota(userId, "meeting", 1);
+      if (!quotaCheck.allowed) {
+        return reply.code(403).send({
+          error: quotaCheck.reason,
+          code: quotaCheck.code,
+          quotaType: quotaCheck.quotaType,
+          limit: quotaCheck.limit,
+          currentUsage: quotaCheck.currentUsage,
+          remaining: quotaCheck.remaining,
+          unit: quotaCheck.unit,
+          resetDate: quotaCheck.resetDate,
+          upgradeUrl: "#/pricing"
+        });
+      }
+
+      if (body.fullSummary || body.summaryPreview) {
+        await entitlementService.consumeQuota(userId, "summary", 1);
+      }
+    }
+
+    const meeting = await meetingStore.saveMeeting(userId, {
       ...body,
       id: meetingId,
       title: body.title
@@ -62,7 +104,7 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
     if (!user) return;
     const userId = user.id;
     const { id } = request.params as { id: string };
-    const existing = meetingStore.getMeetingById(userId, id);
+    const existing = await meetingStore.getMeetingById(userId, id);
 
     if (!existing) {
       return reply.code(404).send({
@@ -72,7 +114,7 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
     }
 
     const updates = request.body as Partial<MeetingRecord>;
-    const updated = meetingStore.saveMeeting(userId, {
+    const updated = await meetingStore.saveMeeting(userId, {
       ...existing,
       ...updates,
       id,
@@ -88,7 +130,7 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
     if (!user) return;
     const userId = user.id;
     const { id } = request.params as { id: string };
-    const deleted = meetingStore.deleteMeeting(userId, id);
+    const deleted = await meetingStore.deleteMeeting(userId, id);
 
     if (!deleted) {
       return reply.code(404).send({
@@ -118,6 +160,8 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
       let filename = "meeting-recording.webm";
       let meetingTitle = "";
       let targetLanguage = "Auto";
+      let clientMeetingId = "";
+      let clientDurationSeconds = 0;
 
       const parts = request.parts();
       for await (const part of parts) {
@@ -128,9 +172,29 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
           const val = String(part.value || "");
           if (part.fieldname === "title") meetingTitle = val;
           if (part.fieldname === "targetLanguage" || part.fieldname === "language") targetLanguage = val;
+          if (part.fieldname === "meetingId" || part.fieldname === "id") clientMeetingId = val.trim();
+          if (part.fieldname === "durationSeconds" || part.fieldname === "duration") {
+            const parsed = parseFloat(val);
+            if (!isNaN(parsed) && parsed > 0) clientDurationSeconds = Math.round(parsed);
+          }
         }
       }
 
+      const meetingId = clientMeetingId && /^[a-zA-Z0-9_-]{1,64}$/.test(clientMeetingId)
+        ? clientMeetingId
+        : `meeting_${Date.now()}`;
+
+      // 1. Idempotency check: if meeting already exists and is completed for this user, return it without re-charging
+      const existing = await meetingStore.getMeetingByIdRaw(meetingId);
+      if (existing && (existing.userId === userId || existing.userId === "user_me") && existing.status === "completed") {
+        return reply.code(200).send({
+          success: true,
+          meetingId: existing.id,
+          meeting: existing
+        });
+      }
+
+      // 2. Audio buffer validation before touching quota
       if (!audioBuffer || audioBuffer.length === 0) {
         return reply.code(400).send({
           error: "Audio file is required and cannot be empty.",
@@ -138,16 +202,56 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
         });
       }
 
+      // 3. Pre-flight reservation / quota check
+      const canRecord = await entitlementService.checkQuota(userId, "meeting", 1);
+      if (!canRecord.allowed) {
+        return reply.code(403).send({
+          error: canRecord.reason,
+          code: canRecord.code,
+          quotaType: canRecord.quotaType,
+          limit: canRecord.limit,
+          currentUsage: canRecord.currentUsage,
+          remaining: canRecord.remaining,
+          unit: canRecord.unit,
+          resetDate: canRecord.resetDate,
+          upgradeUrl: "#/pricing"
+        });
+      }
+
+      const estimatedSeconds = clientDurationSeconds > 0 ? clientDurationSeconds : Math.max(1, Math.round(audioBuffer.length / 3200));
+      const canTranscribe = await entitlementService.checkQuota(userId, "transcription_seconds", estimatedSeconds);
+      if (!canTranscribe.allowed) {
+        return reply.code(403).send({
+          error: canTranscribe.reason,
+          code: canTranscribe.code,
+          quotaType: canTranscribe.quotaType,
+          limit: canTranscribe.limit,
+          currentUsage: canTranscribe.currentUsage,
+          remaining: canTranscribe.remaining,
+          unit: canTranscribe.unit,
+          resetDate: canTranscribe.resetDate,
+          upgradeUrl: "#/pricing"
+        });
+      }
+
       app.log.info({
         action: "processMeetingRecording",
         userId,
+        meetingId,
         sizeBytes: audioBuffer.length,
         title: meetingTitle,
-        targetLanguage
+        targetLanguage,
+        clientDurationSeconds
       });
 
-      // 1. Transcribe audio via Whisper
-      const transcript = await transcribeAudio(audioBuffer, filename);
+      // 4. Transcribe audio via Whisper (capturing exact duration)
+      const transcribeResult = await transcribeAudioDetailed(audioBuffer, filename, {
+        language: targetLanguage !== "Auto" ? targetLanguage : undefined,
+        durationSeconds: clientDurationSeconds
+      });
+
+      const transcript = transcribeResult.text;
+      const durationSeconds = transcribeResult.durationSeconds || clientDurationSeconds || 90;
 
       if (!transcript || !transcript.trim()) {
         return reply.code(400).send({
@@ -156,15 +260,33 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
         });
       }
 
-      // 2. Extract structured notes via Groq LLM
+      // 5. Extract structured notes via Groq LLM
       const notesResult = await generateMeetingNotes(
         transcript,
         meetingTitle || undefined
       );
 
-      // 3. Assemble and persist the MeetingRecord
-      const meetingId = `meeting_${Date.now()}`;
+      // 6. Commit usage only after successful processing outcome
+      const quotaCommit = await entitlementService.consumeMeetingRecordingQuota(userId, durationSeconds);
+      if (!quotaCommit.allowed) {
+        return reply.code(403).send({
+          error: quotaCommit.reason,
+          code: quotaCommit.code,
+          quotaType: quotaCommit.quotaType,
+          limit: quotaCommit.limit,
+          currentUsage: quotaCommit.currentUsage,
+          remaining: quotaCommit.remaining,
+          unit: quotaCommit.unit,
+          resetDate: quotaCommit.resetDate,
+          upgradeUrl: "#/pricing"
+        });
+      }
+
+      // 7. Assemble and persist the MeetingRecord
       const now = new Date();
+      const mins = Math.floor(durationSeconds / 60);
+      const secs = durationSeconds % 60;
+      const formattedDuration = mins > 0 ? (secs > 0 ? `${mins}m ${secs}s` : `${mins} mins`) : `${secs}s`;
 
       const newMeeting: MeetingRecord = {
         id: meetingId,
@@ -172,7 +294,8 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
         title: notesResult.title || meetingTitle || "Recorded Meeting",
         date: now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         time: now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-        duration: "Completed",
+        duration: formattedDuration,
+        durationSeconds,
         status: "completed",
         primaryLanguages: notesResult.primaryLanguages.length ? notesResult.primaryLanguages : ["English"],
         summaryPreview: notesResult.summary ? notesResult.summary.slice(0, 160) : "",
@@ -221,12 +344,14 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
           : ""
       };
 
-      const savedMeeting = meetingStore.saveMeeting(userId, newMeeting);
+      const savedMeeting = await meetingStore.saveMeeting(userId, newMeeting);
+      const updatedEntitlements = await entitlementService.getUserEntitlements(userId);
 
       return reply.code(201).send({
         success: true,
         meetingId: savedMeeting.id,
-        meeting: savedMeeting
+        meeting: savedMeeting,
+        entitlements: updatedEntitlements
       });
     } catch (error: any) {
       app.log.error(error);

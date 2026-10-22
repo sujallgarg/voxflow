@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { generateMeetingNotes } from "../services/meeting-notes.service.js";
+import { authenticateRequest } from "../services/auth.service.js";
+import { entitlementService } from "../services/entitlement.service.js";
 
 const meetingNotesRoute: FastifyPluginAsync = async (app) => {
   app.post("/meeting-notes", async (request, reply) => {
@@ -16,8 +18,27 @@ const meetingNotesRoute: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const user = await authenticateRequest(request, reply);
+      if (!user) return;
+
+      const preCheck = await entitlementService.checkQuota(user.id, "summary", 1);
+      if (!preCheck.allowed) {
+        return reply.code(403).send({
+          error: preCheck.reason,
+          code: preCheck.code,
+          quotaType: preCheck.quotaType,
+          limit: preCheck.limit,
+          currentUsage: preCheck.currentUsage,
+          remaining: preCheck.remaining,
+          unit: preCheck.unit,
+          resetDate: preCheck.resetDate,
+          upgradeUrl: "#/pricing"
+        });
+      }
+
       app.log.info({
         action: "generateMeetingNotes",
+        userId: user.id,
         title: body.title,
         transcriptLength: body.transcript.length
       });
@@ -26,6 +47,9 @@ const meetingNotesRoute: FastifyPluginAsync = async (app) => {
         body.transcript,
         body.title
       );
+
+      // Commit summary usage only after successful outcome
+      await entitlementService.consumeQuota(user.id, "summary", 1);
 
       return result;
     } catch (error: any) {

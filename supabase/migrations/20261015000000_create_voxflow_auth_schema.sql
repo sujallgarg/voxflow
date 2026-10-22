@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
 -- Enable Row Level Security on Profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- Profiles RLS Policies
+-- Profiles RLS Policies: Authenticated users can view and update their own profile
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -39,13 +39,36 @@ BEGIN
   ) THEN
     CREATE POLICY "Users can update own profile"
       ON public.profiles FOR UPDATE
-      USING (auth.uid() = id);
+      USING (auth.uid() = id)
+      WITH CHECK (auth.uid() = id);
   END IF;
 END $$;
 
--- Automatic profile sync trigger from auth.users
-CREATE OR REPLACE FUNCTION public.handle_new_user()
+-- Guard against changing immutable/identity fields (id and email) on profiles
+CREATE OR REPLACE FUNCTION public.check_profile_immutable_fields()
 RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.id <> OLD.id THEN
+    RAISE EXCEPTION 'Profile ID is bound to auth.users and cannot be modified.';
+  END IF;
+  IF NEW.email <> OLD.email THEN
+    RAISE EXCEPTION 'Profile email is synchronized from auth.users and cannot be modified directly.';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_check_profile_immutable_fields ON public.profiles;
+CREATE TRIGGER trg_check_profile_immutable_fields
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.check_profile_immutable_fields();
+
+-- Automatic profile sync trigger from auth.users (with fixed search_path for SECURITY DEFINER)
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   INSERT INTO public.profiles (id, email, full_name, avatar_url)
   VALUES (
@@ -61,7 +84,7 @@ BEGIN
     updated_at = TIMEZONE('utc'::TEXT, NOW());
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql;
 
 -- Drop trigger if existing to ensure idempotent creation
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
@@ -127,7 +150,8 @@ BEGIN
   ) THEN
     CREATE POLICY "Users can update own meetings"
       ON public.meetings FOR UPDATE
-      USING (auth.uid() = user_id);
+      USING (auth.uid() = user_id)
+      WITH CHECK (auth.uid() = user_id);
   END IF;
 
   -- DELETE policy
@@ -158,3 +182,13 @@ DROP TRIGGER IF EXISTS set_meetings_updated_at ON public.meetings;
 CREATE TRIGGER set_meetings_updated_at
   BEFORE UPDATE ON public.meetings
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- 4. Role Privileges & Schema Exposure
+-- Grant schema usage and table privileges (data access is strictly governed by Row Level Security above)
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON public.profiles TO anon, authenticated, service_role;
+GRANT ALL ON public.meetings TO anon, authenticated, service_role;
+
+-- Instruct PostgREST to reload schema cache
+NOTIFY pgrst, 'reload schema';
+

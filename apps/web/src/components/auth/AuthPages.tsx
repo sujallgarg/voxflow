@@ -10,6 +10,7 @@ interface AuthPageProps {
 export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) => {
   const {
     user,
+    session,
     signIn,
     signUp,
     requestPasswordReset,
@@ -54,6 +55,32 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
     }
   }, [user, view, onNavigate]);
 
+  const getSafeReturnDestination = (): string => {
+    try {
+      const hash = window.location.hash || "";
+      const queryIndex = hash.indexOf("?");
+      if (queryIndex !== -1) {
+        const searchParams = new URLSearchParams(hash.slice(queryIndex + 1));
+        const returnTo = searchParams.get("returnTo");
+        if (returnTo) {
+          const decoded = decodeURIComponent(returnTo).trim();
+          // Security: Prevent open-redirect vulnerabilities.
+          // Strictly reject external domains, javascript:, data:, or protocol-relative // URLs.
+          if (
+            (decoded.startsWith("#/") || (decoded.startsWith("/") && !decoded.startsWith("//"))) &&
+            !decoded.includes(":") &&
+            !decoded.toLowerCase().includes("javascript")
+          ) {
+            return decoded.startsWith("#") ? decoded : `#${decoded}`;
+          }
+        }
+      }
+    } catch {
+      // Safe fallback
+    }
+    return "#/meetings";
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -70,8 +97,8 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
       if (error) {
         setErrorMessage(error);
       } else {
-        // Successful login
-        window.location.hash = "#/meetings";
+        // Successful login with validated safe destination
+        window.location.hash = getSafeReturnDestination();
       }
     } catch {
       setErrorMessage("An unexpected error occurred. Please try again.");
@@ -934,7 +961,45 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
 
         {/* 5. RESET PASSWORD VIEW */}
         {view === "reset-password" && (
-          <form onSubmit={handleResetPassword} noValidate>
+          isConfigured && !session ? (
+            <div style={{ textAlign: "center", padding: "10px 0" }}>
+              <div
+                role="alert"
+                style={{
+                  padding: "12px 14px",
+                  backgroundColor: "#fff5f5",
+                  border: "1px solid #fed7d7",
+                  borderRadius: "6px",
+                  color: "#c53030",
+                  fontSize: "0.84375rem",
+                  marginBottom: "20px",
+                  lineHeight: 1.45
+                }}
+              >
+                No active password recovery session detected. Password reset links expire after a short period.
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.hash = "#/forgot-password";
+                }}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  backgroundColor: "#111111",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "0.875rem",
+                  fontWeight: 500,
+                  cursor: "pointer"
+                }}
+              >
+                Request a New Reset Link
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleResetPassword} noValidate>
             <div style={{ marginBottom: "14px" }}>
               <label
                 htmlFor="reset-password"
@@ -1067,7 +1132,7 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
               {isLoading ? "Updating password..." : "Set New Password"}
             </button>
           </form>
-        )}
+        ))}
       </div>
     </div>
   );

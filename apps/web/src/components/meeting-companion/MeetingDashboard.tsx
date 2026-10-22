@@ -3,12 +3,19 @@ import type { MeetingRecord } from "../../data/meetingCompanionData";
 import {
   getCurrentUser,
   getUserMeetings,
+  getUserTranscriptions,
   calculateUserStats,
   setCurrentUser,
   deleteUserMeeting,
+  deleteUserTranscription,
   syncMeetingsFromBackend,
-  type UserProfile
+  syncTranscriptionsFromBackend,
+  type UserProfile,
+  type SavedTranscription
 } from "../../lib/userStore";
+import { UpgradeModal } from "../billing/UpgradeModal";
+import { PremiumBadge } from "../billing/PremiumBadge";
+import { useSubscription } from "../../lib/subscriptionContext";
 
 interface MeetingDashboardProps {
   onSelectMeeting: (
@@ -26,17 +33,26 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
 }) => {
   const [currentUser, setProfile] = useState<UserProfile>(() => getCurrentUser());
   const [meetings, setMeetings] = useState<MeetingRecord[]>(() => getUserMeetings(getCurrentUser().id));
+  const [transcriptions, setTranscriptions] = useState<SavedTranscription[]>(() =>
+    getUserTranscriptions(getCurrentUser().id)
+  );
+  const [mainTab, setMainTab] = useState<"meetings" | "voice-history">("meetings");
+  const [copiedVoiceId, setCopiedVoiceId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLanguageFilter, setSelectedLanguageFilter] = useState("all");
   const [statusTab, setStatusTab] = useState<"all" | "upcoming" | "completed">("all");
+  const { entitlements } = useSubscription();
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   useEffect(() => {
     void syncMeetingsFromBackend(currentUser.id);
+    void syncTranscriptionsFromBackend(currentUser.id);
 
     const handleSync = () => {
       const user = getCurrentUser();
       setProfile(user);
       setMeetings(getUserMeetings(user.id));
+      setTranscriptions(getUserTranscriptions(user.id));
     };
 
     window.addEventListener("voxflow_data_changed", handleSync);
@@ -189,10 +205,23 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
               </select>
             </div>
 
+            {/* Plan Badge */}
+            <PremiumBadge size="md" showFree />
+
             <button
               type="button"
               className="btn-primary"
-              onClick={onOpenNewMeetingModal}
+              onClick={() => {
+                const meetingsExhausted =
+                  (entitlements?.meetings?.isExhausted) ||
+                  (entitlements?.usage && entitlements.usage.meetingsUsed >= (entitlements.limits?.monthlyMeetings || 3));
+
+                if (meetingsExhausted) {
+                  setIsUpgradeModalOpen(true);
+                } else {
+                  onOpenNewMeetingModal();
+                }
+              }}
               style={{ padding: "8px 16px", fontSize: "0.8125rem", borderRadius: "6px" }}
             >
               + New Meeting
@@ -200,6 +229,14 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
           </div>
         </div>
       </header>
+
+      <UpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        reason="You have reached your monthly meeting allowance. Upgrade to Premium ($9/mo) or renew early to continue recording and analyzing meetings without interruption."
+        limitReached={`${entitlements?.breakdown?.meetings.limit ?? entitlements?.limits?.monthlyMeetings ?? (entitlements?.isPremium ? 25 : 3)} meetings / month`}
+        featureKey="meetings"
+      />
 
       {/* Main Container */}
       <main className="container" style={{ paddingTop: "32px" }}>
@@ -308,10 +345,81 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
               </span>
               <span style={{ fontSize: "0.75rem", color: "#666666" }}>Completed</span>
             </div>
+
+            <div
+              onClick={() => setMainTab("voice-history")}
+              style={{
+                background: mainTab === "voice-history" ? "#f5f5f5" : "#ffffff",
+                border: mainTab === "voice-history" ? "1px solid #111111" : "1px solid #e5e5e5",
+                borderRadius: "6px",
+                padding: "8px 16px",
+                textAlign: "center",
+                minWidth: "90px",
+                cursor: "pointer"
+              }}
+              title="Click to view saved voice input dictations"
+            >
+              <span style={{ display: "block", fontSize: "1.25rem", fontWeight: 700, color: "#111111" }}>
+                {stats.totalTranscriptions}
+              </span>
+              <span style={{ fontSize: "0.75rem", color: "#666666" }}>Voice Notes</span>
+            </div>
           </div>
         </div>
 
-        {/* Filter & Search Bar */}
+        {/* Primary View Switcher */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            borderBottom: "1px solid #e5e5e5",
+            marginBottom: "20px"
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setMainTab("meetings")}
+            style={{
+              padding: "10px 18px",
+              fontSize: "0.875rem",
+              fontWeight: mainTab === "meetings" ? 600 : 500,
+              color: mainTab === "meetings" ? "#111111" : "#666666",
+              borderBottom: mainTab === "meetings" ? "2px solid #111111" : "2px solid transparent",
+              background: "transparent",
+              borderTop: "none",
+              borderLeft: "none",
+              borderRight: "none",
+              cursor: "pointer",
+              marginBottom: "-1px"
+            }}
+          >
+            Meetings ({meetings.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setMainTab("voice-history")}
+            style={{
+              padding: "10px 18px",
+              fontSize: "0.875rem",
+              fontWeight: mainTab === "voice-history" ? 600 : 500,
+              color: mainTab === "voice-history" ? "#111111" : "#666666",
+              borderBottom: mainTab === "voice-history" ? "2px solid #111111" : "2px solid transparent",
+              background: "transparent",
+              borderTop: "none",
+              borderLeft: "none",
+              borderRight: "none",
+              cursor: "pointer",
+              marginBottom: "-1px"
+            }}
+          >
+            Voice History ({transcriptions.length})
+          </button>
+        </div>
+
+        {mainTab === "meetings" ? (
+          <>
+            {/* Filter & Search Bar */}
         <div
           style={{
             background: "#ffffff",
@@ -441,7 +549,17 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
               <button
                 type="button"
                 className="btn-primary"
-                onClick={onOpenNewMeetingModal}
+                onClick={() => {
+                  const meetingsExhausted =
+                    (entitlements?.meetings?.isExhausted) ||
+                    (entitlements?.usage && entitlements.usage.meetingsUsed >= (entitlements.limits?.monthlyMeetings || 3));
+
+                  if (meetingsExhausted) {
+                    setIsUpgradeModalOpen(true);
+                  } else {
+                    onOpenNewMeetingModal();
+                  }
+                }}
                 style={{ padding: "10px 20px", fontSize: "0.875rem" }}
               >
                 Create New Meeting
@@ -549,6 +667,204 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </>
+    ) : (
+          /* Main Tab 2: Voice Input History */
+          <div>
+            <div
+              style={{
+                background: "#fafafa",
+                border: "1px solid #e5e5e5",
+                borderRadius: "6px",
+                padding: "12px 16px",
+                marginBottom: "20px",
+                fontSize: "0.8125rem",
+                color: "#666666",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "10px"
+              }}
+            >
+              <div>
+                Durable voice input history synchronized across your Chrome extension and web account.
+              </div>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => syncTranscriptionsFromBackend(currentUser.id)}
+                style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+              >
+                ↻ Refresh History
+              </button>
+            </div>
+
+            {transcriptions.length === 0 ? (
+              <div
+                style={{
+                  padding: "56px 20px",
+                  textAlign: "center",
+                  background: "#ffffff",
+                  borderRadius: "8px",
+                  border: "1px dashed #e5e5e5"
+                }}
+              >
+                <div style={{ fontSize: "2rem", marginBottom: "8px" }}>🎙️</div>
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 600, color: "#111111", marginBottom: "6px" }}>
+                  No voice dictations yet
+                </h3>
+                <p style={{ fontSize: "0.875rem", color: "#666666", maxWidth: "440px", margin: "0 auto", lineHeight: 1.6 }}>
+                  Dictate anywhere in your browser using the VoxFlow Chrome extension. Your original spoken transcripts and transformed text will automatically synchronize and appear here.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "16px" }}>
+                {transcriptions.map((item) => (
+                  <div
+                    key={item.id}
+                    className="card-premium"
+                    style={{
+                      padding: "20px 24px",
+                      background: "#ffffff",
+                      borderRadius: "8px",
+                      border: "1px solid #e5e5e5",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span style={{ fontSize: "1.1rem" }}>🎙️</span>
+                        <div>
+                          <strong style={{ fontSize: "0.95rem", color: "#111111" }}>
+                            {item.title || "Voice Dictation"}
+                          </strong>
+                          <div style={{ fontSize: "0.75rem", color: "#666666" }}>
+                            {new Date(item.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span
+                          style={{
+                            fontSize: "0.75rem",
+                            background: "#f5f5f5",
+                            color: "#111111",
+                            border: "1px solid #e5e5e5",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                            fontWeight: 500
+                          }}
+                        >
+                          {item.language || "Auto"}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm("Delete this voice dictation record?")) {
+                              deleteUserTranscription(currentUser.id, item.id);
+                              setTranscriptions(getUserTranscriptions(currentUser.id));
+                            }
+                          }}
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            fontSize: "0.75rem",
+                            color: "#991b1b",
+                            background: "transparent",
+                            border: "1px solid #fecaca",
+                            cursor: "pointer"
+                          }}
+                          title="Delete voice record"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Transformed Final Text */}
+                    {item.transformedText && (
+                      <div style={{ background: "#fafafa", padding: "12px 16px", borderRadius: "6px", border: "1px solid #e5e5e5" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#666666", textTransform: "uppercase" }}>
+                            Final Processed Text
+                          </span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(item.transformedText || "");
+                                setCopiedVoiceId(`final_${item.id}`);
+                                setTimeout(() => setCopiedVoiceId(null), 2000);
+                              } catch (e) {
+                                console.warn("Clipboard copy failed:", e);
+                              }
+                            }}
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              color: copiedVoiceId === `final_${item.id}` ? "#166534" : "#111111",
+                              background: copiedVoiceId === `final_${item.id}` ? "#f0fdf4" : "#ffffff",
+                              border: copiedVoiceId === `final_${item.id}` ? "1px solid #bbf7d0" : "1px solid #e5e5e5",
+                              borderRadius: "4px",
+                              padding: "3px 8px",
+                              cursor: "pointer"
+                            }}
+                          >
+                            {copiedVoiceId === `final_${item.id}` ? "✓ Copied" : "Copy Processed Text"}
+                          </button>
+                        </div>
+                        <p style={{ fontSize: "0.875rem", color: "#111111", lineHeight: 1.6, margin: 0 }}>
+                          {item.transformedText}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Original Transcript */}
+                    {item.transcript && item.transcript !== item.transformedText && (
+                      <div style={{ background: "#ffffff", padding: "10px 14px", borderRadius: "6px", border: "1px dashed #e5e5e5" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                          <span style={{ fontSize: "0.75rem", color: "#666666" }}>
+                            Original Spoken Transcript
+                          </span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(item.transcript || "");
+                                setCopiedVoiceId(`orig_${item.id}`);
+                                setTimeout(() => setCopiedVoiceId(null), 2000);
+                              } catch (e) {
+                                console.warn("Clipboard copy failed:", e);
+                              }
+                            }}
+                            style={{
+                              fontSize: "0.75rem",
+                              color: copiedVoiceId === `orig_${item.id}` ? "#166534" : "#666666",
+                              background: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              textDecoration: "underline"
+                            }}
+                          >
+                            {copiedVoiceId === `orig_${item.id}` ? "✓ Copied" : "Copy Original"}
+                          </button>
+                        </div>
+                        <p style={{ fontSize: "0.8125rem", color: "#666666", fontStyle: "italic", margin: 0 }}>
+                          "{item.transcript}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>

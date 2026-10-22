@@ -533,8 +533,8 @@ describe("VoxFlow API Server Endpoints", () => {
   });
 
   describe("Authentication, Authorization & Data Isolation", () => {
-    const userA = "user_auth_a_123";
-    const userB = "user_auth_b_456";
+    const userA = `user_auth_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const userB = `user_auth_b_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const tokenA = generateAuthToken(userA);
     const tokenB = generateAuthToken(userB);
 
@@ -681,6 +681,281 @@ describe("VoxFlow API Server Endpoints", () => {
       } finally {
         setSupabaseClientForTesting(null);
       }
+    });
+
+    it("should reject unauthorized updates when User B attempts to PATCH User A's meeting", async () => {
+      const meetingId = `meeting_patch_iso_${Date.now()}`;
+
+      // User A creates meeting
+      await app.inject({
+        method: "POST",
+        url: "/meetings",
+        headers: { authorization: `Bearer ${tokenA}` },
+        payload: { id: meetingId, title: "Original Title", duration: "15m" }
+      });
+
+      // User B attempts to overwrite/patch User A's meeting
+      const patchResB = await app.inject({
+        method: "PATCH",
+        url: `/meetings/${meetingId}`,
+        headers: { authorization: `Bearer ${tokenB}` },
+        payload: { title: "Hacked Title By User B" }
+      });
+
+      expect(patchResB.statusCode).toBe(404);
+      const bodyB = JSON.parse(patchResB.body);
+      expect(bodyB.code).toBe("MEETING_NOT_FOUND");
+
+      // Verify original title was unchanged
+      const verifyResA = await app.inject({
+        method: "GET",
+        url: `/meetings/${meetingId}`,
+        headers: { authorization: `Bearer ${tokenA}` }
+      });
+      const verifyBodyA = JSON.parse(verifyResA.body);
+      expect(verifyBodyA.meeting.title).toBe("Original Title");
+    });
+
+    it("should reject expired authorization tokens (older than 30 days)", async () => {
+      // Manually forge an HMAC token with an old timestamp (31 days ago)
+      const oldTimestamp = Date.now() - 31 * 24 * 60 * 60 * 1000;
+      const oldPayload = `user_expired_test.${oldTimestamp}`;
+      const crypto = await import("crypto");
+      const sig = crypto
+        .createHmac("sha256", process.env.AUTH_SECRET || "voxflow_local_dev_secret_key_32chars_min!")
+        .update(oldPayload)
+        .digest("hex");
+      const expiredToken = `${oldPayload}.${sig}`;
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/meetings",
+        headers: { authorization: `Bearer ${expiredToken}` }
+      });
+
+      expect(res.statusCode).toBe(401);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("INVALID_AUTH_TOKEN");
+    });
+
+    it("should reject User B attempting to overwrite User A's meeting via POST /meetings with same ID", async () => {
+      const hijackedMeetingId = `meeting_hijack_${Date.now()}`;
+
+      // User A creates the meeting
+      const resA = await app.inject({
+        method: "POST",
+        url: "/meetings",
+        headers: { authorization: `Bearer ${tokenA}` },
+        payload: { id: hijackedMeetingId, title: "Alice Original Secret Meeting" }
+      });
+      expect(resA.statusCode).toBe(201);
+
+      // User B attempts to overwrite it by sending POST with the same meeting ID
+      const resB = await app.inject({
+        method: "POST",
+        url: "/meetings",
+        headers: { authorization: `Bearer ${tokenB}` },
+        payload: { id: hijackedMeetingId, title: "Bob Overwrite Malicious Attempt" }
+      });
+
+      expect(resB.statusCode).toBe(409);
+      const bodyB = JSON.parse(resB.body);
+      expect(bodyB.code).toBe("MEETING_ID_CONFLICT");
+
+      // Verify User A's meeting remains untampered
+      const verifyResA = await app.inject({
+        method: "GET",
+        url: `/meetings/${hijackedMeetingId}`,
+        headers: { authorization: `Bearer ${tokenA}` }
+      });
+      const verifyBodyA = JSON.parse(verifyResA.body);
+      expect(verifyBodyA.meeting.title).toBe("Alice Original Secret Meeting");
+      expect(verifyBodyA.meeting.userId).toBe(userA);
+    });
+
+    it("should allow an authenticated user to claim an extension-created guest meeting", async () => {
+      const extMeetingId = `meeting_ext_${Date.now()}`;
+      const authUser = "test_user_authenticated_web";
+      const authToken = generateAuthToken(authUser);
+
+      // 1. Extension creates meeting under default guest identity "user_me"
+      const createRes = await app.inject({
+        method: "POST",
+        url: "/meetings",
+        headers: { "x-user-id": "user_me" },
+        payload: {
+          id: extMeetingId,
+          title: "Architecture Sync from Chrome Extension",
+          duration: "15 mins",
+          status: "completed",
+          primaryLanguages: ["English"],
+          summaryPreview: "Discussed system architecture.",
+          fullSummary: "Discussed system architecture and microservices design."
+        }
+      });
+      expect(createRes.statusCode).toBe(201);
+
+      // 2. Authenticated user opens direct URL on website -> loads and claims the meeting
+      const getRes = await app.inject({
+        method: "GET",
+        url: `/meetings/${extMeetingId}`,
+        headers: { authorization: `Bearer ${authToken}` }
+      });
+      expect(getRes.statusCode).toBe(200);
+      const getBody = JSON.parse(getRes.body);
+      expect(getBody.meeting.id).toBe(extMeetingId);
+      expect(getBody.meeting.title).toBe("Architecture Sync from Chrome Extension");
+      expect(getBody.meeting.userId).toBe(authUser);
+
+      // 3. Meeting now appears in the authenticated user's meeting dashboard list
+      const listRes = await app.inject({
+        method: "GET",
+        url: "/meetings",
+        headers: { authorization: `Bearer ${authToken}` }
+      });
+      expect(listRes.statusCode).toBe(200);
+      const listBody = JSON.parse(listRes.body);
+      expect(listBody.meetings.some((m: any) => m.id === extMeetingId)).toBe(true);
+
+      // 4. Another unauthorized user cannot access it
+      const unauthorizedUser = "test_user_unauthorized_intruder";
+      const unauthorizedToken = generateAuthToken(unauthorizedUser);
+      const unauthGetRes = await app.inject({
+        method: "GET",
+        url: `/meetings/${extMeetingId}`,
+        headers: { authorization: `Bearer ${unauthorizedToken}` }
+      });
+      expect(unauthGetRes.statusCode).toBe(404);
+    });
+
+    it("should accurately return a meeting with status 'processing'", async () => {
+      const processingMeetingId = `meeting_proc_${Date.now()}`;
+      const user = "test_user_proc";
+      const token = generateAuthToken(user);
+
+      const createRes = await app.inject({
+        method: "POST",
+        url: "/meetings",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          id: processingMeetingId,
+          title: "Ongoing Standup",
+          status: "processing",
+          duration: "In progress",
+          primaryLanguages: ["English"],
+          summaryPreview: "",
+          fullSummary: ""
+        }
+      });
+      expect(createRes.statusCode).toBe(201);
+
+      const getRes = await app.inject({
+        method: "GET",
+        url: `/meetings/${processingMeetingId}`,
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(getRes.statusCode).toBe(200);
+      const getBody = JSON.parse(getRes.body);
+      expect(getBody.meeting.status).toBe("processing");
+    });
+  });
+
+  describe("Voice Input History Endpoints (/transcriptions)", () => {
+    it("should save, list, retrieve, and isolate voice input results per user", async () => {
+      const voiceUserA = "test_voice_alice";
+      const voiceUserB = "test_voice_bob";
+      const tokenA = generateAuthToken(voiceUserA);
+      const tokenB = generateAuthToken(voiceUserB);
+
+      const voiceId1 = `vt_test_101_${Date.now()}`;
+
+      // 1. User A saves a voice transcription result
+      const saveRes = await app.inject({
+        method: "POST",
+        url: "/transcriptions",
+        headers: { authorization: `Bearer ${tokenA}` },
+        payload: {
+          id: voiceId1,
+          title: "Quick voice note about product launch",
+          transcript: "let schedule the launch for next tuesday",
+          transformedText: "Let's schedule the product launch for next Tuesday.",
+          language: "English",
+          status: "completed"
+        }
+      });
+
+      expect(saveRes.statusCode).toBe(201);
+      const saveBody = JSON.parse(saveRes.body);
+      expect(saveBody.success).toBe(true);
+      expect(saveBody.transcription.id).toBe(voiceId1);
+      expect(saveBody.transcription.transformedText).toBe("Let's schedule the product launch for next Tuesday.");
+
+      // 2. User A lists their transcriptions
+      const listResA = await app.inject({
+        method: "GET",
+        url: "/transcriptions",
+        headers: { authorization: `Bearer ${tokenA}` }
+      });
+      expect(listResA.statusCode).toBe(200);
+      const listBodyA = JSON.parse(listResA.body);
+      expect(listBodyA.transcriptions.some((t: any) => t.id === voiceId1)).toBe(true);
+
+      // 3. User B cannot see User A's transcription in list or direct GET
+      const listResB = await app.inject({
+        method: "GET",
+        url: "/transcriptions",
+        headers: { authorization: `Bearer ${tokenB}` }
+      });
+      expect(listResB.statusCode).toBe(200);
+      const listBodyB = JSON.parse(listResB.body);
+      expect(listBodyB.transcriptions.some((t: any) => t.id === voiceId1)).toBe(false);
+
+      const directGetResB = await app.inject({
+        method: "GET",
+        url: `/transcriptions/${voiceId1}`,
+        headers: { authorization: `Bearer ${tokenB}` }
+      });
+      expect(directGetResB.statusCode).toBe(404);
+
+      // 4. Retrying the same voice transcription ID is idempotent and does not create duplicates
+      const retryRes = await app.inject({
+        method: "POST",
+        url: "/transcriptions",
+        headers: { authorization: `Bearer ${tokenA}` },
+        payload: {
+          id: voiceId1,
+          title: "Quick voice note about product launch",
+          transcript: "let schedule the launch for next tuesday",
+          transformedText: "Let's schedule the product launch for next Tuesday.",
+          language: "English",
+          status: "completed"
+        }
+      });
+      expect(retryRes.statusCode).toBe(201);
+
+      const listAfterRetry = await app.inject({
+        method: "GET",
+        url: "/transcriptions",
+        headers: { authorization: `Bearer ${tokenA}` }
+      });
+      const matchingCount = JSON.parse(listAfterRetry.body).transcriptions.filter((t: any) => t.id === voiceId1).length;
+      expect(matchingCount).toBe(1);
+
+      // 5. User A can delete the voice transcription
+      const delRes = await app.inject({
+        method: "DELETE",
+        url: `/transcriptions/${voiceId1}`,
+        headers: { authorization: `Bearer ${tokenA}` }
+      });
+      expect(delRes.statusCode).toBe(200);
+
+      // 6. Record is deleted
+      const finalGetRes = await app.inject({
+        method: "GET",
+        url: `/transcriptions/${voiceId1}`,
+        headers: { authorization: `Bearer ${tokenA}` }
+      });
+      expect(finalGetRes.statusCode).toBe(404);
     });
   });
 });

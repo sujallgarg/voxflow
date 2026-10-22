@@ -144,6 +144,27 @@ async function persistSession(): Promise<void> {
 
 void ensureSessionLoaded();
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const data = await chrome.storage.local.get(["voxflow_auth_token", "voxflow_user_id"]);
+    const token = data.voxflow_auth_token as string | undefined;
+    const userId = data.voxflow_user_id as string | undefined;
+
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    if (userId) {
+      headers["x-user-id"] = userId;
+    } else {
+      headers["x-user-id"] = "user_me";
+    }
+    return headers;
+  } catch {
+    return { "x-user-id": "user_me" };
+  }
+}
+
 // --------------------------------------------------
 // OFFSCREEN DOCUMENT MANAGEMENT
 // --------------------------------------------------
@@ -904,19 +925,37 @@ async function processMeetingCapture(
     if (currentSession.targetLanguage && currentSession.targetLanguage !== "Auto") {
       formData.append("language", currentSession.targetLanguage);
     }
+    if (currentSession.meetingId || currentSession.sessionId) {
+      formData.append("meetingId", currentSession.meetingId || `meeting_${currentSession.sessionId}`);
+    }
 
-    console.log("VoxFlow: Submitting meeting audio to backend /meetings/process-recording...");
+    const durationSeconds = Math.max(1, Math.round((Date.now() - (currentSession.startedAt || Date.now())) / 1000));
+    formData.append("durationSeconds", String(durationSeconds));
+
+    const authHeaders = await getAuthHeaders();
+    console.log("VoxFlow: Submitting meeting audio to backend /meetings/process-recording, duration:", durationSeconds, "seconds");
     const res = await fetch(`${API_BASE_URL}/meetings/process-recording`, {
       method: "POST",
       headers: {
-        "x-user-id": "user_me"
+        ...authHeaders
       },
       body: formData
     });
 
     if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Meeting processing failed (${res.status}): ${errText}`);
+      let errMsg = `Meeting processing failed (${res.status})`;
+      try {
+        const errJson = await res.json();
+        if (errJson.code === "USAGE_LIMIT_REACHED") {
+          errMsg = errJson.reason || `Meeting usage limit reached (${errJson.currentUsage}/${errJson.limit}). Upgrade at http://localhost:5173/#/pricing to continue.`;
+        } else if (errJson.error) {
+          errMsg = errJson.error;
+        }
+      } catch {
+        const errText = await res.text().catch(() => "");
+        if (errText) errMsg += `: ${errText}`;
+      }
+      throw new Error(errMsg);
     }
 
     const data = (await res.json()) as {
@@ -1046,15 +1085,32 @@ async function runAiPipeline(
     const formData = new FormData();
     formData.append("file", audioBlob, "recording.webm");
 
-    console.log("VoxFlow: Step 1 → calling /transcribe...");
+    const authHeaders = await getAuthHeaders();
+    console.log("VoxFlow: Step 1 → calling /transcribe with authenticated session...");
     const transcribeRes = await fetch(`${API_BASE_URL}/transcribe`, {
       method: "POST",
+      headers: {
+        ...authHeaders
+      },
       body: formData
     });
 
     if (!transcribeRes.ok) {
-      const errText = await transcribeRes.text();
-      throw new Error(`Transcription failed (${transcribeRes.status}): ${errText}`);
+      let errMsg = `Transcription failed (${transcribeRes.status})`;
+      try {
+        const errJson = await transcribeRes.json();
+        if (errJson.code === "USAGE_LIMIT_REACHED") {
+          errMsg = errJson.reason || `Voice dictation quota reached (${errJson.currentUsage}/${errJson.limit}). Upgrade to Premium at http://localhost:5173/#/pricing to continue.`;
+        } else if (errJson.code === "SUBSCRIPTION_REQUIRED") {
+          errMsg = errJson.reason || `Premium subscription required. Upgrade at http://localhost:5173/#/pricing to continue.`;
+        } else if (errJson.error) {
+          errMsg = errJson.error;
+        }
+      } catch {
+        const errText = await transcribeRes.text().catch(() => "");
+        if (errText) errMsg += `: ${errText}`;
+      }
+      throw new Error(errMsg);
     }
 
     const transcribeData = await transcribeRes.json();
@@ -1145,7 +1201,10 @@ async function runAiPipeline(
     console.log("VoxFlow: Step 5 → calling /transform...");
     const transformRes = await fetch(`${API_BASE_URL}/transform`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({
         transcript,
         meaning: understandData.meaning,
@@ -1192,6 +1251,35 @@ async function runAiPipeline(
     currentSession.completedAt = Date.now();
     currentSession.error = null;
 
+    // Persist voice input result to authoritative API
+    try {
+      const voiceResultId = `vt_${currentSession.sessionId || Date.now()}`;
+      const authHeaders = await getAuthHeaders();
+      const syncRes = await fetch(`${API_BASE_URL}/transcriptions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders
+        },
+        body: JSON.stringify({
+          id: voiceResultId,
+          title: transcript.slice(0, 50),
+          transcript,
+          transformedText: transformData.finalText,
+          language: currentSession.targetLanguage || "Auto",
+          status: "completed",
+          createdAt: new Date().toISOString()
+        })
+      });
+      if (syncRes.ok) {
+        console.log("VoxFlow: voice input synchronized to cloud history successfully.");
+      } else {
+        console.warn("VoxFlow: voice input sync returned status:", syncRes.status);
+      }
+    } catch (syncErr) {
+      console.warn("VoxFlow: voice input cloud sync notice (saved locally in session):", syncErr);
+    }
+
     await persistSession();
 
     return finalResult;
@@ -1224,12 +1312,31 @@ async function runAiPipeline(
 // CHROME RUNTIME MESSAGE HANDLER
 // --------------------------------------------------
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  // Security: Ensure message originates from within this extension
+  if (sender.id && sender.id !== chrome.runtime.id) {
+    return false;
+  }
+
   if (!message || typeof message !== "object") {
     return false;
   }
 
   const msg = message as Record<string, unknown>;
+
+  // 0. Auth Session Synchronization from Web App
+  if (msg.type === "SYNC_AUTH") {
+    const token = msg.token as string | undefined;
+    const userId = msg.userId as string | undefined;
+    const updates: Record<string, any> = {};
+    if (token) updates["voxflow_auth_token"] = token;
+    if (userId) updates["voxflow_user_id"] = userId;
+    if (Object.keys(updates).length > 0) {
+      void chrome.storage.local.set(updates);
+    }
+    sendResponse({ success: true });
+    return true;
+  }
 
   // 1. Text Insertion
   if (msg.type === "INSERT_TEXT" && typeof msg.text === "string") {
