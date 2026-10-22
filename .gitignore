@@ -11,6 +11,8 @@ out/
 # TypeScript cache
 *.tsbuildinfo
 .tmp/
+.temp/
+supabase/.temp/
 
 # Logs
 logs/

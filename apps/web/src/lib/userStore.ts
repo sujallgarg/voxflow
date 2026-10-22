@@ -125,7 +125,11 @@ export async function syncMeetingsFromBackend(userId: string): Promise<MeetingRe
 /**
  * Save or update a meeting record for the specified user both locally and on backend.
  */
-export function saveUserMeeting(userId: string, meeting: MeetingRecord): void {
+export function saveUserMeeting(
+  userId: string,
+  meeting: MeetingRecord,
+  syncBackend = true
+): void {
   try {
     const meetings = getUserMeetings(userId);
     const existingIndex = meetings.findIndex((m) => m.id === meeting.id);
@@ -137,10 +141,12 @@ export function saveUserMeeting(userId: string, meeting: MeetingRecord): void {
     localStorage.setItem(`voxflow_user_meetings_${userId}`, JSON.stringify(meetings));
     window.dispatchEvent(new Event("voxflow_data_changed"));
 
-    // Async sync to backend
-    api.saveMeeting(meeting, userId).catch((err) => {
-      console.warn("Notice: could not save meeting to backend, cached locally:", err);
-    });
+    // Async sync to backend only when creating or updating locally
+    if (syncBackend) {
+      api.saveMeeting(meeting, userId).catch((err) => {
+        console.warn("Notice: could not save meeting to backend, cached locally:", err);
+      });
+    }
   } catch (e) {
     console.warn(`Error saving meeting for user ${userId}:`, e);
   }
@@ -183,9 +189,51 @@ export function getUserTranscriptions(userId: string): SavedTranscription[] {
 }
 
 /**
+ * Asynchronously synchronizes transcriptions from backend API with local cache.
+ */
+export async function syncTranscriptionsFromBackend(userId: string): Promise<SavedTranscription[]> {
+  try {
+    const { transcriptions: backendItems } = await api.getTranscriptions(userId);
+    if (Array.isArray(backendItems)) {
+      const localItems = getUserTranscriptions(userId);
+      const mergedMap = new Map<string, SavedTranscription>();
+
+      for (const t of localItems) {
+        mergedMap.set(t.id, t);
+      }
+      for (const t of backendItems) {
+        mergedMap.set(t.id, {
+          id: t.id,
+          title: t.title || "Voice Dictation",
+          transcript: t.transcript || "",
+          transformedText: t.transformedText || t.finalText || "",
+          language: t.language || "Auto",
+          createdAt: t.createdAt || new Date().toISOString()
+        });
+      }
+
+      const mergedList = Array.from(mergedMap.values()).sort((a, b) =>
+        (b.createdAt || "").localeCompare(a.createdAt || "")
+      );
+
+      localStorage.setItem(`voxflow_user_transcripts_${userId}`, JSON.stringify(mergedList));
+      window.dispatchEvent(new Event("voxflow_data_changed"));
+      return mergedList;
+    }
+  } catch (e) {
+    console.warn("Backend transcriptions sync notice (using local storage cache):", e);
+  }
+  return getUserTranscriptions(userId);
+}
+
+/**
  * Save a new transcription for the specified user.
  */
-export function saveUserTranscription(userId: string, item: SavedTranscription): void {
+export function saveUserTranscription(
+  userId: string,
+  item: SavedTranscription,
+  syncBackend = true
+): void {
   try {
     const items = getUserTranscriptions(userId);
     const existingIndex = items.findIndex((t) => t.id === item.id);
@@ -196,6 +244,12 @@ export function saveUserTranscription(userId: string, item: SavedTranscription):
     }
     localStorage.setItem(`voxflow_user_transcripts_${userId}`, JSON.stringify(items));
     window.dispatchEvent(new Event("voxflow_data_changed"));
+
+    if (syncBackend) {
+      api.saveTranscription(item, userId).catch((err) => {
+        console.warn("Notice: could not save transcription to backend:", err);
+      });
+    }
   } catch (e) {
     console.warn(`Error saving transcription for user ${userId}:`, e);
   }
@@ -210,6 +264,10 @@ export function deleteUserTranscription(userId: string, id: string): void {
     const filtered = items.filter((t) => t.id !== id);
     localStorage.setItem(`voxflow_user_transcripts_${userId}`, JSON.stringify(filtered));
     window.dispatchEvent(new Event("voxflow_data_changed"));
+
+    api.deleteTranscription(id, userId).catch((err) => {
+      console.warn("Notice: could not delete transcription from backend:", err);
+    });
   } catch (e) {
     console.warn(`Error deleting transcription for user ${userId}:`, e);
   }

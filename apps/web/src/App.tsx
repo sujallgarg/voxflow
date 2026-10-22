@@ -23,12 +23,17 @@ import { CookiePolicy } from "./components/legal/CookiePolicy";
 import { CookieConsentBanner } from "./components/legal/CookieConsentBanner";
 import { useAuth } from "./lib/authContext";
 import { AuthPages } from "./components/auth/AuthPages";
+import { BillingDashboard } from "./components/billing/BillingDashboard";
+import { CheckoutSuccessPage, CheckoutCancelPage } from "./components/billing/CheckoutStatus";
 
 export default function App() {
   type AppView =
     | "landing"
     | "companion-dashboard"
     | "companion-workspace"
+    | "billing"
+    | "billing-success"
+    | "billing-cancel"
     | "privacy"
     | "terms"
     | "refunds"
@@ -69,7 +74,7 @@ export default function App() {
     }
   }, [user]);
 
-  // Sync hash routing if user enters #/meetings, #/login, #/signup, etc.
+  // Sync hash routing if user enters #/meetings, #/billing, #/login, #/signup, etc.
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash || "";
@@ -79,6 +84,17 @@ export default function App() {
         setCurrentView("companion-workspace");
       } else if (hash === "#/meetings") {
         setCurrentView("companion-dashboard");
+      } else if (hash.startsWith("#/billing/success")) {
+        setCurrentView("billing-success");
+      } else if (hash.startsWith("#/billing/cancel")) {
+        setCurrentView("billing-cancel");
+      } else if (hash === "#/billing") {
+        setCurrentView("billing");
+      } else if (hash === "#/pricing" || hash === "#pricing") {
+        setCurrentView("landing");
+        setTimeout(() => {
+          document.querySelector("#pricing")?.scrollIntoView({ behavior: "smooth" });
+        }, 100);
       } else if (hash === "#/login" || hash.startsWith("#/login?")) {
         setCurrentView("login");
       } else if (hash === "#/signup" || hash.startsWith("#/signup?")) {
@@ -113,9 +129,10 @@ export default function App() {
 
     const isMeetingRoute =
       currentView === "companion-dashboard" || currentView === "companion-workspace";
+    const isBillingRoute = currentView === "billing";
 
-    // If Supabase is configured and user is unauthenticated on protected meeting route:
-    if (isConfigured && !user && isMeetingRoute) {
+    // If Supabase is configured and user is unauthenticated on protected route:
+    if (isConfigured && !user && (isMeetingRoute || isBillingRoute)) {
       const safeReturnTo = encodeURIComponent(window.location.hash || "#/meetings");
       window.location.hash = `#/login?returnTo=${safeReturnTo}`;
       setCurrentView("login");
@@ -158,18 +175,27 @@ export default function App() {
           .getMeeting(selectedMeetingId, currentUser.id)
           .then((res) => {
             if (res && res.meeting) {
-              saveUserMeeting(currentUser.id, res.meeting);
+              saveUserMeeting(currentUser.id, res.meeting, false);
               setUserMeetings(getUserMeetings(currentUser.id));
               setMeetingLoadError(null);
             } else {
               setMeetingLoadError("Meeting not found on server.");
             }
           })
-          .catch((err) => {
+          .catch((err: any) => {
             console.warn("Direct meeting fetch notice:", err);
-            setMeetingLoadError(
-              "Could not retrieve meeting from server. Please verify backend connection."
-            );
+            const msg = err?.message || "";
+            if (msg.includes("404") || msg.includes("not found")) {
+              setMeetingLoadError(
+                "Meeting record not found or does not belong to this account."
+              );
+            } else if (msg.includes("401") || msg.includes("403")) {
+              setMeetingLoadError("You are not authorized to view this meeting.");
+            } else {
+              setMeetingLoadError(
+                "Could not connect to the VoxFlow server. Please check your network connection and retry."
+              );
+            }
           })
           .finally(() => {
             setIsLoadingMeeting(false);
@@ -216,6 +242,12 @@ export default function App() {
     (m) => m.id === selectedMeetingId
   );
 
+  const isDirectMeetingLoading =
+    currentView === "companion-workspace" &&
+    Boolean(selectedMeetingId) &&
+    !activeMeetingRecord &&
+    !meetingLoadError;
+
   return (
     <div className="voxflow-app" style={{ minHeight: "100vh", position: "relative" }}>
       {/* Subtle ambient background glow */}
@@ -232,7 +264,7 @@ export default function App() {
 
       {/* VIEW 2: MEETING WORKSPACE */}
       {currentView === "companion-workspace" && (
-        isLoadingMeeting ? (
+        (isLoadingMeeting || isDirectMeetingLoading) ? (
           <div style={{ minHeight: "100vh", padding: "100px 20px", textAlign: "center", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ maxWidth: "440px", margin: "0 auto", background: "#ffffff", padding: "36px 28px", borderRadius: "8px", border: "1px solid #e5e5e5" }}>
               <div style={{ width: "32px", height: "32px", border: "3px solid #e5e5e5", borderTopColor: "#111111", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
@@ -266,17 +298,78 @@ export default function App() {
                   <>This meeting does not exist or does not belong to your account (<strong>{currentUser.email}</strong>).</>
                 )}
               </p>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={handleBackToDashboard}
-                style={{ fontSize: "0.875rem", padding: "9px 18px" }}
-              >
-                ← Return to Meetings
-              </button>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+                {meetingLoadError && meetingLoadError.includes("network") && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      setMeetingLoadError(null);
+                      setIsLoadingMeeting(true);
+                      api.getMeeting(selectedMeetingId, currentUser.id)
+                        .then((res) => {
+                          if (res?.meeting) {
+                            saveUserMeeting(currentUser.id, res.meeting, false);
+                            setUserMeetings(getUserMeetings(currentUser.id));
+                          }
+                        })
+                        .catch(() => {})
+                        .finally(() => setIsLoadingMeeting(false));
+                    }}
+                    style={{ fontSize: "0.875rem", padding: "9px 18px" }}
+                  >
+                    Retry Loading
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleBackToDashboard}
+                  style={{ fontSize: "0.875rem", padding: "9px 18px" }}
+                >
+                  ← Return to Meetings
+                </button>
+              </div>
             </div>
           </div>
         )
+      )}
+
+      {/* VIEW: BILLING DASHBOARD */}
+      {currentView === "billing" && (
+        <BillingDashboard
+          onBackToHome={handleBackToHome}
+          onNavigateToPricing={() => {
+            window.location.hash = "#pricing";
+          }}
+        />
+      )}
+
+      {/* VIEW: CHECKOUT SUCCESS */}
+      {currentView === "billing-success" && (
+        <CheckoutSuccessPage
+          onBackToApp={() => {
+            window.location.hash = "#/meetings";
+            setCurrentView("companion-dashboard");
+          }}
+          onNavigateToBilling={() => {
+            window.location.hash = "#/billing";
+            setCurrentView("billing");
+          }}
+        />
+      )}
+
+      {/* VIEW: CHECKOUT CANCEL */}
+      {currentView === "billing-cancel" && (
+        <CheckoutCancelPage
+          onBackToApp={() => {
+            window.location.hash = "#/meetings";
+            setCurrentView("companion-dashboard");
+          }}
+          onNavigateToPricing={() => {
+            window.location.hash = "#pricing";
+          }}
+        />
       )}
 
       {/* VIEW 3: LEGAL - PRIVACY POLICY */}

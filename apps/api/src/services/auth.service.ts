@@ -8,10 +8,10 @@ export interface AuthenticatedUser {
   role?: string;
 }
 
-// Secret key for HMAC token signing (falls back to local dev secret if not set in environment)
-const AUTH_SECRET = process.env.AUTH_SECRET || "voxflow_local_dev_secret_key_32chars_min!";
+// Secret key for HMAC token signing (only used in dev / testing, disabled in production)
 const IS_PROD = process.env.NODE_ENV === "production";
 const ENFORCE_AUTH = process.env.AUTH_ENFORCE === "true" || IS_PROD;
+const AUTH_SECRET = process.env.AUTH_SECRET || (IS_PROD ? "" : "voxflow_local_dev_secret_key_32chars_min!");
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
@@ -149,9 +149,9 @@ export async function authenticateRequest(
       verified = await verifySupabaseToken(token);
     }
 
-    // 2. If not verified by Supabase (or Supabase not active), check HMAC signature
-    if (!verified) {
-      verified = verifyAuthToken(token);
+    // 2. If not verified by Supabase (or Supabase not active), check HMAC signature ONLY in non-production
+    if (!verified && !IS_PROD && AUTH_SECRET) {
+      verified = verifyAuthToken(token, AUTH_SECRET);
     }
 
     if (!verified) {

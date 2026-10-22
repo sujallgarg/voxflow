@@ -205,7 +205,7 @@ class VoxFlowApiClient {
     return res.json();
   }
 
-  private async getAuthHeaders(): Promise<Record<string, string>> {
+  private async getAuthHeaders(userId?: string): Promise<Record<string, string>> {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
@@ -216,13 +216,15 @@ class VoxFlowApiClient {
     } catch {
       // Ignored: fallback to unauthenticated or dev identifier
     }
-    return {};
+    return {
+      "x-user-id": userId || "user_me"
+    };
   }
 
-  async getMeetings(userId = "user_me"): Promise<{ meetings: any[] }> {
-    const authHeaders = await this.getAuthHeaders();
+  async getMeetings(userId?: string): Promise<{ meetings: any[] }> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/meetings`, {
-      headers: { ...authHeaders, "x-user-id": userId }
+      headers: { ...authHeaders }
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -231,10 +233,10 @@ class VoxFlowApiClient {
     return res.json();
   }
 
-  async getMeeting(id: string, userId = "user_me"): Promise<{ meeting: any }> {
-    const authHeaders = await this.getAuthHeaders();
+  async getMeeting(id: string, userId?: string): Promise<{ meeting: any }> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
-      headers: { ...authHeaders, "x-user-id": userId }
+      headers: { ...authHeaders }
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -243,14 +245,13 @@ class VoxFlowApiClient {
     return res.json();
   }
 
-  async saveMeeting(meeting: any, userId = "user_me"): Promise<{ success: boolean; meeting: any }> {
-    const authHeaders = await this.getAuthHeaders();
+  async saveMeeting(meeting: any, userId?: string): Promise<{ success: boolean; meeting: any }> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/meetings`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...authHeaders,
-        "x-user-id": userId
+        ...authHeaders
       },
       body: JSON.stringify(meeting)
     });
@@ -261,14 +262,13 @@ class VoxFlowApiClient {
     return res.json();
   }
 
-  async updateMeeting(id: string, updates: any, userId = "user_me"): Promise<{ success: boolean; meeting: any }> {
-    const authHeaders = await this.getAuthHeaders();
+  async updateMeeting(id: string, updates: any, userId?: string): Promise<{ success: boolean; meeting: any }> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        ...authHeaders,
-        "x-user-id": userId
+        ...authHeaders
       },
       body: JSON.stringify(updates)
     });
@@ -279,11 +279,11 @@ class VoxFlowApiClient {
     return res.json();
   }
 
-  async deleteMeeting(id: string, userId = "user_me"): Promise<{ success: boolean }> {
-    const authHeaders = await this.getAuthHeaders();
+  async deleteMeeting(id: string, userId?: string): Promise<{ success: boolean }> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
       method: "DELETE",
-      headers: { ...authHeaders, "x-user-id": userId }
+      headers: { ...authHeaders }
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -292,13 +292,67 @@ class VoxFlowApiClient {
     return res.json();
   }
 
+  async getTranscriptions(userId?: string): Promise<{ transcriptions: any[] }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const res = await fetch(`${this.baseUrl}/transcriptions`, {
+      headers: { ...authHeaders }
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to fetch transcriptions (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async getTranscription(id: string, userId?: string): Promise<{ transcription: any }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const res = await fetch(`${this.baseUrl}/transcriptions/${encodeURIComponent(id)}`, {
+      headers: { ...authHeaders }
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to fetch transcription (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async saveTranscription(item: any, userId?: string): Promise<{ success: boolean; transcription: any }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const res = await fetch(`${this.baseUrl}/transcriptions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
+      body: JSON.stringify(item)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to save transcription (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async deleteTranscription(id: string, userId?: string): Promise<{ success: boolean }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const res = await fetch(`${this.baseUrl}/transcriptions/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { ...authHeaders }
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to delete transcription (${res.status})`);
+    }
+    return res.json();
+  }
+
   async processMeetingRecording(
     audioBlob: Blob,
     title = "",
     targetLanguage = "Auto",
-    userId = "user_me"
+    userId?: string
   ): Promise<{ success: boolean; meetingId: string; meeting: any }> {
-    const authHeaders = await this.getAuthHeaders();
+    const authHeaders = await this.getAuthHeaders(userId);
     const formData = new FormData();
     formData.append("file", audioBlob, "meeting-audio.webm");
     if (title) formData.append("title", title);
@@ -306,7 +360,7 @@ class VoxFlowApiClient {
 
     const res = await fetch(`${this.baseUrl}/meetings/process-recording`, {
       method: "POST",
-      headers: { ...authHeaders, "x-user-id": userId },
+      headers: { ...authHeaders },
       body: formData
     });
 
@@ -339,6 +393,145 @@ class VoxFlowApiClient {
 
     return res.json();
   }
+
+  // --- Billing API Methods ---
+  async getSubscription(
+    userId?: string,
+    sessionId?: string
+  ): Promise<{
+    entitlements: any;
+    subscription: any;
+  }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+    const res = await fetch(`${this.baseUrl}/billing/subscription${query}`, {
+      headers: { ...authHeaders }
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to fetch subscription (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async getAddons(): Promise<{ packs: any[]; notice: string }> {
+    const res = await fetch(`${this.baseUrl}/billing/addons`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to fetch add-on packs (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async getAddonQuote(packId?: string, index?: number, userId?: string): Promise<{
+    pack: any;
+    priceUsd: number;
+    priceCents: number;
+    minutes: number;
+    isPro: boolean;
+    currentPlan: string;
+    renewalDate: string | null;
+    oneTimePurchase: boolean;
+    proposed: boolean;
+  }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const params = new URLSearchParams();
+    if (packId) params.append("packId", packId);
+    if (index !== undefined) params.append("index", String(index));
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetch(`${this.baseUrl}/billing/addon-quote${query}`, {
+      headers: { ...authHeaders }
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to fetch quote (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async createCheckoutSession(
+    planId = "premium_monthly",
+    userId?: string,
+    action: "new" | "early_renewal" | "topup" = "new",
+    packId?: string
+  ): Promise<{ sessionId: string; checkoutUrl: string }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const host = window.location.origin;
+    const res = await fetch(`${this.baseUrl}/billing/checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
+      body: JSON.stringify({
+        planId,
+        action,
+        packId,
+        successUrl: `${host}/#/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${host}/#/billing/cancel`
+      })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const err: any = new Error(errData.error || `Checkout failed (${res.status})`);
+      err.code = errData.code;
+      throw err;
+    }
+
+    return res.json();
+  }
+
+  async createPortalSession(userId?: string): Promise<{ portalUrl: string }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const res = await fetch(`${this.baseUrl}/billing/portal`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      }
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Portal failed (${res.status})`);
+    }
+
+    return res.json();
+  }
+
+  async getInvoices(userId?: string): Promise<{ invoices: any[] }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const res = await fetch(`${this.baseUrl}/billing/invoices`, {
+      headers: { ...authHeaders }
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to fetch invoices (${res.status})`);
+    }
+
+    return res.json();
+  }
+
+  async cancelSubscription(userId?: string): Promise<{ success: boolean; message: string; subscription: any }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const res = await fetch(`${this.baseUrl}/billing/cancel`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      }
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Cancel subscription failed (${res.status})`);
+    }
+
+    return res.json();
+  }
 }
 
 export const api = new VoxFlowApiClient(API_BASE_URL);
+

@@ -87,7 +87,12 @@ let autoStopNotice: string | null = null;
 // --------------------------------------------------
 
 chrome.runtime.onMessage.addListener(
-  (message: unknown, _sender, sendResponse) => {
+  (message: unknown, sender, sendResponse) => {
+    // Security: Only accept commands originating from this extension
+    if (sender.id && sender.id !== chrome.runtime.id) {
+      return false;
+    }
+
     if (!message || typeof message !== "object") {
       return false;
     }

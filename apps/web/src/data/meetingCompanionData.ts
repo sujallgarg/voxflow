@@ -47,7 +47,7 @@ export interface MeetingRecord {
   date: string;
   time: string;
   duration: string;
-  status: "completed" | "upcoming";
+  status: "completed" | "upcoming" | "processing";
   primaryLanguages: string[];
   summaryPreview: string;
   fullSummary: string;

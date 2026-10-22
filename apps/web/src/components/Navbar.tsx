@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Logo } from "./Logo";
 import { useAuth } from "../lib/authContext";
+import { PremiumBadge } from "./billing/PremiumBadge";
 
 interface NavbarProps {
   onOpenBetaModal?: () => void;
@@ -137,19 +138,38 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
             >
               Meetings
             </a>
-            <span
+            <a
+              href="#/billing"
               style={{
-                fontSize: "0.8125rem",
-                color: "#666666",
-                maxWidth: "160px",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap"
+                fontSize: "0.9375rem",
+                fontWeight: 500,
+                color: "#111111",
+                textDecoration: "none",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                transition: "background 0.15s ease"
               }}
-              title={user.email}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f5f5f5")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
-              {user.email}
-            </span>
+              Billing
+            </a>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span
+                style={{
+                  fontSize: "0.8125rem",
+                  color: "#666666",
+                  maxWidth: "160px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                }}
+                title={user.email}
+              >
+                {user.email}
+              </span>
+              <PremiumBadge size="sm" />
+            </div>
             <button
               type="button"
               onClick={() => signOut()}
@@ -295,10 +315,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
                 style={{
                   fontSize: "0.8125rem",
                   color: "#666666",
-                  padding: "4px 0"
+                  padding: "4px 0",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "8px"
                 }}
               >
-                Signed in as: <strong>{user.email}</strong>
+                <span>Signed in as: <strong>{user.email}</strong></span>
+                <PremiumBadge size="sm" />
               </div>
               <button
                 type="button"

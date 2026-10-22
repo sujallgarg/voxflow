@@ -14,12 +14,32 @@ import processRoute from "./routes/process.js";
 import meetingNotesRoute from "./routes/meeting-notes.js";
 import meetingsRoute from "./routes/meetings.js";
 import waitlistRoute from "./routes/waitlist.js";
+import billingRoute from "./routes/billing.js";
 import { createRateLimiter } from "./middleware/rate-limiter.js";
 
 export function buildServer() {
   const app = Fastify({
     logger: true
   });
+
+  // Preserve rawBody for secure webhook signature validation
+  app.addContentTypeParser(
+    ["application/json", "text/plain"],
+    { parseAs: "string" },
+    (req, body, done) => {
+      (req as any).rawBody = body;
+      if (typeof body === "string" && body.trim().length > 0) {
+        try {
+          const json = JSON.parse(body);
+          done(null, json);
+          return;
+        } catch {
+          // Fall through if not valid JSON
+        }
+      }
+      done(null, body);
+    }
+  );
 
   // CORS Configuration
   const isProd = process.env.NODE_ENV === "production";
@@ -76,6 +96,7 @@ export function buildServer() {
   app.register(meetingNotesRoute);
   app.register(meetingsRoute);
   app.register(waitlistRoute);
+  app.register(billingRoute);
 
   return app;
 }

@@ -219,9 +219,14 @@ function insertText(text: string) {
 chrome.runtime.onMessage.addListener(
   (
     message: InsertMessage,
-    _sender,
+    sender,
     sendResponse
   ) => {
+    // Security: Only process messages originating from this extension's background worker
+    if (sender.id && sender.id !== chrome.runtime.id) {
+      return;
+    }
+
     if (message.type !== "INSERT_TEXT") {
       return;
     }
@@ -233,6 +238,69 @@ chrome.runtime.onMessage.addListener(
   }
 );
 
-console.log(
-  "VoxFlow content script loaded."
-);
+console.log("VoxFlow content script loaded.");
+
+function checkAndSyncVoxFlowAuth() {
+  try {
+    let token: string | null = null;
+    let userId: string | null = null;
+
+    // 1. Check for Supabase auth token in localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("sb-") && key.endsWith("-auth-token")) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.access_token) {
+              token = parsed.access_token;
+            }
+            if (parsed?.user?.id) {
+              userId = parsed.user.id;
+            }
+          }
+        } catch {
+          // Ignore JSON parse errors
+        }
+      }
+    }
+
+    // 2. Check for current user profile in localStorage
+    const rawUser = localStorage.getItem("voxflow_current_user");
+    if (rawUser) {
+      try {
+        const parsed = JSON.parse(rawUser);
+        if (parsed?.id && parsed.id !== "user_me") {
+          userId = parsed.id;
+        }
+      } catch {
+        // Ignore JSON parse errors
+      }
+    }
+
+    if (token || userId) {
+      chrome.runtime.sendMessage({
+        type: "SYNC_AUTH",
+        token: token || undefined,
+        userId: userId || undefined
+      }).catch(() => {});
+    }
+  } catch {
+    // Cross-origin or restricted frame security ignore
+  }
+}
+
+if (window.location.hostname === "localhost" || window.location.hostname.includes("voxflow")) {
+  checkAndSyncVoxFlowAuth();
+
+  window.addEventListener("storage", (e) => {
+    if (e.key === "voxflow_current_user" || (e.key && e.key.startsWith("sb-"))) {
+      checkAndSyncVoxFlowAuth();
+    }
+  });
+
+  window.addEventListener("voxflow_auth_sync", () => {
+    checkAndSyncVoxFlowAuth();
+  });
+}
