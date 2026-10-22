@@ -54,6 +54,55 @@ body {
   font-size: 11px;
 }
 
+.quota-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 6px 10px;
+  background: #141417;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.quota-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quota-badge {
+  background: #27272a;
+  color: #a1a1aa;
+  font-weight: 600;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.quota-badge.pro {
+  background: linear-gradient(135deg, #6366f1, #818cf8);
+  color: #ffffff;
+}
+
+.quota-text {
+  color: #d4d4d8;
+  font-size: 11px;
+}
+
+.quota-upgrade-btn {
+  color: #818cf8;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.quota-upgrade-btn:hover {
+  text-decoration: underline;
+}
+
 .status {
   display: flex;
   align-items: center;

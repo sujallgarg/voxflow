@@ -1430,7 +1430,28 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     return true;
   }
 
-  // 8. Offscreen Audio Completion
+  // 8. Authoritative Quota & Usage Query
+  if (msg.type === "GET_USAGE") {
+    (async () => {
+      try {
+        const authHeaders = await getAuthHeaders();
+        const res = await fetch(`${API_BASE_URL}/billing/subscription`, {
+          headers: authHeaders
+        });
+        if (res.ok) {
+          const data = await res.json();
+          sendResponse({ success: true, entitlements: data.entitlements, usage: data.entitlements?.usage });
+        } else {
+          sendResponse({ success: false, error: `Failed to fetch usage (${res.status})` });
+        }
+      } catch (err: any) {
+        sendResponse({ success: false, error: err?.message || "Usage check failed" });
+      }
+    })();
+    return true;
+  }
+
+  // 9. Offscreen Audio Completion
   if (
     msg.type === "TAB_CAPTURE_COMPLETE" ||
     msg.type === "MIC_RECORDING_COMPLETE" ||

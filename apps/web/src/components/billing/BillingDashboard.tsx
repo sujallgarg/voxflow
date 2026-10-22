@@ -45,6 +45,20 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
 
   useEffect(() => {
     void loadBillingData();
+
+    const handleSync = () => {
+      void loadBillingData();
+    };
+
+    window.addEventListener("voxflow_subscription_updated", handleSync);
+    window.addEventListener("focus", handleSync);
+    document.addEventListener("visibilitychange", handleSync);
+
+    return () => {
+      window.removeEventListener("voxflow_subscription_updated", handleSync);
+      window.removeEventListener("focus", handleSync);
+      document.removeEventListener("visibilitychange", handleSync);
+    };
   }, [userId]);
 
   const handleOpenCustomerPortal = async () => {

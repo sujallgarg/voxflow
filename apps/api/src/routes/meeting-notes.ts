@@ -50,8 +50,13 @@ const meetingNotesRoute: FastifyPluginAsync = async (app) => {
 
       // Commit summary usage only after successful outcome
       await entitlementService.consumeQuota(user.id, "summary", 1);
+      const entitlements = await entitlementService.getUserEntitlements(user.id);
 
-      return result;
+      return {
+        ...result,
+        usage: entitlements.usage,
+        entitlements
+      };
     } catch (error: any) {
       app.log.error(error);
       const message = error instanceof Error ? error.message : "Meeting notes generation failed";

@@ -52,8 +52,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn("Auth initialization error:", error.message);
       }
       setSession(initialSession);
-      setUser(mapSupabaseUser(initialSession?.user ?? null));
+      const mapped = mapSupabaseUser(initialSession?.user ?? null);
+      setUser(mapped);
       setLoading(false);
+
+      if (initialSession?.user) {
+        localStorage.setItem("voxflow_current_user", JSON.stringify({
+          id: initialSession.user.id,
+          email: initialSession.user.email,
+          name: mapped?.name || initialSession.user.email?.split("@")[0]
+        }));
+        window.dispatchEvent(new CustomEvent("voxflow_auth_sync"));
+        window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
+      }
     }).catch((err) => {
       console.warn("Failed to get initial session:", err);
       setLoading(false);
@@ -62,8 +73,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 2. Auth state subscription
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
       setSession(currentSession);
-      setUser(mapSupabaseUser(currentSession?.user ?? null));
+      const mapped = mapSupabaseUser(currentSession?.user ?? null);
+      setUser(mapped);
       setLoading(false);
+
+      if (currentSession?.user) {
+        localStorage.setItem("voxflow_current_user", JSON.stringify({
+          id: currentSession.user.id,
+          email: currentSession.user.email,
+          name: mapped?.name || currentSession.user.email?.split("@")[0]
+        }));
+      } else {
+        localStorage.removeItem("voxflow_current_user");
+      }
+      window.dispatchEvent(new CustomEvent("voxflow_auth_sync"));
+      window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
 
       if (event === "PASSWORD_RECOVERY") {
         // Direct user to set a new password
