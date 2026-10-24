@@ -114,7 +114,17 @@ const billingRoute: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // 2. Concurrency lock: Prevent rapid double-clicks or racing checkout creations
+    // 2. Return existing active checkout session if still valid for duplicate/concurrent requests
+    const existingCheckout = billingStore.getActiveCheckoutSession(userId, action, planId, selectedPack?.id);
+    if (existingCheckout) {
+      return reply.code(200).send({
+        sessionId: existingCheckout.sessionId,
+        checkoutUrl: existingCheckout.checkoutUrl,
+        reused: true
+      });
+    }
+
+    // 3. Concurrency lock: Prevent rapid double-clicks or racing checkout creations
     const lockAcquired = billingStore.acquireCheckoutLock(userId);
     if (!lockAcquired) {
       return reply.code(409).send({
@@ -124,7 +134,7 @@ const billingRoute: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      // 3. Server-authoritative idempotency key
+      // 4. Server-authoritative idempotency key
       const clientSuppliedKey = request.headers["x-idempotency-key"] as string | undefined;
       const idempotencyKey =
         clientSuppliedKey ||
@@ -154,6 +164,15 @@ const billingRoute: FastifyPluginAsync = async (app) => {
           minutes: String(selectedPack.minutes),
           priceCents: String(selectedPack.priceCents)
         }
+      });
+
+      // Cache active session for subsequent duplicate requests (15-min TTL)
+      billingStore.saveActiveCheckoutSession(userId, {
+        sessionId: sessionResult.sessionId,
+        checkoutUrl: sessionResult.checkoutUrl,
+        action,
+        planId,
+        packId: selectedPack.id
       });
 
       return reply.code(200).send({
@@ -262,6 +281,7 @@ const billingRoute: FastifyPluginAsync = async (app) => {
           const paymentId = eventObj.payment_id || eventObj.invoice || eventObj.id;
 
           if (userId) {
+            billingStore.clearActiveCheckoutSession(userId);
             const now = new Date();
             const periodKey = entitlementService.getCurrentPeriodKey();
 
@@ -699,7 +719,10 @@ const billingRoute: FastifyPluginAsync = async (app) => {
     const entitlements = await entitlementService.getUserEntitlements(userId);
 
     return {
-      entitlements,
+      entitlements: {
+        ...entitlements,
+        email: user.email || undefined
+      },
       subscription
     };
   });

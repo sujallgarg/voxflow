@@ -67,6 +67,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
   const meetingsBreakdown = entitlements?.meetings;
 
   const handleCheckout = async (action: "new" | "early_renewal" | "topup" = "new") => {
+    if (loading) return;
     if (!user) {
       window.location.hash = "#/login?returnTo=" + encodeURIComponent("#/pricing");
       onClose();

@@ -100,6 +100,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
   };
 
   const handleEarlyRenewal = async () => {
+    if (actionLoading) return;
     try {
       setActionLoading(true);
       setError(null);

@@ -37,6 +37,7 @@ export class BillingStoreService {
   private webhookEvents: Map<string, ProcessedWebhookRecord> = new Map(); // key: `${provider}:${eventId}`
   private usageQuotas: Map<string, UserUsageQuota> = new Map();      // key: `${userId}:${periodYearMonth}`
   private activeLocks: Set<string> = new Set();                      // checkout concurrency locks
+  private activeCheckoutSessions: Map<string, { sessionId: string; checkoutUrl: string; createdAt: number; action: string; planId: string; packId?: string }> = new Map();
   private supabase: SupabaseClient | null = null;
   private isLoaded = false;
 
@@ -136,6 +137,43 @@ export class BillingStoreService {
     this.activeLocks.delete(userId);
   }
 
+  // --- Reusable Active Checkout Sessions ---
+  saveActiveCheckoutSession(
+    userId: string,
+    data: { sessionId: string; checkoutUrl: string; action: string; planId: string; packId?: string }
+  ) {
+    const key = `${userId}:${data.action}:${data.planId}:${data.packId || ""}`;
+    this.activeCheckoutSessions.set(key, {
+      ...data,
+      createdAt: Date.now()
+    });
+  }
+
+  getActiveCheckoutSession(
+    userId: string,
+    action: string,
+    planId: string,
+    packId?: string
+  ): { sessionId: string; checkoutUrl: string } | null {
+    const key = `${userId}:${action}:${planId}:${packId || ""}`;
+    const session = this.activeCheckoutSessions.get(key);
+    if (!session) return null;
+    // Sessions remain valid for 15 minutes
+    if (Date.now() - session.createdAt > 15 * 60 * 1000) {
+      this.activeCheckoutSessions.delete(key);
+      return null;
+    }
+    return { sessionId: session.sessionId, checkoutUrl: session.checkoutUrl };
+  }
+
+  clearActiveCheckoutSession(userId: string) {
+    for (const [key] of this.activeCheckoutSessions) {
+      if (key.startsWith(`${userId}:`)) {
+        this.activeCheckoutSessions.delete(key);
+      }
+    }
+  }
+
   // --- Subscriptions ---
   async getSubscriptionByUserId(userId: string): Promise<UserSubscription | null> {
     if (this.supabase) {
@@ -159,6 +197,17 @@ export class BillingStoreService {
   }
 
   async saveSubscription(sub: UserSubscription): Promise<UserSubscription> {
+    const existing = await this.getSubscriptionByUserId(sub.userId);
+    if (existing && existing.subscriptionId === sub.subscriptionId) {
+      const existingUpdate = new Date(existing.updatedAt).getTime();
+      const newUpdate = new Date(sub.updatedAt).getTime();
+      // Protect against out-of-order older events downgrading a newer active status
+      if (newUpdate < existingUpdate && existing.status === "active" && sub.status !== "active") {
+        console.warn(`[BillingStore] Ignoring out-of-order older event for subscription ${sub.subscriptionId}`);
+        return existing;
+      }
+    }
+
     this.subscriptions.set(sub.userId, sub);
     this.saveToDisk();
 

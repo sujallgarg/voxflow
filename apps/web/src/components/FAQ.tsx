@@ -5,32 +5,27 @@ export const FAQ: React.FC = () => {
     {
       id: "what-is-voxflow",
       q: "What is VoxFlow?",
-      a: "VoxFlow is an AI voice input tool that converts natural speech into structured, context-aware text in your preferred language. Rather than raw dictation, it refines your spoken phrasing to fit your destination tone and format."
-    },
-    {
-      id: "how-does-it-work",
-      q: "How does it work?",
-      a: "When you speak, VoxFlow captures your audio, transcribes the speech, detects language and communication context, and generates polished text that can be inserted directly into web input fields."
+      a: "VoxFlow is an AI voice input tool that converts natural speech into clear, structured, context-aware text in your preferred language. Instead of literal dictation with awkward punctuation commands, VoxFlow understands your communication intent and formats your words to fit your recipient's tone and format."
     },
     {
       id: "which-languages-supported",
-      q: "Which languages are supported?",
-      a: "VoxFlow supports major global languages (including English, Hindi, Spanish, French, German, and Portuguese) and naturally handles conversational code-switching (such as Hinglish or Spanglish) without manual mode toggling."
+      q: "Which languages does it support?",
+      a: "VoxFlow supports major global languages (including English, Hindi, Spanish, French, German, and Portuguese) and natively handles conversational code-switching (such as Hinglish or Spanglish) without requiring you to manually toggle language modes."
     },
     {
       id: "where-can-i-use-it",
-      q: "Where can I use it?",
-      a: "VoxFlow is designed as a browser extension that operates across websites where you write, including webmail, docs, spreadsheets, customer support tools, and messaging platforms."
+      q: "Where can I use VoxFlow?",
+      a: "VoxFlow runs directly in modern Chromium web browsers. You can use it across any web application where you write, including Gmail, Slack, Google Docs, Notion, customer support dashboards, and web forms."
     },
     {
-      id: "how-do-i-get-access",
-      q: "How do I get access?",
-      a: "VoxFlow is currently in open public beta. You can sign up using the 'Get Started' button to receive beta extension releases and test the product for free."
+      id: "how-do-meetings-and-summaries-work",
+      q: "How do meetings and summaries work?",
+      a: "The VoxFlow Meeting Workspace allows you to record live audio from your discussions directly within your browser. Once recording stops, VoxFlow produces a full chronological transcript, extracts core discussion decisions, and compiles prioritized action items with zero manual note-taking required."
     },
     {
-      id: "how-is-data-handled",
-      q: "How is my audio and data handled?",
-      a: "Audio recordings and generated text are processed exclusively to perform speech transcription and contextual text generation. We do not sell user audio or monetize recordings."
+      id: "what-is-included-in-free-and-pro",
+      q: "What is included in the Free and Pro plans?",
+      a: "The Free plan includes 30 minutes of voice transcription, 100 voice requests, 50 AI text corrections, and 3 meeting summaries per month with 7-day history retention. The Pro plan ($9/month) expands limits to 300 minutes of transcription, 1,000 voice typing requests, 500 AI text corrections, 25 meetings & summaries, fair-use retention, and priority processing."
     }
   ];
 
@@ -44,25 +39,25 @@ export const FAQ: React.FC = () => {
     <section id="faq" className="section-spacing" style={{ background: "#ffffff" }}>
       <div className="container" style={{ maxWidth: "800px" }}>
         <div className="section-title-wrap">
-          <span className="badge">FAQ</span>
+          <span className="badge">Frequently Asked</span>
           <h2>Frequently Asked Questions</h2>
           <p>
-            Common questions about VoxFlow capabilities, languages, access, and privacy.
+            Clear answers about VoxFlow capabilities, language support, meeting intelligence, and pricing plans.
           </p>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {faqData.map((item) => {
             const isOpen = openId === item.id;
             return (
               <div
                 key={item.id}
-                className="card-premium"
                 style={{
                   background: "#ffffff",
                   overflow: "hidden",
-                  border: "1px solid #e5e5e5",
-                  borderRadius: "6px"
+                  border: `1px solid ${isOpen ? "#111111" : "#e5e5e5"}`,
+                  borderRadius: "8px",
+                  transition: "border-color 0.15s ease"
                 }}
               >
                 <button
@@ -72,7 +67,7 @@ export const FAQ: React.FC = () => {
                   onClick={() => toggleAccordion(item.id)}
                   style={{
                     width: "100%",
-                    padding: "18px 20px",
+                    padding: "20px 24px",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
@@ -85,7 +80,7 @@ export const FAQ: React.FC = () => {
                 >
                   <span
                     style={{
-                      fontSize: "0.95rem",
+                      fontSize: "1rem",
                       fontWeight: 600,
                       color: "#111111"
                     }}
@@ -95,18 +90,18 @@ export const FAQ: React.FC = () => {
 
                   <span
                     style={{
-                      width: "24px",
-                      height: "24px",
-                      borderRadius: "4px",
-                      background: "#f5f5f5",
-                      color: "#111111",
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "6px",
+                      background: isOpen ? "#111111" : "#f5f5f5",
+                      color: isOpen ? "#ffffff" : "#111111",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: "14px",
+                      fontSize: "15px",
                       fontWeight: 600,
                       flexShrink: 0,
-                      transition: "transform 0.15s ease",
+                      transition: "all 0.15s ease",
                       transform: isOpen ? "rotate(45deg)" : "rotate(0deg)"
                     }}
                   >
@@ -118,10 +113,10 @@ export const FAQ: React.FC = () => {
                   <div
                     id={`faq-answer-${item.id}`}
                     style={{
-                      padding: "0 20px 18px 20px",
-                      fontSize: "0.875rem",
-                      lineHeight: 1.6,
-                      color: "#666666",
+                      padding: "0 24px 22px 24px",
+                      fontSize: "0.9375rem",
+                      lineHeight: 1.65,
+                      color: "#555555",
                       borderTop: "1px solid #f5f5f5"
                     }}
                   >

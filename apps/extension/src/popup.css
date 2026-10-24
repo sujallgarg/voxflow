@@ -87,6 +87,15 @@ body {
   color: #ffffff;
 }
 
+.quota-email {
+  color: #71717a;
+  font-size: 10px;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .quota-text {
   color: #d4d4d8;
   font-size: 11px;

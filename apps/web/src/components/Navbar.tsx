@@ -10,31 +10,54 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModal }) => {
   const { user, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
-  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Close mobile drawer on Escape key
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setAccountDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Close mobile drawer and dropdown on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && mobileMenuOpen) {
-        setMobileMenuOpen(false);
-        menuButtonRef.current?.focus();
+      if (e.key === "Escape") {
+        if (mobileMenuOpen) {
+          setMobileMenuOpen(false);
+          menuButtonRef.current?.focus();
+        }
+        if (accountDropdownOpen) {
+          setAccountDropdownOpen(false);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [mobileMenuOpen]);
+  }, [mobileMenuOpen, accountDropdownOpen]);
 
   const navLinks = [
     { label: "Product", href: "#features" },
     { label: "How It Works", href: "#how-it-works" },
-    { label: "Pricing", href: "#pricing" }
+    { label: "Pricing", href: "#pricing" },
+    ...(user ? [{ label: "Meetings", href: "#/meetings" }] : [])
   ];
 
   const handleLinkClick = (
     e: React.MouseEvent<HTMLAnchorElement>,
     href: string
   ) => {
+    if (href.startsWith("#/")) {
+      // route hash
+      setMobileMenuOpen(false);
+      return;
+    }
     e.preventDefault();
     setMobileMenuOpen(false);
     const target = document.querySelector(href);
@@ -79,22 +102,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
             }}
             aria-label="VoxFlow Home"
           >
-            <Logo size={30} />
+            <Logo size={28} />
           </a>
         </div>
 
-        {/* Center: Essential Navigation Links */}
+        {/* Center: Navigation Links */}
         <nav
           className="desktop-nav"
           style={{
             alignItems: "center",
-            gap: "36px"
+            gap: "32px"
           }}
           aria-label="Main Navigation"
         >
           {navLinks.map((link) => (
             <a
-              key={link.href}
+              key={link.label}
               href={link.href}
               onClick={(e) => handleLinkClick(e, link.href)}
               style={{
@@ -113,89 +136,166 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
           ))}
         </nav>
 
-        {/* Right: Authenticated or Log in & Get Started */}
+        {/* Right: Authenticated or Logged Out CTAs */}
         {user ? (
           <div
             className="desktop-cta"
             style={{
               alignItems: "center",
-              gap: "16px"
+              gap: "12px"
             }}
           >
             <a
               href="#/meetings"
+              className="btn-primary"
               style={{
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "#111111",
-                textDecoration: "none",
-                padding: "8px 12px",
+                padding: "8px 16px",
+                fontSize: "0.875rem",
                 borderRadius: "6px",
-                transition: "background 0.15s ease"
+                textDecoration: "none"
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f5f5f5")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
-              Meetings
+              Open Dashboard
             </a>
-            <a
-              href="#/billing"
-              style={{
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "#111111",
-                textDecoration: "none",
-                padding: "8px 12px",
-                borderRadius: "6px",
-                transition: "background 0.15s ease"
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f5f5f5")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-            >
-              Billing
-            </a>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span
+
+            {/* Account Menu Dropdown */}
+            <div ref={dropdownRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
+                aria-expanded={accountDropdownOpen}
+                aria-haspopup="true"
                 style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "6px 12px",
                   fontSize: "0.8125rem",
-                  color: "#666666",
-                  maxWidth: "160px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap"
+                  fontWeight: 500,
+                  color: "#111111",
+                  background: "#f5f5f5",
+                  border: "1px solid #e5e5e5",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  maxWidth: "180px"
                 }}
-                title={user.email}
               >
-                {user.email}
-              </span>
-              <PremiumBadge size="sm" />
+                <span
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap"
+                  }}
+                  title={user.email}
+                >
+                  {user.name || user.email?.split("@")[0] || "Account"}
+                </span>
+                <PremiumBadge size="sm" />
+                <span style={{ fontSize: "10px", color: "#666666" }}>▼</span>
+              </button>
+
+              {accountDropdownOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "calc(100% + 8px)",
+                    width: "220px",
+                    background: "#ffffff",
+                    border: "1px solid #e5e5e5",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
+                    padding: "8px 0",
+                    zIndex: 100
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "8px 16px",
+                      borderBottom: "1px solid #f0f0f0",
+                      fontSize: "0.75rem",
+                      color: "#666666"
+                    }}
+                  >
+                    Signed in as
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        color: "#111111",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}
+                      title={user.email}
+                    >
+                      {user.email}
+                    </div>
+                  </div>
+
+                  <a
+                    href="#/meetings"
+                    onClick={() => setAccountDropdownOpen(false)}
+                    style={{
+                      display: "block",
+                      padding: "8px 16px",
+                      fontSize: "0.875rem",
+                      color: "#111111",
+                      textDecoration: "none"
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f5f5f5")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    Meetings Workspace
+                  </a>
+
+                  <a
+                    href="#/billing"
+                    onClick={() => setAccountDropdownOpen(false)}
+                    style={{
+                      display: "block",
+                      padding: "8px 16px",
+                      fontSize: "0.875rem",
+                      color: "#111111",
+                      textDecoration: "none"
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f5f5f5")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    Billing & Subscription
+                  </a>
+
+                  <div style={{ borderTop: "1px solid #f0f0f0", margin: "4px 0" }} />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountDropdownOpen(false);
+                      signOut();
+                    }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "8px 16px",
+                      fontSize: "0.875rem",
+                      color: "#dc2626",
+                      cursor: "pointer"
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#fef2f2")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => signOut()}
-              style={{
-                padding: "7px 14px",
-                fontSize: "0.8125rem",
-                fontWeight: 500,
-                backgroundColor: "#ffffff",
-                color: "#111111",
-                border: "1px solid #e5e5e5",
-                borderRadius: "6px",
-                cursor: "pointer",
-                transition: "border-color 0.15s ease"
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#111111")}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e5e5e5")}
-            >
-              Log out
-            </button>
           </div>
         ) : (
           <div
             className="desktop-cta"
             style={{
               alignItems: "center",
-              gap: "16px"
+              gap: "12px"
             }}
           >
             <a
@@ -205,7 +305,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
                 fontWeight: 500,
                 color: "#111111",
                 textDecoration: "none",
-                padding: "8px 12px",
+                padding: "8px 14px",
                 borderRadius: "6px",
                 transition: "background 0.15s ease"
               }}
@@ -249,7 +349,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
             border: "1px solid #e5e5e5",
             color: "#111111",
             cursor: "pointer",
-            fontSize: "16px"
+            fontSize: "1.2rem",
+            display: "none"
           }}
           className="mobile-toggle"
         >
@@ -261,9 +362,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
       {mobileMenuOpen && (
         <div
           id="mobile-nav-panel"
-          ref={drawerRef}
-          role="region"
-          aria-label="Mobile Navigation"
           style={{
             position: "absolute",
             top: "68px",
@@ -271,117 +369,106 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
             right: 0,
             background: "#ffffff",
             borderBottom: "1px solid #e5e5e5",
-            padding: "20px 24px 24px",
+            boxShadow: "0 10px 25px rgba(0, 0, 0, 0.08)",
+            padding: "20px 24px 28px 24px",
             display: "flex",
             flexDirection: "column",
-            gap: "12px",
-            boxShadow: "0 10px 24px rgba(0, 0, 0, 0.04)"
+            gap: "16px",
+            zIndex: 49
           }}
         >
-          {navLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              onClick={(e) => handleLinkClick(e, link.href)}
-              style={{
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "#111111",
-                padding: "8px 0",
-                textDecoration: "none",
-                borderBottom: "1px solid #f5f5f5"
-              }}
-            >
-              {link.label}
-            </a>
-          ))}
-
-          {user ? (
-            <>
+          <nav style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {navLinks.map((link) => (
               <a
-                href="#/meetings"
-                onClick={() => setMobileMenuOpen(false)}
+                key={link.label}
+                href={link.href}
+                onClick={(e) => handleLinkClick(e, link.href)}
                 style={{
-                  fontSize: "0.9375rem",
+                  fontSize: "1rem",
                   fontWeight: 500,
                   color: "#111111",
-                  padding: "8px 0",
-                  textDecoration: "none"
-                }}
-              >
-                Meetings
-              </a>
-              <div
-                style={{
-                  fontSize: "0.8125rem",
-                  color: "#666666",
-                  padding: "4px 0",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "8px"
-                }}
-              >
-                <span>Signed in as: <strong>{user.email}</strong></span>
-                <PremiumBadge size="sm" />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  signOut();
-                }}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  marginTop: "6px",
-                  backgroundColor: "#ffffff",
-                  color: "#111111",
-                  border: "1px solid #e5e5e5",
-                  borderRadius: "6px",
-                  fontSize: "0.875rem",
-                  fontWeight: 500,
-                  cursor: "pointer"
-                }}
-              >
-                Log out
-              </button>
-            </>
-          ) : (
-            <>
-              <a
-                href="#/login"
-                onClick={() => setMobileMenuOpen(false)}
-                style={{
-                  fontSize: "0.9375rem",
-                  fontWeight: 500,
-                  color: "#666666",
-                  padding: "8px 0",
-                  textDecoration: "none"
-                }}
-              >
-                Log in
-              </a>
-
-              <a
-                href="#/signup"
-                onClick={() => setMobileMenuOpen(false)}
-                className="btn-primary"
-                style={{
-                  display: "block",
-                  textAlign: "center",
-                  width: "100%",
-                  padding: "12px",
-                  marginTop: "4px",
-                  borderRadius: "6px",
                   textDecoration: "none",
-                  boxSizing: "border-box"
+                  padding: "6px 0"
                 }}
               >
-                Get Started
+                {link.label}
               </a>
-            </>
-          )}
+            ))}
+          </nav>
+
+          <div
+            style={{
+              borderTop: "1px solid #e5e5e5",
+              paddingTop: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px"
+            }}
+          >
+            {user ? (
+              <>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "0.8125rem", color: "#666666" }}>
+                    {user.email}
+                  </span>
+                  <PremiumBadge size="sm" />
+                </div>
+                <a
+                  href="#/meetings"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="btn-primary"
+                  style={{ width: "100%", textAlign: "center", padding: "11px" }}
+                >
+                  Open Dashboard
+                </a>
+                <a
+                  href="#/billing"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="btn-secondary"
+                  style={{ width: "100%", textAlign: "center", padding: "11px" }}
+                >
+                  Billing
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    signOut();
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    color: "#dc2626",
+                    background: "#fef2f2",
+                    borderRadius: "6px",
+                    fontWeight: 500,
+                    fontSize: "0.875rem"
+                  }}
+                >
+                  Log out
+                </button>
+              </>
+            ) : (
+              <>
+                <a
+                  href="#/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="btn-secondary"
+                  style={{ width: "100%", textAlign: "center", padding: "11px" }}
+                >
+                  Log in
+                </a>
+                <a
+                  href="#/signup"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="btn-primary"
+                  style={{ width: "100%", textAlign: "center", padding: "11px" }}
+                >
+                  Get Started
+                </a>
+              </>
+            )}
+          </div>
         </div>
       )}
     </header>
