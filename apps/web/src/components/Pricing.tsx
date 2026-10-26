@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/authContext";
 import { getCurrentUser } from "../lib/userStore";
 import { useSubscription } from "../lib/subscriptionContext";
+import { PLAN_CONFIGS } from "@voxflow/shared";
 
 interface PricingProps {
   onOpenBetaModal?: () => void;
@@ -16,6 +17,9 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
   const { entitlements } = useSubscription();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const freeConfig = PLAN_CONFIGS.free;
+  const proConfig = PLAN_CONFIGS.premium_monthly;
 
   const handleUpgrade = async () => {
     if (checkoutLoading) return; // Prevent double clicks
@@ -54,13 +58,14 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
   return (
     <section id="pricing" className="section-spacing" style={{ background: "#fafafa" }}>
       <div className="container">
+        {/* Section Title */}
         <div className="section-title-wrap" style={{ textAlign: "center", marginBottom: "48px" }}>
           <span className="badge">Plans & Pricing</span>
           <h2 style={{ fontSize: "2.25rem", fontWeight: 700, color: "#111111", marginBottom: "12px" }}>
-            Simple, Transparent Pricing
+            Transparent, Predictable Pricing
           </h2>
           <p style={{ fontSize: "1.0625rem", color: "#666666", maxWidth: "600px", margin: "0 auto" }}>
-            Start with our generous free tier or upgrade to Premium for expanded intelligence, high quotas, and priority processing.
+            Start for free to streamline your daily typing or upgrade to Pro for expanded transcription, higher quotas, and meeting intelligence.
           </p>
         </div>
 
@@ -82,27 +87,27 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
           </div>
         )}
 
-        {/* Pricing Cards Grid */}
+        {/* 3 Visually Aligned Cards Grid */}
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
             gap: "28px",
             maxWidth: "1120px",
-            margin: "0 auto 40px"
+            margin: "0 auto"
           }}
         >
-          {/* PLAN 1: FREE */}
+          {/* CARD 1: FREE */}
           <div
             style={{
               background: "#ffffff",
               border: "1px solid #e5e5e5",
-              borderRadius: "8px",
+              borderRadius: "12px",
               padding: "36px 28px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
-              position: "relative"
+              boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
             }}
           >
             <div>
@@ -116,7 +121,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                     color: "#666666"
                   }}
                 >
-                  Essential Tier
+                  Starter
                 </span>
               </div>
 
@@ -124,10 +129,11 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                 Free
               </h3>
 
-              <p style={{ fontSize: "0.875rem", color: "#666666", lineHeight: 1.5, minHeight: "42px" }}>
-                Essential voice dictation and basic meeting recording for personal use.
+              <p style={{ fontSize: "0.875rem", color: "#666666", lineHeight: 1.5, minHeight: "42px", margin: 0 }}>
+                Essential voice dictation and basic meeting recording for individual users.
               </p>
 
+              {/* Price Area */}
               <div style={{ display: "flex", alignItems: "baseline", gap: "6px", margin: "24px 0" }}>
                 <span
                   style={{
@@ -142,6 +148,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                 <span style={{ fontSize: "0.9375rem", color: "#666666" }}>/ month</span>
               </div>
 
+              {/* Feature List */}
               <div
                 style={{
                   borderTop: "1px solid #eeeeee",
@@ -156,27 +163,27 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span><strong>30 minutes</strong> voice transcription / mo</span>
+                  <span><strong>{freeConfig.limits.transcriptionMinutes} minutes</strong> audio transcription / mo</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span><strong>100 requests</strong> voice typing / mo</span>
+                  <span><strong>{freeConfig.limits.voiceTypingRequests} requests</strong> voice typing / mo</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span><strong>50 requests</strong> AI text correction / mo</span>
+                  <span><strong>{freeConfig.limits.textCorrectionRequests} requests</strong> AI text correction / mo</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span><strong>3 meetings</strong> & <strong>3 AI summaries</strong> / mo</span>
+                  <span><strong>{freeConfig.limits.monthlyMeetings} meetings</strong> & <strong>{freeConfig.limits.meetingSummaries} summaries</strong> / mo</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span><strong>7 days</strong> meeting history retention</span>
+                  <span><strong>{freeConfig.limits.historyRetentionDays} days</strong> meeting history retention</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#999999" }}>
                   <span>—</span>
-                  <span>Premium badge not included</span>
+                  <span>Standard processing queue</span>
                 </div>
               </div>
             </div>
@@ -211,18 +218,18 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
             </div>
           </div>
 
-          {/* PLAN 2: PRO */}
+          {/* CARD 2: PRO */}
           <div
             style={{
               background: "#ffffff",
               border: "2px solid #111111",
-              borderRadius: "8px",
+              borderRadius: "12px",
               padding: "36px 28px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
               position: "relative",
-              boxShadow: "0 10px 30px rgba(0, 0, 0, 0.06)"
+              boxShadow: "0 6px 24px rgba(0, 0, 0, 0.06)"
             }}
           >
             {/* Badge */}
@@ -255,7 +262,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                     color: "#111111"
                   }}
                 >
-                  Pro Tier
+                  Professional
                 </span>
               </div>
 
@@ -263,10 +270,11 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                 Pro
               </h3>
 
-              <p style={{ fontSize: "0.875rem", color: "#666666", lineHeight: 1.5, minHeight: "42px" }}>
-                Deep voice intelligence, expanded quotas, priority processing, and active Pro badge.
+              <p style={{ fontSize: "0.875rem", color: "#666666", lineHeight: 1.5, minHeight: "42px", margin: 0 }}>
+                High-volume voice intelligence, expanded quotas, priority processing, and active Pro badge.
               </p>
 
+              {/* Price Area */}
               <div style={{ display: "flex", alignItems: "baseline", gap: "6px", margin: "24px 0" }}>
                 <span
                   style={{
@@ -281,6 +289,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                 <span style={{ fontSize: "0.9375rem", color: "#666666" }}>USD / month</span>
               </div>
 
+              {/* Feature List */}
               <div
                 style={{
                   borderTop: "1px solid #eeeeee",
@@ -295,23 +304,23 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span><strong>300 minutes</strong> voice transcription / mo</span>
+                  <span><strong>{proConfig.limits.transcriptionMinutes} minutes</strong> audio transcription / mo</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span><strong>1,000 requests</strong> voice typing / mo</span>
+                  <span><strong>{proConfig.limits.voiceTypingRequests.toLocaleString()} requests</strong> voice typing / mo</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span><strong>500 requests</strong> AI text correction / mo</span>
+                  <span><strong>{proConfig.limits.textCorrectionRequests} requests</strong> AI text correction / mo</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span><strong>25 meetings</strong> & <strong>25 AI summaries</strong> / mo</span>
+                  <span><strong>{proConfig.limits.monthlyMeetings} meetings</strong> & <strong>{proConfig.limits.meetingSummaries} summaries</strong> / mo</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
-                  <span>Fair-use retention (no fixed time limit)</span>
+                  <span>Fair-use meeting retention</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#111111", fontWeight: 700 }}>✓</span>
@@ -361,18 +370,17 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
             </div>
           </div>
 
-          {/* PLAN 3: BUSINESS (COMING SOON) */}
+          {/* CARD 3: BUSINESS (COMING SOON) */}
           <div
             style={{
-              background: "#fafafa",
-              border: "1px dashed #cccccc",
-              borderRadius: "8px",
+              background: "#ffffff",
+              border: "1px dashed #d4d4d4",
+              borderRadius: "12px",
               padding: "36px 28px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
-              position: "relative",
-              opacity: 0.92
+              position: "relative"
             }}
           >
             {/* Status Badge */}
@@ -409,38 +417,39 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                 </span>
               </div>
 
-              <h3 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#404040", marginBottom: "6px" }}>
+              <h3 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#111111", marginBottom: "6px" }}>
                 Business
               </h3>
 
-              <p style={{ fontSize: "0.875rem", color: "#737373", lineHeight: 1.5, minHeight: "42px" }}>
-                High-capacity shared workspaces, team seat management, and unified summaries.
+              <p style={{ fontSize: "0.875rem", color: "#666666", lineHeight: 1.5, minHeight: "42px", margin: 0 }}>
+                High-capacity shared workspaces, team seat management, and unified analytics.
               </p>
 
+              {/* Price Area: Clearly Display Coming Soon */}
               <div style={{ display: "flex", alignItems: "baseline", gap: "6px", margin: "24px 0" }}>
                 <span
                   style={{
-                    fontSize: "2.75rem",
+                    fontSize: "2.25rem",
                     fontWeight: 700,
-                    color: "#404040",
+                    color: "#737373",
                     fontFamily: "var(--font-heading)"
                   }}
                 >
-                  $
+                  Coming Soon
                 </span>
-                <span style={{ fontSize: "0.9375rem", color: "#737373" }}>USD / month</span>
               </div>
 
+              {/* Feature List */}
               <div
                 style={{
-                  borderTop: "1px solid #e5e5e5",
+                  borderTop: "1px solid #eeeeee",
                   paddingTop: "24px",
                   display: "flex",
                   flexDirection: "column",
                   gap: "12px",
                   marginBottom: "32px",
                   fontSize: "0.875rem",
-                  color: "#525252"
+                  color: "#666666"
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -461,11 +470,11 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#737373", fontWeight: 700 }}>•</span>
-                  <span><strong>Planned 5 team seats</strong> included</span>
+                  <span>Centralized team administration & billing</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ color: "#737373", fontWeight: 700 }}>•</span>
-                  <span>Shared meeting workspace (Planned)</span>
+                  <span>Dedicated priority pipeline & SLA</span>
                 </div>
               </div>
             </div>
@@ -479,55 +488,16 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                   padding: "13px",
                   fontSize: "0.9375rem",
                   fontWeight: 500,
-                  background: "#e5e5e5",
-                  color: "#737373",
-                  border: "1px solid #d4d4d4",
+                  background: "#f5f5f5",
+                  color: "#999999",
+                  border: "1px solid #e5e5e5",
                   borderRadius: "6px",
                   cursor: "not-allowed"
                 }}
               >
-                Not Available Yet
+                Plan In Development
               </button>
             </div>
-          </div>
-        </div>
-
-        {/* Billing Policy Guarantees */}
-        <div
-          style={{
-            maxWidth: "860px",
-            margin: "0 auto",
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "20px",
-            textAlign: "center"
-          }}
-        >
-          <div style={{ padding: "16px", background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: "6px" }}>
-            <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111111", marginBottom: "4px" }}>
-              Monthly Renewal
-            </h4>
-            <p style={{ fontSize: "0.8125rem", color: "#666666", margin: 0 }}>
-              $9 billed monthly in USD. Renews every 30 days automatically.
-            </p>
-          </div>
-
-          <div style={{ padding: "16px", background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: "6px" }}>
-            <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111111", marginBottom: "4px" }}>
-              Cancel Anytime
-            </h4>
-            <p style={{ fontSize: "0.8125rem", color: "#666666", margin: 0 }}>
-              Cancel in one click. You retain Premium access until the end of the billing period.
-            </p>
-          </div>
-
-          <div style={{ padding: "16px", background: "#ffffff", border: "1px solid #e5e5e5", borderRadius: "6px" }}>
-            <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111111", marginBottom: "4px" }}>
-              Secure Payments
-            </h4>
-            <p style={{ fontSize: "0.8125rem", color: "#666666", margin: 0 }}>
-              Encrypted provider-hosted checkout. Card numbers are never stored on our servers.
-            </p>
           </div>
         </div>
       </div>

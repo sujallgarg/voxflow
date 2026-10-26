@@ -285,6 +285,10 @@ function checkAndSyncVoxFlowAuth() {
         token: token || undefined,
         userId: userId || undefined
       }).catch(() => {});
+    } else {
+      chrome.runtime.sendMessage({
+        type: "CLEAR_AUTH"
+      }).catch(() => {});
     }
   } catch {
     // Cross-origin or restricted frame security ignore

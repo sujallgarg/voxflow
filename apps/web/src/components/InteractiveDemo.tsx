@@ -220,9 +220,10 @@ export const InteractiveDemo: React.FC = () => {
         <div
           style={{
             background: "#ffffff",
-            borderRadius: "8px",
+            borderRadius: "12px",
             border: "1px solid #e5e5e5",
-            overflow: "hidden"
+            overflow: "hidden",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)"
           }}
         >
           {/* Top Control Bar */}

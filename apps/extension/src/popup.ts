@@ -751,13 +751,20 @@ resetButton.addEventListener("click", async () => {
 async function refreshUsageDisplay() {
   try {
     chrome.runtime.sendMessage({ type: "GET_USAGE" }, (response) => {
+      const planBadge = document.getElementById("quota-plan-badge");
+      const userEmail = document.getElementById("quota-user-email");
+      const voiceSummary = document.getElementById("quota-voice-summary");
+      const meetingSummary = document.getElementById("quota-meeting-summary");
+      const upgradeLink = document.getElementById("quota-upgrade-link") as HTMLAnchorElement;
+
       if (response?.success && response.entitlements) {
         const ent = response.entitlements;
         const isPro = Boolean(ent.isPremium);
-        const planBadge = document.getElementById("quota-plan-badge");
-        const voiceSummary = document.getElementById("quota-voice-summary");
-        const meetingSummary = document.getElementById("quota-meeting-summary");
-        const upgradeLink = document.getElementById("quota-upgrade-link") as HTMLAnchorElement;
+
+        if (userEmail) {
+          userEmail.textContent = ent.email || "";
+          userEmail.title = ent.email || "";
+        }
 
         if (planBadge) {
           planBadge.textContent = isPro ? "Pro" : "Free";
@@ -765,21 +772,50 @@ async function refreshUsageDisplay() {
           else planBadge.classList.remove("pro");
         }
 
+        const voiceBreakdown = ent.breakdown?.voiceTyping;
+        const usedVoice = voiceBreakdown?.used ?? ent.usage?.voiceTypingUsed ?? 0;
+        const limitVoice = voiceBreakdown?.limit ?? ent.limits?.voiceTypingRequests ?? (isPro ? 1000 : 100);
         if (voiceSummary) {
-          const usedVoice = ent.breakdown?.voiceTyping?.used ?? ent.usage?.voiceTypingUsed ?? 0;
-          const limitVoice = ent.breakdown?.voiceTyping?.limit ?? ent.limits?.voiceTypingRequests ?? (isPro ? 1000 : 100);
           voiceSummary.textContent = `Voice: ${usedVoice}/${limitVoice}`;
+          if (voiceBreakdown?.isExhausted) {
+            voiceSummary.style.color = "#f87171";
+            voiceSummary.title = "Monthly voice typing limit reached. Upgrade to Pro for 1,000 requests/mo.";
+          } else {
+            voiceSummary.style.color = "#d4d4d8";
+            voiceSummary.title = "";
+          }
         }
 
+        const mtgBreakdown = ent.breakdown?.meetings;
+        const usedMtg = mtgBreakdown?.used ?? ent.usage?.meetingsUsed ?? 0;
+        const limitMtg = mtgBreakdown?.limit ?? ent.limits?.monthlyMeetings ?? (isPro ? 25 : 3);
         if (meetingSummary) {
-          const usedMtg = ent.breakdown?.meetings?.used ?? ent.usage?.meetingsUsed ?? 0;
-          const limitMtg = ent.breakdown?.meetings?.limit ?? ent.limits?.monthlyMeetings ?? (isPro ? 25 : 3);
           meetingSummary.textContent = `Meetings: ${usedMtg}/${limitMtg}`;
+          if (mtgBreakdown?.isExhausted || ent.breakdown?.transcriptionMinutes?.isExhausted) {
+            meetingSummary.style.color = "#f87171";
+            meetingSummary.title = "Monthly meeting limit reached. Upgrade to Pro for 25 meetings/mo.";
+          } else {
+            meetingSummary.style.color = "#d4d4d8";
+            meetingSummary.title = "";
+          }
         }
 
         if (upgradeLink) {
           upgradeLink.textContent = isPro ? "Manage ↗" : "Upgrade ↗";
           upgradeLink.href = isPro ? "http://localhost:5173/#/billing" : "http://localhost:5173/#/pricing";
+        }
+      } else {
+        // Unauthenticated or expired session
+        if (userEmail) {
+          userEmail.textContent = "Guest";
+        }
+        if (planBadge) {
+          planBadge.textContent = "Free";
+          planBadge.classList.remove("pro");
+        }
+        if (upgradeLink) {
+          upgradeLink.textContent = "Sign In ↗";
+          upgradeLink.href = "http://localhost:5173/#/login";
         }
       }
     });

@@ -6,6 +6,8 @@ import { Features } from "./components/Features";
 import { HowItWorks } from "./components/HowItWorks";
 import { MeetingCompanionLanding } from "./components/meeting-companion/MeetingCompanionLanding";
 import { InteractiveDemo } from "./components/InteractiveDemo";
+import { BeforeAfter } from "./components/BeforeAfter";
+import { FinalCTA } from "./components/FinalCTA";
 import { Pricing } from "./components/Pricing";
 import { FAQ } from "./components/FAQ";
 import { Footer } from "./components/Footer";
@@ -468,37 +470,43 @@ export default function App() {
       {/* VIEW 8: MAIN LANDING PAGE */}
       {currentView === "landing" && (
         <>
-          {/* Navigation */}
+          {/* 1. Navigation */}
           <Navbar onOpenBetaModal={handleOpenBetaModal} />
 
           {/* Main Content */}
           <main id="main-content">
-            {/* Hero Section */}
+            {/* 2. Hero Section */}
             <Hero
               onOpenBetaModal={handleOpenBetaModal}
               onScrollToDemo={handleScrollToDemo}
             />
 
-            {/* Core Features */}
-            <Features />
-
-            {/* How It Works (3 Steps + Optional Technical Details) */}
-            <HowItWorks />
-
-            {/* Interactive Product Demo */}
+            {/* 3. Interactive Voice Demo */}
             <InteractiveDemo />
 
-            {/* Meeting Companion (Honest Planned Feature / Coming Soon Preview) */}
+            {/* 4. Before-and-After Example */}
+            <BeforeAfter />
+
+            {/* 5. How VoxFlow Works */}
+            <HowItWorks />
+
+            {/* 6. Core Features */}
+            <Features />
+
+            {/* 7. Meetings and AI Summaries */}
             <MeetingCompanionLanding />
 
-            {/* Access & Pricing */}
+            {/* 8. Pricing */}
             <Pricing onOpenBetaModal={handleOpenBetaModal} />
 
-            {/* FAQ Accordion */}
+            {/* 9. FAQ */}
             <FAQ />
+
+            {/* 10. Final Call to Action */}
+            <FinalCTA onOpenBetaModal={handleOpenBetaModal} />
           </main>
 
-          {/* Footer */}
+          {/* 11. Footer */}
           <Footer
             onOpenBetaModal={handleOpenBetaModal}
             onNavigateToPrivacy={() => { window.location.hash = "#/privacy"; setCurrentView("privacy"); }}

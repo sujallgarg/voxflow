@@ -5,28 +5,28 @@ export const HowItWorks: React.FC = () => {
 
   const mainSteps = [
     {
-      num: "1",
-      title: "Speak Naturally",
-      desc: "Activate the extension and speak your thoughts aloud in your preferred language or mix languages freely."
+      step: "01",
+      title: "Speak naturally",
+      desc: "Activate VoxFlow in any text field or meeting. Talk freely as ideas come to mind in English, Hindi, or mixed languages without pausing for punctuation or manual commands."
     },
     {
-      num: "2",
-      title: "Process & Contextualize",
-      desc: "VoxFlow transcribes speech, extracts intent, and formats the output with appropriate tone for your recipient."
+      step: "02",
+      title: "VoxFlow processes your speech",
+      desc: "Our engine transcribes speech with code-switching awareness, detects communication context, eliminates filler words, and refines grammar into clear, structured sentences."
     },
     {
-      num: "3",
-      title: "Review & Insert",
-      desc: "Receive clean, polished prose placed directly into your input field or copied to your clipboard in seconds."
+      step: "03",
+      title: "Use your text in your workflow",
+      desc: "Polished output is placed directly into your email, Slack channel, Notion doc, or meeting summary ready for immediate sending or sharing with your team."
     }
   ];
 
   const pipelineStages = [
-    { name: "Transcribe", desc: "Speech-to-text transcription engine." },
-    { name: "Detect Language", desc: "Identifies primary language and code-switching." },
-    { name: "Understand Intent", desc: "Extracts underlying meaning and key details." },
-    { name: "Detect Context", desc: "Identifies destination, formality, and audience." },
-    { name: "Transform", desc: "Generates formatted, ready-to-use writing." }
+    { name: "Transcribe", desc: "Whisper speech-to-text with multilingual acoustic models." },
+    { name: "Detect Language", desc: "Identifies primary language and conversational code-switching." },
+    { name: "Understand Intent", desc: "Extracts underlying communication intent and key points." },
+    { name: "Detect Context", desc: "Infers destination, tone requirements, and recipient formality." },
+    { name: "Transform", desc: "Generates formatted, ready-to-use prose matching the target channel." }
   ];
 
   return (
@@ -39,61 +39,63 @@ export const HowItWorks: React.FC = () => {
       }}
     >
       <div className="container">
+        {/* Section Header */}
         <div className="section-title-wrap">
-          <span className="badge">Workflow</span>
-          <h2>How It Works</h2>
+          <span className="badge">Simple Workflow</span>
+          <h2>How VoxFlow Works</h2>
           <p>
-            Three simple steps between your spoken words and polished writing on the web.
+            From spoken thought to polished prose in three effortless steps.
           </p>
         </div>
 
-        {/* 3 Main Steps */}
+        {/* 3 Step Flow */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: "20px",
-            marginBottom: "32px"
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: "28px",
+            maxWidth: "1120px",
+            margin: "0 auto 40px auto"
           }}
         >
           {mainSteps.map((step) => (
             <div
-              key={step.num}
-              className="card-premium"
+              key={step.step}
               style={{
-                background: "#ffffff",
-                padding: "28px 24px",
+                background: "#fafafa",
+                border: "1px solid #e5e5e5",
+                borderRadius: "12px",
+                padding: "32px 28px",
                 display: "flex",
                 flexDirection: "column",
-                gap: "14px",
-                border: "1px solid #e5e5e5",
-                borderRadius: "8px"
+                position: "relative"
               }}
             >
               <div
                 style={{
-                  width: "36px",
-                  height: "36px",
-                  borderRadius: "6px",
-                  background: "#111111",
-                  color: "#ffffff",
-                  fontWeight: 700,
-                  fontSize: "0.95rem",
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontFamily: "var(--font-heading)"
+                  width: "38px",
+                  height: "38px",
+                  borderRadius: "8px",
+                  background: "#111111",
+                  color: "#ffffff",
+                  fontSize: "0.875rem",
+                  fontWeight: 700,
+                  marginBottom: "20px"
                 }}
               >
-                {step.num}
+                {step.step}
               </div>
 
               <h3
                 style={{
-                  fontSize: "1.1rem",
-                  fontWeight: 600,
+                  fontSize: "1.25rem",
+                  fontWeight: 700,
                   color: "#111111",
-                  margin: 0
+                  marginBottom: "12px",
+                  lineHeight: 1.3
                 }}
               >
                 {step.title}
@@ -101,9 +103,9 @@ export const HowItWorks: React.FC = () => {
 
               <p
                 style={{
-                  fontSize: "0.875rem",
+                  fontSize: "0.9375rem",
                   lineHeight: 1.6,
-                  color: "#666666",
+                  color: "#555555",
                   margin: 0
                 }}
               >
@@ -113,8 +115,8 @@ export const HowItWorks: React.FC = () => {
           ))}
         </div>
 
-        {/* Technical Pipeline Toggle */}
-        <div style={{ textAlign: "center", maxWidth: "800px", margin: "0 auto" }}>
+        {/* Working Architecture Viewer */}
+        <div style={{ textAlign: "center", maxWidth: "860px", margin: "0 auto" }}>
           <button
             type="button"
             onClick={() => setShowTechnicalPipeline(!showTechnicalPipeline)}
@@ -122,12 +124,13 @@ export const HowItWorks: React.FC = () => {
               background: "#ffffff",
               border: "1px solid #e5e5e5",
               borderRadius: "6px",
-              padding: "9px 18px",
-              fontSize: "0.85rem",
+              padding: "10px 20px",
+              fontSize: "0.875rem",
               fontWeight: 500,
               color: "#111111",
               cursor: "pointer",
-              transition: "background 0.15s ease"
+              transition: "all 0.15s ease",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
             }}
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f5f5f5")}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
@@ -138,38 +141,70 @@ export const HowItWorks: React.FC = () => {
           {showTechnicalPipeline && (
             <div
               style={{
-                marginTop: "20px",
-                padding: "20px",
-                background: "#fafafa",
-                borderRadius: "8px",
+                marginTop: "24px",
+                padding: "24px",
+                background: "#fcfcfc",
                 border: "1px solid #e5e5e5",
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-                gap: "12px",
+                borderRadius: "10px",
                 textAlign: "left"
               }}
             >
-              {pipelineStages.map((stage, idx) => (
-                <div
-                  key={stage.name}
-                  style={{
-                    background: "#ffffff",
-                    padding: "12px 14px",
-                    borderRadius: "6px",
-                    border: "1px solid #e5e5e5"
-                  }}
-                >
-                  <span style={{ fontSize: "0.75rem", color: "#666666", fontWeight: 700 }}>
-                    Stage 0{idx + 1}
-                  </span>
-                  <strong style={{ display: "block", fontSize: "0.875rem", color: "#111111", marginTop: "2px" }}>
-                    {stage.name}
-                  </strong>
-                  <span style={{ fontSize: "0.75rem", color: "#666666", lineHeight: 1.4, display: "block", marginTop: "4px" }}>
-                    {stage.desc}
-                  </span>
-                </div>
-              ))}
+              <h4
+                style={{
+                  fontSize: "0.875rem",
+                  fontWeight: 700,
+                  color: "#111111",
+                  marginBottom: "16px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em"
+                }}
+              >
+                Engine Pipeline Execution Stages:
+              </h4>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                  gap: "14px"
+                }}
+              >
+                {pipelineStages.map((stage, idx) => (
+                  <div
+                    key={stage.name}
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "6px",
+                      padding: "14px 12px"
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "#888888",
+                        fontWeight: 600,
+                        marginBottom: "4px"
+                      }}
+                    >
+                      Stage {idx + 1}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.875rem",
+                        fontWeight: 600,
+                        color: "#111111",
+                        marginBottom: "4px"
+                      }}
+                    >
+                      {stage.name}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "#666666", lineHeight: 1.4 }}>
+                      {stage.desc}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

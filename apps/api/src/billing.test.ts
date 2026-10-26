@@ -795,10 +795,10 @@ describe("VoxFlow Billing & Security Audit Test Suite", { timeout: 30000 }, () =
     const newEnd = new Date(existingSub!.currentPeriodEnd);
     expect(newEnd.getTime()).toBeGreaterThan(originalEnd.getTime()); // Period extended by 30 days
 
-    // 5. Verify usage quota was reset to 0 so user has fresh quota immediately
+    // 5. Verify usage continuity: existing usage consumed is preserved, NOT reset to 0
     const quota = await billingStore.getUsageQuota(userId, periodKey);
-    expect(quota.voiceTranscriptionsUsed).toBe(0);
-    expect(quota.meetingsUsed).toBe(0);
+    expect(quota.voiceTranscriptionsUsed).toBe(2000);
+    expect(quota.meetingsUsed).toBe(100);
 
     // 6. Verify an invoice for $9 was saved
     const invoices = await billingStore.getInvoicesByUserId(userId);
@@ -1184,6 +1184,99 @@ describe("VoxFlow Billing & Security Audit Test Suite", { timeout: 30000 }, () =
     // Exactly 2 must succeed, and 3 must be rejected with USAGE_LIMIT_REACHED
     expect(allowedCount).toBe(2);
     expect(rejectedCount).toBe(3);
+  });
+
+  // Test 31: Duplicate and concurrent checkout requests reuse existing valid session
+  it("Scenario 31: Duplicate and concurrent checkout requests return existing valid checkout session without creating duplicate provider sessions", async () => {
+    const userId = "user_checkout_reuse_31";
+    const token = generateAuthToken(userId);
+
+    const res1 = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json"
+      },
+      payload: {
+        planId: "premium_monthly",
+        action: "new"
+      }
+    });
+
+    expect(res1.statusCode).toBe(200);
+    const body1 = JSON.parse(res1.payload);
+    expect(body1.sessionId).toBeDefined();
+    expect(body1.checkoutUrl).toBeDefined();
+
+    // Second call for the same intended purchase within active TTL must return the same session
+    const res2 = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json"
+      },
+      payload: {
+        planId: "premium_monthly",
+        action: "new"
+      }
+    });
+
+    expect(res2.statusCode).toBe(200);
+    const body2 = JSON.parse(res2.payload);
+    expect(body2.sessionId).toBe(body1.sessionId);
+    expect(body2.checkoutUrl).toBe(body1.checkoutUrl);
+    expect(body2.reused).toBe(true);
+  });
+
+  // Test 32: Out-of-order older webhook event does not downgrade an already active newer subscription
+  it("Scenario 32: Out-of-order older webhook event does not downgrade an active subscription", async () => {
+    const userId = "user_out_of_order_32";
+    const now = new Date();
+    const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    // Newer active subscription record
+    const newerSub: UserSubscription = {
+      id: "sub_newer_32",
+      userId,
+      provider: "mock",
+      customerId: `cus_${userId}`,
+      subscriptionId: "sub_mock_32",
+      planId: "premium_monthly",
+      status: "active",
+      currentPeriodStart: now.toISOString(),
+      currentPeriodEnd: periodEnd.toISOString(),
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString()
+    };
+    await billingStore.saveSubscription(newerSub);
+
+    // Simulate an older event arriving late (e.g. older canceled event from 2 hours ago)
+    const olderTime = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    const olderSub: UserSubscription = {
+      id: "sub_older_32",
+      userId,
+      provider: "mock",
+      customerId: `cus_${userId}`,
+      subscriptionId: "sub_mock_32",
+      planId: "premium_monthly",
+      status: "canceled",
+      currentPeriodStart: olderTime.toISOString(),
+      currentPeriodEnd: olderTime.toISOString(),
+      cancelAtPeriodEnd: true,
+      canceledAt: olderTime.toISOString(),
+      createdAt: olderTime.toISOString(),
+      updatedAt: olderTime.toISOString()
+    };
+
+    const result = await billingStore.saveSubscription(olderSub);
+    expect(result.status).toBe("active");
+
+    const currentSub = await billingStore.getSubscriptionByUserId(userId);
+    expect(currentSub?.status).toBe("active");
   });
 });
 

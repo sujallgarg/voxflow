@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -7,7 +10,8 @@ import type {
   BillingInvoice,
   UserUsageQuota,
   SubscriptionStatus,
-  PlanId
+  PlanId,
+  AddonCreditRecord
 } from "@voxflow/shared";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,6 +25,8 @@ const SUPABASE_KEY =
   process.env.SUPABASE_ANON_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY ||
   "";
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface ProcessedWebhookRecord {
   id: string;
@@ -36,7 +42,9 @@ export class BillingStoreService {
   private invoices: Map<string, BillingInvoice[]> = new Map();       // key: userId -> list of invoices
   private webhookEvents: Map<string, ProcessedWebhookRecord> = new Map(); // key: `${provider}:${eventId}`
   private usageQuotas: Map<string, UserUsageQuota> = new Map();      // key: `${userId}:${periodYearMonth}`
+  private addonCredits: Map<string, AddonCreditRecord[]> = new Map(); // key: userId -> list of credit records
   private activeLocks: Set<string> = new Set();                      // checkout concurrency locks
+  private activeCheckoutSessions: Map<string, { sessionId: string; checkoutUrl: string; createdAt: number; action: string; planId: string; packId?: string }> = new Map();
   private supabase: SupabaseClient | null = null;
   private isLoaded = false;
 
@@ -46,14 +54,16 @@ export class BillingStoreService {
   }
 
   private initSupabase() {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || SUPABASE_KEY;
     if (
-      SUPABASE_URL &&
-      SUPABASE_KEY &&
-      SUPABASE_URL.startsWith("https://") &&
-      !SUPABASE_URL.includes("placeholder")
+      url &&
+      key &&
+      url.startsWith("https://") &&
+      !url.includes("placeholder")
     ) {
       try {
-        this.supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+        this.supabase = createClient(url, key, {
           auth: {
             persistSession: false,
             autoRefreshToken: false
@@ -63,6 +73,17 @@ export class BillingStoreService {
         console.warn("Failed to initialize Supabase client in BillingStoreService:", e);
       }
     }
+  }
+
+  isSupabaseConnected(): boolean {
+    return Boolean(this.getSupabase());
+  }
+
+  getSupabase(): SupabaseClient | null {
+    if (!this.supabase) {
+      this.initSupabase();
+    }
+    return this.supabase;
   }
 
   setSupabaseClientForTesting(client: SupabaseClient | null) {
@@ -95,6 +116,13 @@ export class BillingStoreService {
             this.usageQuotas.set(`${q.userId}:${q.periodYearMonth}`, q);
           }
         }
+        if (Array.isArray(parsed.addonCredits)) {
+          for (const c of parsed.addonCredits) {
+            const list = this.addonCredits.get(c.userId) || [];
+            list.push(c);
+            this.addonCredits.set(c.userId, list);
+          }
+        }
       }
     } catch (e) {
       console.warn("Notice: could not load billing data from disk:", e);
@@ -111,7 +139,8 @@ export class BillingStoreService {
         subscriptions: Array.from(this.subscriptions.values()),
         invoices: Object.fromEntries(this.invoices.entries()),
         webhookEvents: Array.from(this.webhookEvents.values()),
-        usageQuotas: Array.from(this.usageQuotas.values())
+        usageQuotas: Array.from(this.usageQuotas.values()),
+        addonCredits: Array.from(this.addonCredits.values()).flat()
       };
       fs.writeFileSync(BILLING_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
     } catch (e) {
@@ -136,9 +165,46 @@ export class BillingStoreService {
     this.activeLocks.delete(userId);
   }
 
+  // --- Reusable Active Checkout Sessions ---
+  saveActiveCheckoutSession(
+    userId: string,
+    data: { sessionId: string; checkoutUrl: string; action: string; planId: string; packId?: string }
+  ) {
+    const key = `${userId}:${data.action}:${data.planId}:${data.packId || ""}`;
+    this.activeCheckoutSessions.set(key, {
+      ...data,
+      createdAt: Date.now()
+    });
+  }
+
+  getActiveCheckoutSession(
+    userId: string,
+    action: string,
+    planId: string,
+    packId?: string
+  ): { sessionId: string; checkoutUrl: string } | null {
+    const key = `${userId}:${action}:${planId}:${packId || ""}`;
+    const session = this.activeCheckoutSessions.get(key);
+    if (!session) return null;
+    // Sessions remain valid for 15 minutes
+    if (Date.now() - session.createdAt > 15 * 60 * 1000) {
+      this.activeCheckoutSessions.delete(key);
+      return null;
+    }
+    return { sessionId: session.sessionId, checkoutUrl: session.checkoutUrl };
+  }
+
+  clearActiveCheckoutSession(userId: string) {
+    for (const [key] of this.activeCheckoutSessions) {
+      if (key.startsWith(`${userId}:`)) {
+        this.activeCheckoutSessions.delete(key);
+      }
+    }
+  }
+
   // --- Subscriptions ---
   async getSubscriptionByUserId(userId: string): Promise<UserSubscription | null> {
-    if (this.supabase) {
+    if (this.supabase && UUID_REGEX.test(userId)) {
       try {
         const { data, error } = await this.supabase
           .from("subscriptions")
@@ -149,7 +215,11 @@ export class BillingStoreService {
           .maybeSingle();
 
         if (!error && data) {
-          return this.mapDbSubscription(data);
+          const sub = this.mapDbSubscription(data);
+          this.subscriptions.set(userId, sub);
+          return sub;
+        } else if (error && error.code !== "PGRST205" && error.code !== "PGRST116") {
+          console.warn("[BillingStore] Supabase subscription fetch notice:", error.message);
         }
       } catch {
         // Fall back to memory
@@ -159,12 +229,33 @@ export class BillingStoreService {
   }
 
   async saveSubscription(sub: UserSubscription): Promise<UserSubscription> {
+    const existing = await this.getSubscriptionByUserId(sub.userId);
+    if (existing && existing.subscriptionId === sub.subscriptionId) {
+      const existingUpdate = new Date(existing.updatedAt).getTime();
+      const newUpdate = new Date(sub.updatedAt).getTime();
+      // Protect against out-of-order older events downgrading a newer active status
+      if (newUpdate < existingUpdate && existing.status === "active" && sub.status !== "active") {
+        console.warn(`[BillingStore] Ignoring out-of-order older event for subscription ${sub.subscriptionId}`);
+        return existing;
+      }
+
+      // Protect against out-of-order older events shrinking an extended currentPeriodEnd
+      if (
+        existing.status === "active" &&
+        sub.status === "active" &&
+        new Date(existing.currentPeriodEnd).getTime() > new Date(sub.currentPeriodEnd).getTime()
+      ) {
+        console.warn(`[BillingStore] Retaining extended periodEnd ${existing.currentPeriodEnd} over older incoming ${sub.currentPeriodEnd}`);
+        sub.currentPeriodEnd = existing.currentPeriodEnd;
+      }
+    }
+
     this.subscriptions.set(sub.userId, sub);
     this.saveToDisk();
 
-    if (this.supabase) {
+    if (this.supabase && UUID_REGEX.test(sub.userId)) {
       try {
-        await this.supabase.from("subscriptions").upsert({
+        const { error } = await this.supabase.from("subscriptions").upsert({
           id: sub.id,
           user_id: sub.userId,
           provider: sub.provider,
@@ -178,6 +269,9 @@ export class BillingStoreService {
           canceled_at: sub.canceledAt,
           updated_at: new Date().toISOString()
         }, { onConflict: "subscription_id" });
+        if (error && error.code !== "PGRST205") {
+          console.warn("[BillingStore] Supabase subscription save notice:", error.message);
+        }
       } catch (e) {
         console.warn("Supabase subscription save notice:", e);
       }
@@ -341,53 +435,63 @@ export class BillingStoreService {
     this.usageQuotas.set(key, quota);
     this.saveToDisk();
 
-    if (this.supabase) {
+    const supabase = this.getSupabase();
+    if (supabase && UUID_REGEX.test(quota.userId)) {
       try {
+        const topUpRemaining = quota.purchasedVoiceCredits
+          ? Math.max(0, quota.purchasedVoiceCredits - (quota.usedVoiceCredits || 0))
+          : 0;
+
         const payload: Record<string, any> = {
           user_id: quota.userId,
           period_year_month: quota.periodYearMonth,
-          voice_transcriptions_used: quota.voiceTranscriptionsUsed,
-          meetings_used: quota.meetingsUsed,
-          updated_at: quota.updatedAt
+          voice_transcriptions_used: quota.voiceTranscriptionsUsed || 0,
+          meetings_used: quota.meetingsUsed || 0,
+          transcription_seconds_used: quota.transcriptionSecondsUsed ?? ((quota.voiceTranscriptionsUsed || 0) * 60),
+          voice_typing_used: quota.voiceTypingUsed ?? 0,
+          text_corrections_used: quota.textCorrectionsUsed ?? 0,
+          meeting_summaries_used: quota.meetingSummariesUsed ?? 0,
+          top_up_credits_remaining: topUpRemaining,
+          updated_at: quota.updatedAt || new Date().toISOString()
         };
-        if (quota.transcriptionSecondsUsed !== undefined) payload.transcription_seconds_used = quota.transcriptionSecondsUsed;
-        if (quota.voiceTypingUsed !== undefined) payload.voice_typing_used = quota.voiceTypingUsed;
-        if (quota.textCorrectionsUsed !== undefined) payload.text_corrections_used = quota.textCorrectionsUsed;
-        if (quota.meetingSummariesUsed !== undefined) payload.meeting_summaries_used = quota.meetingSummariesUsed;
-        if (quota.purchasedVoiceCredits !== undefined) payload.purchased_voice_credits = quota.purchasedVoiceCredits;
-        if (quota.usedVoiceCredits !== undefined) payload.used_voice_credits = quota.usedVoiceCredits;
-        if (quota.purchasedMeetingCredits !== undefined) payload.purchased_meeting_credits = quota.purchasedMeetingCredits;
-        if (quota.usedMeetingCredits !== undefined) payload.used_meeting_credits = quota.usedMeetingCredits;
 
-        await this.supabase.from("usage_quotas").upsert(payload, { onConflict: "user_id,period_year_month" });
-      } catch (e) {
-        // Fallback safely if remote columns not yet added
+        const { error } = await supabase
+          .from("usage_quotas")
+          .upsert(payload, { onConflict: "user_id,period_year_month" });
+
+        if (error) {
+          console.error(`[BillingStore] Supabase usage_quotas upsert failed for user ${quota.userId}:`, error.message, error.code);
+        } else {
+          console.log(JSON.stringify({
+            event: "usage_quota_persisted",
+            userId: quota.userId.length > 8 ? `${quota.userId.slice(0, 4)}...${quota.userId.slice(-4)}` : quota.userId,
+            period: quota.periodYearMonth,
+            typing: quota.voiceTypingUsed,
+            seconds: quota.transcriptionSecondsUsed,
+            meetings: quota.meetingsUsed,
+            summaries: quota.meetingSummariesUsed,
+            dbSuccess: true
+          }));
+        }
+      } catch (e: any) {
+        console.error(`[BillingStore] Supabase usage_quotas exception:`, e?.message || e);
       }
     }
   }
 
   async getUsageQuota(userId: string, periodYearMonth: string = this.getCurrentPeriodYearMonth()): Promise<UserUsageQuota> {
     const key = `${userId}:${periodYearMonth}`;
-    const existing = this.usageQuotas.get(key);
-    if (existing) {
-      // Ensure all fields are present
-      if (existing.transcriptionSecondsUsed === undefined) {
-        existing.transcriptionSecondsUsed = (existing.voiceTranscriptionsUsed || 0) * 60;
-      }
-      if (existing.voiceTypingUsed === undefined) existing.voiceTypingUsed = 0;
-      if (existing.textCorrectionsUsed === undefined) existing.textCorrectionsUsed = 0;
-      if (existing.meetingSummariesUsed === undefined) existing.meetingSummariesUsed = 0;
-      return existing;
-    }
 
-    if (this.supabase) {
+    // If Supabase is available and user is a valid UUID, read authoritative state from database first
+    const supabase = this.getSupabase();
+    if (supabase && UUID_REGEX.test(userId)) {
       try {
-        const { data, error } = await this.supabase
+        const { data, error } = await supabase
           .from("usage_quotas")
           .select("*")
           .eq("user_id", userId)
           .eq("period_year_month", periodYearMonth)
-          .single();
+          .maybeSingle();
 
         if (data && !error) {
           const mapped: UserUsageQuota = {
@@ -399,37 +503,63 @@ export class BillingStoreService {
             voiceTypingUsed: data.voice_typing_used ?? 0,
             textCorrectionsUsed: data.text_corrections_used ?? 0,
             meetingSummariesUsed: data.meeting_summaries_used ?? 0,
-            purchasedVoiceCredits: data.purchased_voice_credits ?? 0,
-            usedVoiceCredits: data.used_voice_credits ?? 0,
-            purchasedMeetingCredits: data.purchased_meeting_credits ?? 0,
-            usedMeetingCredits: data.used_meeting_credits ?? 0,
+            purchasedVoiceCredits: data.top_up_credits_remaining ?? 0,
+            usedVoiceCredits: 0,
+            purchasedMeetingCredits: 0,
+            usedMeetingCredits: 0,
             updatedAt: data.updated_at || new Date().toISOString()
           };
+
+          // Overlay active in-memory add-on credits if present
+          const voiceCredits = this.getAvailableAddonCredits(userId, "transcription_minutes");
+          const meetingCredits = this.getAvailableAddonCredits(userId, "meeting");
+          const voiceTypingCredits = this.getAvailableAddonCredits(userId, "voice_typing");
+          if (voiceCredits.total > 0) {
+            mapped.purchasedVoiceCredits = voiceCredits.remaining + (mapped.usedVoiceCredits || 0);
+          }
+          if (meetingCredits.total > 0) {
+            mapped.purchasedMeetingCredits = meetingCredits.remaining + (mapped.usedMeetingCredits || 0);
+          }
+          if (voiceTypingCredits.total > 0) {
+            mapped.purchasedVoiceTypingCredits = voiceTypingCredits.remaining + (mapped.usedVoiceTypingCredits || 0);
+          }
+
           this.usageQuotas.set(key, mapped);
           return mapped;
+        } else if (error && error.code !== "PGRST116") {
+          console.warn(`[BillingStore] Supabase usage_quotas fetch warning:`, error.message);
         }
-      } catch {
-        // Fallback to memory
+      } catch (err) {
+        console.warn(`[BillingStore] Supabase usage_quotas fetch exception:`, err);
       }
     }
 
-    // Preserve purchased top-up credits across ordinary monthly subscription renewals:
-    // Aggregate unused purchased top-up minutes from previous periods
-    let carryOverVoiceCredits = 0;
-    let carryOverMeetingCredits = 0;
-
-    for (const [k, q] of this.usageQuotas.entries()) {
-      if (k.startsWith(`${userId}:`) && k !== key) {
-        const netVoice = (q.purchasedVoiceCredits || 0) - (q.usedVoiceCredits || 0);
-        if (netVoice > 0) {
-          carryOverVoiceCredits += netVoice;
-        }
-        const netMeeting = (q.purchasedMeetingCredits || 0) - (q.usedMeetingCredits || 0);
-        if (netMeeting > 0) {
-          carryOverMeetingCredits += netMeeting;
-        }
+    const existing = this.usageQuotas.get(key);
+    if (existing) {
+      // Ensure all fields are present
+      if (existing.transcriptionSecondsUsed === undefined) {
+        existing.transcriptionSecondsUsed = (existing.voiceTranscriptionsUsed || 0) * 60;
       }
+      if (existing.voiceTypingUsed === undefined) existing.voiceTypingUsed = 0;
+      if (existing.textCorrectionsUsed === undefined) existing.textCorrectionsUsed = 0;
+      if (existing.meetingSummariesUsed === undefined) existing.meetingSummariesUsed = 0;
+
+      // Ensure active add-on credits are reflected accurately on current period
+      if (periodYearMonth === this.getCurrentPeriodYearMonth()) {
+        const voiceCredits = this.getAvailableAddonCredits(userId, "transcription_minutes");
+        const meetingCredits = this.getAvailableAddonCredits(userId, "meeting");
+        const voiceTypingCredits = this.getAvailableAddonCredits(userId, "voice_typing");
+        existing.purchasedVoiceCredits = voiceCredits.remaining + (existing.usedVoiceCredits || 0);
+        existing.purchasedMeetingCredits = meetingCredits.remaining + (existing.usedMeetingCredits || 0);
+        existing.purchasedVoiceTypingCredits = voiceTypingCredits.remaining + (existing.usedVoiceTypingCredits || 0);
+      }
+      return existing;
     }
+
+    // Compute unconsumed add-on credits from persistent ledger
+    const initialVoiceCredits = this.getAvailableAddonCredits(userId, "transcription_minutes").remaining;
+    const initialMeetingCredits = this.getAvailableAddonCredits(userId, "meeting").remaining;
+    const initialVoiceTypingCredits = this.getAvailableAddonCredits(userId, "voice_typing").remaining;
 
     const newQuota: UserUsageQuota = {
       userId,
@@ -440,10 +570,12 @@ export class BillingStoreService {
       voiceTypingUsed: 0,
       textCorrectionsUsed: 0,
       meetingSummariesUsed: 0,
-      purchasedVoiceCredits: carryOverVoiceCredits,
+      purchasedVoiceCredits: initialVoiceCredits,
       usedVoiceCredits: 0,
-      purchasedMeetingCredits: carryOverMeetingCredits,
+      purchasedMeetingCredits: initialMeetingCredits,
       usedMeetingCredits: 0,
+      purchasedVoiceTypingCredits: initialVoiceTypingCredits,
+      usedVoiceTypingCredits: 0,
       updatedAt: new Date().toISOString()
     };
     await this.saveUsageQuota(newQuota);
@@ -485,7 +617,8 @@ export class BillingStoreService {
     periodYearMonth: string = this.getCurrentPeriodYearMonth(),
     voiceTranscriptionsUsed: number,
     meetingsUsed: number,
-    transcriptionSecondsUsed?: number
+    transcriptionSecondsUsed?: number,
+    voiceTypingUsed?: number
   ): Promise<UserUsageQuota> {
     const quota = await this.getUsageQuota(userId, periodYearMonth);
     quota.voiceTranscriptionsUsed = voiceTranscriptionsUsed;
@@ -495,13 +628,17 @@ export class BillingStoreService {
     } else {
       quota.transcriptionSecondsUsed = voiceTranscriptionsUsed * 60;
     }
+    if (voiceTypingUsed !== undefined) {
+      quota.voiceTypingUsed = voiceTypingUsed;
+    }
     quota.updatedAt = new Date().toISOString();
     await this.saveUsageQuota(quota);
     return quota;
   }
 
   /**
-   * Reset monthly usage quota counters upon early renewal (preserving purchased top-up credits)
+   * Reset recurring period quota counters for genuine period boundaries.
+   * NOTE: Must NEVER be called during early renewals, extensions, or add-on purchases.
    */
   async resetMonthlyQuota(userId: string, periodYearMonth: string = this.getCurrentPeriodYearMonth()): Promise<UserUsageQuota> {
     const quota = await this.getUsageQuota(userId, periodYearMonth);
@@ -524,6 +661,191 @@ export class BillingStoreService {
   }
 
   /**
+   * Get all active and unexpired add-on credits for a user and quota type
+   */
+  getAvailableAddonCredits(
+    userId: string,
+    quotaType: "transcription_minutes" | "voice_typing" | "meeting" | "text_correction" | "summary"
+  ): { total: number; used: number; remaining: number; records: AddonCreditRecord[] } {
+    const list = this.addonCredits.get(userId) || [];
+    const now = new Date();
+
+    let total = 0;
+    let used = 0;
+    let remaining = 0;
+    const activeRecords: AddonCreditRecord[] = [];
+
+    for (const record of list) {
+      if (record.quotaType === quotaType) {
+        const isExpired = record.expiresAt ? new Date(record.expiresAt) <= now : false;
+        if (!isExpired) {
+          total += record.amount;
+          used += record.usedAmount;
+          remaining += Math.max(0, record.amount - record.usedAmount);
+          activeRecords.push(record);
+        }
+      }
+    }
+
+    // Support legacy credits stored in the current period quota record if not in ledger
+    const periodKey = this.getCurrentPeriodYearMonth();
+    const quota = this.usageQuotas.get(`${userId}:${periodKey}`);
+    if (quota && activeRecords.length === 0) {
+      if (quotaType === "transcription_minutes" && (quota.purchasedVoiceCredits || 0) > 0) {
+        total += quota.purchasedVoiceCredits || 0;
+        used += quota.usedVoiceCredits || 0;
+        remaining += Math.max(0, (quota.purchasedVoiceCredits || 0) - (quota.usedVoiceCredits || 0));
+      } else if (quotaType === "meeting" && (quota.purchasedMeetingCredits || 0) > 0) {
+        total += quota.purchasedMeetingCredits || 0;
+        used += quota.usedMeetingCredits || 0;
+        remaining += Math.max(0, (quota.purchasedMeetingCredits || 0) - (quota.usedMeetingCredits || 0));
+      } else if (quotaType === "voice_typing" && (quota.purchasedVoiceTypingCredits || 0) > 0) {
+        total += quota.purchasedVoiceTypingCredits || 0;
+        used += quota.usedVoiceTypingCredits || 0;
+        remaining += Math.max(0, (quota.purchasedVoiceTypingCredits || 0) - (quota.usedVoiceTypingCredits || 0));
+      }
+    }
+
+    return { total, used, remaining, records: activeRecords };
+  }
+
+  /**
+   * Consume add-on credits:
+   * Consumes earliest-expiring credits first, then FIFO by creation date.
+   */
+  async consumeAddonCredits(
+    userId: string,
+    quotaType: "transcription_minutes" | "voice_typing" | "meeting" | "text_correction" | "summary",
+    amount: number
+  ): Promise<boolean> {
+    const list = this.addonCredits.get(userId) || [];
+    const now = new Date();
+
+    const candidateRecords = list
+      .filter((r) => r.quotaType === quotaType && (!r.expiresAt || new Date(r.expiresAt) > now) && r.usedAmount < r.amount)
+      .sort((a, b) => {
+        // 1. Expiring records first (earliest expiry first)
+        if (a.expiresAt && b.expiresAt) return new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime();
+        if (a.expiresAt) return -1;
+        if (b.expiresAt) return 1;
+        // 2. FIFO by createdAt
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      });
+
+    let needed = amount;
+    const touchedRecords: AddonCreditRecord[] = [];
+    for (const record of candidateRecords) {
+      const avail = record.amount - record.usedAmount;
+      const toTake = Math.min(avail, needed);
+      record.usedAmount += toTake;
+      needed -= toTake;
+      touchedRecords.push(record);
+      if (needed <= 0) break;
+    }
+
+    this.saveToDisk();
+
+    // Persist updated credit consumption to Supabase if available
+    if (this.supabase && UUID_REGEX.test(userId)) {
+      for (const record of touchedRecords) {
+        try {
+          const { error } = await this.supabase
+            .from("addon_credits")
+            .update({
+              used_amount: record.usedAmount,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", record.id);
+          if (error && error.code !== "PGRST205") {
+            console.warn(`[BillingStore] Supabase addon_credits consumption update notice:`, error.message);
+          }
+        } catch {
+          // Fallback safely if remote table not yet created
+        }
+      }
+    }
+
+    return needed <= 0;
+  }
+
+  /**
+   * Add purchased add-on credits record with strict idempotency protection
+   */
+  async addAddonCredits(params: {
+    userId: string;
+    quotaType: "transcription_minutes" | "voice_typing" | "meeting" | "text_correction" | "summary";
+    amount: number;
+    paymentId: string;
+    expiresAt?: string | null;
+  }): Promise<{ record: AddonCreditRecord; alreadyProcessed: boolean }> {
+    const { userId, quotaType, amount, paymentId, expiresAt } = params;
+    const dedupKey = `${userId}:${paymentId}:${quotaType}`;
+
+    if (this.processedTopUps.has(dedupKey) || this.processedTopUps.has(paymentId)) {
+      const existingList = this.addonCredits.get(userId) || [];
+      const match = existingList.find((r) => r.paymentId === paymentId && r.quotaType === quotaType);
+      if (match) {
+        return { record: match, alreadyProcessed: true };
+      }
+    }
+
+    this.processedTopUps.add(dedupKey);
+    this.processedTopUps.add(paymentId);
+
+    const record: AddonCreditRecord = {
+      id: `addon_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userId,
+      quotaType,
+      amount,
+      usedAmount: 0,
+      paymentId,
+      createdAt: new Date().toISOString(),
+      expiresAt: expiresAt || null
+    };
+
+    const userCredits = this.addonCredits.get(userId) || [];
+    userCredits.push(record);
+    this.addonCredits.set(userId, userCredits);
+
+    // Update backward-compatible quota counters on the current period
+    const periodKey = this.getCurrentPeriodYearMonth();
+    const quota = await this.getUsageQuota(userId, periodKey);
+    const voiceCredits = this.getAvailableAddonCredits(userId, "transcription_minutes");
+    const meetingCredits = this.getAvailableAddonCredits(userId, "meeting");
+    const voiceTypingCredits = this.getAvailableAddonCredits(userId, "voice_typing");
+    quota.purchasedVoiceCredits = voiceCredits.remaining + (quota.usedVoiceCredits || 0);
+    quota.purchasedMeetingCredits = meetingCredits.remaining + (quota.usedMeetingCredits || 0);
+    quota.purchasedVoiceTypingCredits = voiceTypingCredits.remaining + (quota.usedVoiceTypingCredits || 0);
+    quota.updatedAt = new Date().toISOString();
+    await this.saveUsageQuota(quota);
+
+    this.saveToDisk();
+
+    // Persist to Supabase if available
+    if (this.supabase && UUID_REGEX.test(userId)) {
+      try {
+        const { error } = await this.supabase.from("addon_credits").upsert({
+          id: record.id,
+          user_id: record.userId,
+          quota_type: record.quotaType,
+          amount: record.amount,
+          used_amount: record.usedAmount,
+          payment_id: record.paymentId,
+          created_at: record.createdAt,
+          expires_at: record.expiresAt
+        }, { onConflict: "user_id,payment_id,quota_type" });
+        if (error && error.code !== "PGRST205") {
+          console.warn("[BillingStore] Supabase addon_credits save notice:", error.message);
+        }
+      } catch (e) {
+        // Fallback safely if table not yet created remotely
+      }
+    }
+
+    return { record, alreadyProcessed: false };
+  }
+
+  /**
    * Atomically add purchased top-up credits with idempotency protection
    */
   async addPurchasedCredits(
@@ -531,23 +853,40 @@ export class BillingStoreService {
     periodYearMonth: string,
     voiceCredits: number,
     meetingCredits: number,
-    paymentId?: string
+    paymentId?: string,
+    expiresAt?: string | null
   ): Promise<{ quota: UserUsageQuota; alreadyProcessed: boolean }> {
+    const pId = paymentId || `pay_addon_${Date.now()}`;
+    let already = false;
+
     if (paymentId && this.processedTopUps.has(paymentId)) {
-      const existingQuota = await this.getUsageQuota(userId, periodYearMonth);
-      return { quota: existingQuota, alreadyProcessed: true };
+      already = true;
     }
 
-    if (paymentId) {
-      this.processedTopUps.add(paymentId);
+    if (voiceCredits > 0) {
+      const res = await this.addAddonCredits({
+        userId,
+        quotaType: "transcription_minutes",
+        amount: voiceCredits,
+        paymentId: pId,
+        expiresAt
+      });
+      if (res.alreadyProcessed) already = true;
+    }
+
+    if (meetingCredits > 0) {
+      const res = await this.addAddonCredits({
+        userId,
+        quotaType: "meeting",
+        amount: meetingCredits,
+        paymentId: pId,
+        expiresAt
+      });
+      if (res.alreadyProcessed) already = true;
     }
 
     const quota = await this.getUsageQuota(userId, periodYearMonth);
-    quota.purchasedVoiceCredits = (quota.purchasedVoiceCredits || 0) + voiceCredits;
-    quota.purchasedMeetingCredits = (quota.purchasedMeetingCredits || 0) + meetingCredits;
-    quota.updatedAt = new Date().toISOString();
-    await this.saveUsageQuota(quota);
-    return { quota, alreadyProcessed: false };
+    return { quota, alreadyProcessed: already };
   }
 
   /**
@@ -560,8 +899,10 @@ export class BillingStoreService {
     amount = 1
   ): Promise<UserUsageQuota> {
     const quota = await this.getUsageQuota(userId, periodYearMonth);
+    const quotaType = feature === "voice" || feature === "transcription_seconds" ? "transcription_minutes" : "meeting";
+    const minutesEquivalent = feature === "transcription_seconds" ? Math.ceil(amount / 60) : amount;
+    this.consumeAddonCredits(userId, quotaType, minutesEquivalent);
     if (feature === "transcription_seconds") {
-      const minutesEquivalent = Math.ceil(amount / 60);
       quota.usedVoiceCredits = (quota.usedVoiceCredits || 0) + minutesEquivalent;
     } else if (feature === "voice") {
       quota.usedVoiceCredits = (quota.usedVoiceCredits || 0) + amount;
@@ -579,6 +920,7 @@ export class BillingStoreService {
     this.invoices.clear();
     this.webhookEvents.clear();
     this.usageQuotas.clear();
+    this.addonCredits.clear();
     this.activeLocks.clear();
     this.processedTopUps.clear();
     this.quotaLocks.clear();

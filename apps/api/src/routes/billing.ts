@@ -23,9 +23,15 @@ export function getPaymentGatewayAdapter(): IPaymentGatewayAdapter {
   if (!process.env.DODO_PAYMENTS_API_KEY) {
     dotenv.config();
   }
-  return process.env.DODO_PAYMENTS_API_KEY
-    ? new DodoPaymentAdapter()
-    : new MockPaymentAdapter();
+  if (process.env.DODO_PAYMENTS_API_KEY) {
+    return new DodoPaymentAdapter();
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Production configuration error: DODO_PAYMENTS_API_KEY is required in production."
+    );
+  }
+  return new MockPaymentAdapter();
 }
 
 const billingRoute: FastifyPluginAsync = async (app) => {
@@ -114,7 +120,17 @@ const billingRoute: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // 2. Concurrency lock: Prevent rapid double-clicks or racing checkout creations
+    // 2. Return existing active checkout session if still valid for duplicate/concurrent requests
+    const existingCheckout = billingStore.getActiveCheckoutSession(userId, action, planId, selectedPack?.id);
+    if (existingCheckout) {
+      return reply.code(200).send({
+        sessionId: existingCheckout.sessionId,
+        checkoutUrl: existingCheckout.checkoutUrl,
+        reused: true
+      });
+    }
+
+    // 3. Concurrency lock: Prevent rapid double-clicks or racing checkout creations
     const lockAcquired = billingStore.acquireCheckoutLock(userId);
     if (!lockAcquired) {
       return reply.code(409).send({
@@ -124,7 +140,7 @@ const billingRoute: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      // 3. Server-authoritative idempotency key
+      // 4. Server-authoritative idempotency key
       const clientSuppliedKey = request.headers["x-idempotency-key"] as string | undefined;
       const idempotencyKey =
         clientSuppliedKey ||
@@ -154,6 +170,15 @@ const billingRoute: FastifyPluginAsync = async (app) => {
           minutes: String(selectedPack.minutes),
           priceCents: String(selectedPack.priceCents)
         }
+      });
+
+      // Cache active session for subsequent duplicate requests (15-min TTL)
+      billingStore.saveActiveCheckoutSession(userId, {
+        sessionId: sessionResult.sessionId,
+        checkoutUrl: sessionResult.checkoutUrl,
+        action,
+        planId,
+        packId: selectedPack.id
       });
 
       return reply.code(200).send({
@@ -210,9 +235,10 @@ const billingRoute: FastifyPluginAsync = async (app) => {
 
   // 3. POST /billing/webhook — Secure authoritative webhook endpoint
   app.post("/billing/webhook", async (request, reply) => {
+    const isProd = process.env.NODE_ENV === "production";
     const sigHeader =
       (request.headers["webhook-signature"] as string) ||
-      (request.headers["x-mock-signature"] as string) ||
+      (!isProd ? (request.headers["x-mock-signature"] as string) : "") ||
       "";
 
     // In Fastify, raw body is preserved via our preParsing rawBody plugin or request.body
@@ -262,6 +288,7 @@ const billingRoute: FastifyPluginAsync = async (app) => {
           const paymentId = eventObj.payment_id || eventObj.invoice || eventObj.id;
 
           if (userId) {
+            billingStore.clearActiveCheckoutSession(userId);
             const now = new Date();
             const periodKey = entitlementService.getCurrentPeriodKey();
 
@@ -273,7 +300,7 @@ const billingRoute: FastifyPluginAsync = async (app) => {
                   : false;
 
                 if (!alreadyProcessed) {
-                  await billingStore.resetMonthlyQuota(userId, periodKey);
+                  // CRITICAL: Preserve current period's usage consumed. Do NOT reset counters on early renewal!
                   const currentEnd = new Date(existingSub.currentPeriodEnd);
                   const baseTime = currentEnd > now ? currentEnd.getTime() : now.getTime();
                   const newPeriodEnd = new Date(baseTime + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -305,17 +332,15 @@ const billingRoute: FastifyPluginAsync = async (app) => {
             } else if (action === "topup") {
               const packId = eventObj.metadata?.packId;
               const pack = ADDON_PACKS.find((p) => p.id === packId) || ADDON_PACKS[0];
-              const minutes = eventObj.metadata?.minutes
-                ? parseInt(eventObj.metadata.minutes, 10)
-                : pack.minutes;
+              const quotaType = pack.quotaType || "transcription_minutes";
+              const amount = pack.amount || (eventObj.metadata?.minutes ? parseInt(eventObj.metadata.minutes, 10) : pack.minutes);
 
-              const { alreadyProcessed } = await billingStore.addPurchasedCredits(
+              const { alreadyProcessed } = await billingStore.addAddonCredits({
                 userId,
-                periodKey,
-                minutes,
-                0, // transcription minutes only
-                paymentId
-              );
+                quotaType,
+                amount,
+                paymentId: paymentId || `pay_topup_${Date.now()}`
+              });
 
               if (!alreadyProcessed) {
                 const amountCents = eventObj.total_amount || eventObj.amount_total || pack.priceCents;
@@ -336,8 +361,8 @@ const billingRoute: FastifyPluginAsync = async (app) => {
                 app.log.info({
                   msg: "Successfully credited usage add-on minutes",
                   userId,
-                  packId: pack.id,
-                  minutes,
+                  amount,
+                  quotaType,
                   paymentId
                 });
               }
@@ -546,7 +571,7 @@ const billingRoute: FastifyPluginAsync = async (app) => {
               if (action === "early_renewal") {
                 const existingSub = await billingStore.getSubscriptionByUserId(userId);
                 if (existingSub) {
-                  await billingStore.resetMonthlyQuota(userId, periodKey);
+                  // CRITICAL: Preserve current period's usage consumed. Do NOT reset counters on early renewal!
                   const currentEnd = new Date(existingSub.currentPeriodEnd);
                   const baseTime = currentEnd > now ? currentEnd.getTime() : now.getTime();
                   const newPeriodEnd = new Date(baseTime + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -560,16 +585,14 @@ const billingRoute: FastifyPluginAsync = async (app) => {
               } else if (action === "topup") {
                 const packId = eventObj.metadata?.packId;
                 const pack = ADDON_PACKS.find((p) => p.id === packId) || ADDON_PACKS[0];
-                const minutes = eventObj.metadata?.minutes
-                  ? parseInt(eventObj.metadata.minutes, 10)
-                  : pack.minutes;
-                await billingStore.addPurchasedCredits(
+                const quotaType = pack.quotaType || "transcription_minutes";
+                const amount = pack.amount || (eventObj.metadata?.minutes ? parseInt(eventObj.metadata.minutes, 10) : pack.minutes);
+                await billingStore.addAddonCredits({
                   userId,
-                  periodKey,
-                  minutes,
-                  0,
+                  quotaType,
+                  amount,
                   paymentId
-                );
+                });
               }
             }
 
@@ -699,7 +722,10 @@ const billingRoute: FastifyPluginAsync = async (app) => {
     const entitlements = await entitlementService.getUserEntitlements(userId);
 
     return {
-      entitlements,
+      entitlements: {
+        ...entitlements,
+        email: user.email || undefined
+      },
       subscription
     };
   });

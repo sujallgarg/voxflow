@@ -154,14 +154,62 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
-    if (userId) {
+    // Only pass x-user-id if explicitly known, and never send fake fallback if token is present
+    if (userId && userId !== "user_me") {
       headers["x-user-id"] = userId;
-    } else {
+    } else if (!token) {
+      // In development / guest mode when no token exists
       headers["x-user-id"] = "user_me";
     }
     return headers;
   } catch {
-    return { "x-user-id": "user_me" };
+    return {};
+  }
+}
+
+async function checkPreflightQuota(type: "voice_typing" | "meeting"): Promise<{ allowed: boolean; reason?: string }> {
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/billing/subscription`, {
+      headers: authHeaders
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        return { allowed: false, reason: "Your session has expired. Please sign into VoxFlow on the website." };
+      }
+      return { allowed: true }; // allow server-side gate to make definitive decision
+    }
+    const data = await res.json();
+    const ent = data.entitlements;
+    if (!ent) return { allowed: true };
+
+    if (type === "voice_typing") {
+      const breakdown = ent.breakdown?.voiceTyping;
+      if (breakdown?.isExhausted) {
+        return {
+          allowed: false,
+          reason: `QUOTA_EXCEEDED: You have exhausted your monthly voice typing limit (${breakdown.used}/${breakdown.limit}). Upgrade to Pro for 1,000 requests/month.`
+        };
+      }
+    } else if (type === "meeting") {
+      const mtgBreakdown = ent.breakdown?.meetings;
+      const minsBreakdown = ent.breakdown?.transcriptionMinutes;
+      if (mtgBreakdown?.isExhausted) {
+        return {
+          allowed: false,
+          reason: `QUOTA_EXCEEDED: You have exhausted your monthly meeting limit (${mtgBreakdown.used}/${mtgBreakdown.limit}). Upgrade to Pro for 25 meetings/month.`
+        };
+      }
+      if (minsBreakdown?.isExhausted) {
+        return {
+          allowed: false,
+          reason: `QUOTA_EXCEEDED: You have exhausted your transcription time limit (${minsBreakdown.used}/${minsBreakdown.limit} mins). Upgrade to Pro for 300 mins/month.`
+        };
+      }
+    }
+    return { allowed: true };
+  } catch {
+    return { allowed: true };
   }
 }
 
@@ -414,6 +462,13 @@ async function handleStartMicRecording(
     return;
   }
 
+  // Pre-flight quota check: prevent recording if voice quota is exhausted
+  const quotaCheck = await checkPreflightQuota("voice_typing");
+  if (!quotaCheck.allowed) {
+    sendResponse({ success: false, reason: quotaCheck.reason });
+    return;
+  }
+
   isStartingCapture = true;
 
   try {
@@ -535,6 +590,13 @@ async function handleStartTabCapture(
 
   if (currentSession.mode === "processing") {
     sendResponse({ success: false, reason: "Previous audio is still being processed." });
+    return;
+  }
+
+  // Pre-flight quota check: prevent recording if voice quota is exhausted
+  const quotaCheck = await checkPreflightQuota("voice_typing");
+  if (!quotaCheck.allowed) {
+    sendResponse({ success: false, reason: quotaCheck.reason });
     return;
   }
 
@@ -691,6 +753,13 @@ async function handleStartMeetingCapture(
 
   if (currentSession.mode === "processing") {
     sendResponse({ success: false, reason: "Previous audio is still being processed." });
+    return;
+  }
+
+  // Pre-flight quota check: prevent meeting capture if meeting or minutes quota is exhausted
+  const quotaCheck = await checkPreflightQuota("meeting");
+  if (!quotaCheck.allowed) {
+    sendResponse({ success: false, reason: quotaCheck.reason });
     return;
   }
 
@@ -1328,13 +1397,43 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   if (msg.type === "SYNC_AUTH") {
     const token = msg.token as string | undefined;
     const userId = msg.userId as string | undefined;
-    const updates: Record<string, any> = {};
-    if (token) updates["voxflow_auth_token"] = token;
-    if (userId) updates["voxflow_user_id"] = userId;
-    if (Object.keys(updates).length > 0) {
-      void chrome.storage.local.set(updates);
-    }
-    sendResponse({ success: true });
+    (async () => {
+      const prev = await chrome.storage.local.get(["voxflow_user_id"]);
+      // Clear previous user's private data if account switched
+      if (prev.voxflow_user_id && userId && prev.voxflow_user_id !== userId) {
+        currentSession.transcript = "";
+        currentSession.finalText = "";
+        currentSession.meetingId = undefined;
+        currentSession.meetingTitle = undefined;
+        currentSession.meetingLink = undefined;
+        currentSession.error = null;
+        await persistSession();
+      }
+      const updates: Record<string, any> = {};
+      if (token) updates["voxflow_auth_token"] = token;
+      if (userId) updates["voxflow_user_id"] = userId;
+      if (Object.keys(updates).length > 0) {
+        await chrome.storage.local.set(updates);
+      }
+      sendResponse({ success: true });
+    })();
+    return true;
+  }
+
+  // 0b. Auth Clear / Logout Synchronization from Web App
+  if (msg.type === "CLEAR_AUTH") {
+    (async () => {
+      await chrome.storage.local.remove(["voxflow_auth_token", "voxflow_user_id"]);
+      // Clear user-specific meeting/session state to prevent private data leakage
+      currentSession.transcript = "";
+      currentSession.finalText = "";
+      currentSession.meetingId = undefined;
+      currentSession.meetingTitle = undefined;
+      currentSession.meetingLink = undefined;
+      currentSession.error = null;
+      await persistSession();
+      sendResponse({ success: true });
+    })();
     return true;
   }
 
@@ -1441,6 +1540,16 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
         if (res.ok) {
           const data = await res.json();
           sendResponse({ success: true, entitlements: data.entitlements, usage: data.entitlements?.usage });
+        } else if (res.status === 401) {
+          // Token expired or invalid: clear local credentials and private session state
+          await chrome.storage.local.remove(["voxflow_auth_token", "voxflow_user_id"]);
+          currentSession.transcript = "";
+          currentSession.finalText = "";
+          currentSession.meetingId = undefined;
+          currentSession.meetingTitle = undefined;
+          currentSession.meetingLink = undefined;
+          await persistSession();
+          sendResponse({ success: false, error: "SESSION_EXPIRED", code: 401 });
         } else {
           sendResponse({ success: false, error: `Failed to fetch usage (${res.status})` });
         }

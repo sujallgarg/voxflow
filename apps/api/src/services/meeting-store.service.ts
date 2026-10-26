@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -10,7 +13,7 @@ const MEETINGS_FILE = path.join(DATA_DIR, "meetings.json");
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface Participant {
   id: string;
@@ -60,6 +63,7 @@ export interface MeetingRecord {
   date: string;
   time: string;
   duration: string;
+  durationSeconds?: number;
   status: "completed" | "upcoming" | "processing";
   primaryLanguages: string[];
   summaryPreview: string;

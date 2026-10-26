@@ -100,18 +100,27 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 /* Common Layout Containers */
 .container {
   width: 100%;
-  max-width: 1160px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px;
 }
 
 .section-spacing {
-  padding: 80px 0;
+  padding: 92px 0;
+}
+
+@media (max-width: 1024px) {
+  .section-spacing {
+    padding: 64px 0;
+  }
 }
 
 @media (max-width: 768px) {
+  .container {
+    padding: 0 16px;
+  }
   .section-spacing {
-    padding: 56px 0;
+    padding: 48px 0;
   }
 }
 

@@ -68,6 +68,7 @@ export const UsageAddonSlider: React.FC<UsageAddonSliderProps> = ({
       return;
     }
     if (!quote?.pack?.id) return;
+    if (purchasing) return;
 
     try {
       setPurchasing(true);
