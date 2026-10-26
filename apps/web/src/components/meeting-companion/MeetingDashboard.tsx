@@ -5,7 +5,6 @@ import {
   getUserMeetings,
   getUserTranscriptions,
   calculateUserStats,
-  setCurrentUser,
   deleteUserMeeting,
   deleteUserTranscription,
   syncMeetingsFromBackend,
@@ -93,15 +92,6 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
     }
   };
 
-  const handleSwitchAccount = (newUserId: string, name: string, email: string) => {
-    setCurrentUser({
-      id: newUserId,
-      name,
-      email,
-      createdAt: new Date().toISOString()
-    });
-  };
-
   return (
     <div style={{ minHeight: "100vh", background: "#ffffff", paddingBottom: "80px" }}>
       {/* Top Header / Breadcrumbs */}
@@ -167,42 +157,33 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
 
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             {/* User Account Switcher */}
+            {/* User Account Info */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
                 background: "#fafafa",
-                padding: "4px 10px",
+                padding: "6px 12px",
                 borderRadius: "6px",
                 border: "1px solid #e5e5e5",
                 fontSize: "0.8125rem"
               }}
             >
               <span style={{ color: "#666666" }}>Account:</span>
-              <select
-                aria-label="Active User Account"
-                value={currentUser.id}
-                onChange={(e) => {
-                  if (e.target.value === "user_me") {
-                    handleSwitchAccount("user_me", "My Account", "user@voxflow.ai");
-                  } else {
-                    handleSwitchAccount("user_tester", "Test Account 2", "tester@company.com");
-                  }
-                }}
+              <span
                 style={{
-                  border: "none",
-                  background: "transparent",
                   fontWeight: 600,
                   color: "#111111",
-                  outline: "none",
-                  cursor: "pointer",
-                  fontSize: "0.8125rem"
+                  maxWidth: "180px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
                 }}
+                title={currentUser.email || currentUser.name}
               >
-                <option value="user_me">Primary Account ({currentUser.id === "user_me" ? "Active" : "user@voxflow.ai"})</option>
-                <option value="user_tester">Test Account 2 ({currentUser.id === "user_tester" ? "Active" : "tester@company.com"})</option>
-              </select>
+                {currentUser.name || currentUser.email || "My Account"}
+              </span>
             </div>
 
             {/* Plan Badge */}

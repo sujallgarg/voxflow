@@ -134,7 +134,20 @@ for (const relFile of staticFiles) {
     console.warn(`⚠️ Warning: ${relFile} not found to copy.`);
   }
 }
-console.log("✓ Static assets copied to dist/");
+
+// Copy icons directory to dist/icons
+const iconsSrcDir = path.join(extensionRoot, "src", "icons");
+const iconsDistDir = path.join(distDir, "icons");
+if (fs.existsSync(iconsSrcDir)) {
+  if (!fs.existsSync(iconsDistDir)) {
+    fs.mkdirSync(iconsDistDir, { recursive: true });
+  }
+  const iconFiles = fs.readdirSync(iconsSrcDir);
+  for (const file of iconFiles) {
+    fs.copyFileSync(path.join(iconsSrcDir, file), path.join(iconsDistDir, file));
+  }
+}
+console.log("✓ Static assets & icons copied to dist/");
 
 console.log("\n✨ VoxFlow extension build completed successfully!");
 console.log(`   Output: ${path.relative(process.cwd(), distDir)}\n`);

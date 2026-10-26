@@ -1,5 +1,11 @@
 import { billingStore } from "./billing/billing-store.service.js";
-import { PLAN_CONFIGS, type PlanId, type UserEntitlements, type SubscriptionStatus } from "@voxflow/shared";
+import {
+  PLAN_CONFIGS,
+  type PlanId,
+  type UserEntitlements,
+  type SubscriptionStatus,
+  type FeatureUsageBreakdown
+} from "@voxflow/shared";
 
 export type FeatureKey =
   | "voice_dictation"
@@ -14,9 +20,13 @@ export interface EntitlementCheckResult {
   allowed: boolean;
   code?: "SUBSCRIPTION_REQUIRED" | "USAGE_LIMIT_REACHED" | "SUBSCRIPTION_EXPIRED";
   reason?: string;
+  quotaType?: string;
   currentUsage?: number;
   limit?: number;
+  remaining?: number;
+  unit?: string;
   resetDate?: string;
+  upgradeUrl?: string;
 }
 
 export class EntitlementService {
@@ -96,26 +106,37 @@ export class EntitlementService {
     const usedSeconds = quota.transcriptionSecondsUsed ?? ((quota.voiceTranscriptionsUsed || 0) * 60);
     const usedMinutes = Number((usedSeconds / 60).toFixed(1));
 
-    const voicePurchasedMins = quota.purchasedVoiceCredits || 0;
-    const voiceUsedMins = quota.usedVoiceCredits || 0;
-    const voiceRemainingPurchasedMins = Math.max(0, voicePurchasedMins - voiceUsedMins);
+    const voiceAddon = billingStore.getAvailableAddonCredits(userId, "transcription_minutes");
+    const voicePurchasedMins = voiceAddon.total;
+    const voiceUsedMins = voiceAddon.used;
+    const voiceRemainingPurchasedMins = voiceAddon.remaining;
     const voiceMonthlyRemainingMins = Math.max(0, Number((voiceLimit - (usedSeconds / 60)).toFixed(1)));
     const voiceTotalRemainingMins = Number((voiceMonthlyRemainingMins + voiceRemainingPurchasedMins).toFixed(1));
 
-    const meetingsPurchased = quota.purchasedMeetingCredits || 0;
-    const meetingsUsedCredits = quota.usedMeetingCredits || 0;
-    const meetingsRemainingCredits = Math.max(0, meetingsPurchased - meetingsUsedCredits);
+    const meetingsAddon = billingStore.getAvailableAddonCredits(userId, "meeting");
+    const meetingsPurchased = meetingsAddon.total;
+    const meetingsUsedCredits = meetingsAddon.used;
+    const meetingsRemainingCredits = meetingsAddon.remaining;
     const meetingsMonthlyRemaining = Math.max(0, meetingsLimit - quota.meetingsUsed);
     const meetingsTotalRemaining = meetingsMonthlyRemaining + meetingsRemainingCredits;
 
+    const voiceTypingAddon = billingStore.getAvailableAddonCredits(userId, "voice_typing");
+    const voiceTypingPurchased = voiceTypingAddon.total;
+    const voiceTypingUsedCredits = voiceTypingAddon.used;
+    const voiceTypingRemainingCredits = voiceTypingAddon.remaining;
     const voiceTypingUsed = quota.voiceTypingUsed ?? 0;
-    const voiceTypingRemaining = Math.max(0, voiceTypingLimit - voiceTypingUsed);
+    const voiceTypingMonthlyRemaining = Math.max(0, voiceTypingLimit - voiceTypingUsed);
+    const voiceTypingTotalRemaining = voiceTypingMonthlyRemaining + voiceTypingRemainingCredits;
 
+    const textCorrectionAddon = billingStore.getAvailableAddonCredits(userId, "text_correction");
     const textCorrectionsUsed = quota.textCorrectionsUsed ?? 0;
-    const textCorrectionsRemaining = Math.max(0, textCorrectionLimit - textCorrectionsUsed);
+    const textCorrectionMonthlyRemaining = Math.max(0, textCorrectionLimit - textCorrectionsUsed);
+    const textCorrectionTotalRemaining = textCorrectionMonthlyRemaining + textCorrectionAddon.remaining;
 
+    const summariesAddon = billingStore.getAvailableAddonCredits(userId, "summary");
     const summariesUsed = quota.meetingSummariesUsed ?? 0;
-    const summariesRemaining = Math.max(0, summaryLimit - summariesUsed);
+    const summariesMonthlyRemaining = Math.max(0, summaryLimit - summariesUsed);
+    const summariesTotalRemaining = summariesMonthlyRemaining + summariesAddon.remaining;
 
     const resetDate = this.getNextQuotaResetDate();
 
@@ -136,26 +157,26 @@ export class EntitlementService {
     const voiceTypingBreakdown: FeatureUsageBreakdown = {
       used: voiceTypingUsed,
       limit: voiceTypingLimit,
-      remaining: voiceTypingRemaining,
-      isExhausted: voiceTypingRemaining <= 0,
+      remaining: voiceTypingMonthlyRemaining,
+      isExhausted: voiceTypingTotalRemaining <= 0,
       unit: "requests",
-      purchasedCredits: 0,
-      usedCredits: 0,
-      remainingCredits: 0,
-      totalRemaining: voiceTypingRemaining
+      purchasedCredits: voiceTypingPurchased,
+      usedCredits: voiceTypingUsedCredits,
+      remainingCredits: voiceTypingRemainingCredits,
+      totalRemaining: voiceTypingTotalRemaining
     };
 
     // 3. AI Text Correction Breakdown
     const textCorrectionBreakdown: FeatureUsageBreakdown = {
       used: textCorrectionsUsed,
       limit: textCorrectionLimit,
-      remaining: textCorrectionsRemaining,
-      isExhausted: textCorrectionsRemaining <= 0,
+      remaining: textCorrectionMonthlyRemaining,
+      isExhausted: textCorrectionTotalRemaining <= 0,
       unit: "requests",
-      purchasedCredits: 0,
-      usedCredits: 0,
-      remainingCredits: 0,
-      totalRemaining: textCorrectionsRemaining
+      purchasedCredits: textCorrectionAddon.total,
+      usedCredits: textCorrectionAddon.used,
+      remainingCredits: textCorrectionAddon.remaining,
+      totalRemaining: textCorrectionTotalRemaining
     };
 
     // 4. Meetings Breakdown
@@ -175,13 +196,13 @@ export class EntitlementService {
     const summariesBreakdown: FeatureUsageBreakdown = {
       used: summariesUsed,
       limit: summaryLimit,
-      remaining: summariesRemaining,
-      isExhausted: summariesRemaining <= 0,
+      remaining: summariesMonthlyRemaining,
+      isExhausted: summariesTotalRemaining <= 0,
       unit: "summaries",
-      purchasedCredits: 0,
-      usedCredits: 0,
-      remainingCredits: 0,
-      totalRemaining: summariesRemaining
+      purchasedCredits: summariesAddon.total,
+      usedCredits: summariesAddon.used,
+      remainingCredits: summariesAddon.remaining,
+      totalRemaining: summariesTotalRemaining
     };
 
     const detailedBreakdown = {
@@ -309,8 +330,8 @@ export class EntitlementService {
     if (feature === "meeting") {
       const limit = entitlements.limits.monthlyMeetings ?? 3;
       const used = quota.meetingsUsed;
-      const remainingCredits = Math.max(0, (quota.purchasedMeetingCredits || 0) - (quota.usedMeetingCredits || 0));
-      const totalRemaining = Math.max(0, limit - used) + remainingCredits;
+      const addon = billingStore.getAvailableAddonCredits(userId, "meeting");
+      const totalRemaining = Math.max(0, limit - used) + addon.remaining;
       if (totalRemaining < amount) {
         return {
           allowed: false,
@@ -330,14 +351,15 @@ export class EntitlementService {
       return { allowed: true, currentUsage: used, limit, remaining: totalRemaining, unit: "meetings" };
     }
 
-    if (feature === "transcription_seconds") {
+    if (feature === "transcription_seconds" || feature === "voice") {
       const limitMinutes = entitlements.limits.transcriptionMinutes ?? 30;
       const limitSeconds = limitMinutes * 60;
       const usedSeconds = quota.transcriptionSecondsUsed ?? ((quota.voiceTranscriptionsUsed || 0) * 60);
-      const remainingCreditsSeconds = Math.max(0, ((quota.purchasedVoiceCredits || 0) - (quota.usedVoiceCredits || 0)) * 60);
-      const totalRemainingSeconds = Math.max(0, limitSeconds - usedSeconds) + remainingCreditsSeconds;
+      const addon = billingStore.getAvailableAddonCredits(userId, "transcription_minutes");
+      const totalRemainingSeconds = Math.max(0, limitSeconds - usedSeconds) + addon.remaining * 60;
+      const secondsNeeded = feature === "voice" ? amount * 60 : amount;
 
-      if (totalRemainingSeconds < amount) {
+      if (totalRemainingSeconds < secondsNeeded) {
         return {
           allowed: false,
           code: "USAGE_LIMIT_REACHED",
@@ -359,8 +381,9 @@ export class EntitlementService {
     if (feature === "voice_typing") {
       const limit = entitlements.limits.voiceTypingRequests ?? 100;
       const used = quota.voiceTypingUsed ?? 0;
-      const remaining = Math.max(0, limit - used);
-      if (remaining < amount) {
+      const addon = billingStore.getAvailableAddonCredits(userId, "voice_typing");
+      const totalRemaining = Math.max(0, limit - used) + addon.remaining;
+      if (totalRemaining < amount) {
         return {
           allowed: false,
           code: "USAGE_LIMIT_REACHED",
@@ -370,20 +393,21 @@ export class EntitlementService {
             : `Monthly voice typing limit (${limit} requests) reached. Upgrade to Pro for 1,000 requests.`,
           currentUsage: used,
           limit,
-          remaining,
+          remaining: totalRemaining,
           unit: "requests",
           resetDate: this.getNextQuotaResetDate(),
           upgradeUrl: "#/pricing"
         };
       }
-      return { allowed: true, currentUsage: used, limit, remaining, unit: "requests" };
+      return { allowed: true, currentUsage: used, limit, remaining: totalRemaining, unit: "requests" };
     }
 
     if (feature === "text_correction") {
       const limit = entitlements.limits.textCorrectionRequests ?? 50;
       const used = quota.textCorrectionsUsed ?? 0;
-      const remaining = Math.max(0, limit - used);
-      if (remaining < amount) {
+      const addon = billingStore.getAvailableAddonCredits(userId, "text_correction");
+      const totalRemaining = Math.max(0, limit - used) + addon.remaining;
+      if (totalRemaining < amount) {
         return {
           allowed: false,
           code: "USAGE_LIMIT_REACHED",
@@ -393,20 +417,21 @@ export class EntitlementService {
             : `Monthly text correction limit (${limit} requests) reached. Upgrade to Pro for 500 requests.`,
           currentUsage: used,
           limit,
-          remaining,
+          remaining: totalRemaining,
           unit: "requests",
           resetDate: this.getNextQuotaResetDate(),
           upgradeUrl: "#/pricing"
         };
       }
-      return { allowed: true, currentUsage: used, limit, remaining, unit: "requests" };
+      return { allowed: true, currentUsage: used, limit, remaining: totalRemaining, unit: "requests" };
     }
 
     if (feature === "summary") {
       const limit = entitlements.limits.meetingSummaries ?? 3;
       const used = quota.meetingSummariesUsed ?? 0;
-      const remaining = Math.max(0, limit - used);
-      if (remaining < amount) {
+      const addon = billingStore.getAvailableAddonCredits(userId, "summary");
+      const totalRemaining = Math.max(0, limit - used) + addon.remaining;
+      if (totalRemaining < amount) {
         return {
           allowed: false,
           code: "USAGE_LIMIT_REACHED",
@@ -416,13 +441,13 @@ export class EntitlementService {
             : `Monthly meeting summaries limit (${limit}) reached. Upgrade to Pro for 25 summaries.`,
           currentUsage: used,
           limit,
-          remaining,
+          remaining: totalRemaining,
           unit: "summaries",
           resetDate: this.getNextQuotaResetDate(),
           upgradeUrl: "#/pricing"
         };
       }
-      return { allowed: true, currentUsage: used, limit, remaining, unit: "summaries" };
+      return { allowed: true, currentUsage: used, limit, remaining: totalRemaining, unit: "summaries" };
     }
 
     return { allowed: true };
@@ -481,24 +506,33 @@ export class EntitlementService {
         const monthlyLimitSeconds = monthlyLimitMins * 60;
         const secondsToConsume = feature === "transcription_seconds" ? amount : amount * 60;
         const monthlyUsedSeconds = quota.transcriptionSecondsUsed ?? ((quota.voiceTranscriptionsUsed || 0) * 60);
+        const baseRemainingSeconds = Math.max(0, monthlyLimitSeconds - monthlyUsedSeconds);
 
-        const purchasedMins = quota.purchasedVoiceCredits || 0;
-        const usedCreditsMins = quota.usedVoiceCredits || 0;
-        const remainingCreditsSeconds = Math.max(0, (purchasedMins - usedCreditsMins) * 60);
+        const addon = billingStore.getAvailableAddonCredits(userId, "transcription_minutes");
+        const remainingCreditsSeconds = addon.remaining * 60;
 
         // 1. Consume normal monthly allowance first
-        if (monthlyUsedSeconds + secondsToConsume <= monthlyLimitSeconds) {
+        if (secondsToConsume <= baseRemainingSeconds) {
           await billingStore.incrementUsageQuota(userId, periodKey, "transcription_seconds", secondsToConsume);
           const updatedMins = Number(((monthlyUsedSeconds + secondsToConsume) / 60).toFixed(1));
           return { allowed: true, currentUsage: updatedMins, limit: monthlyLimitMins, unit: "mins" };
         }
 
-        // 2. Consume purchased credits if available
-        if (remainingCreditsSeconds >= secondsToConsume) {
-          await billingStore.incrementUsedCredits(userId, periodKey, "transcription_seconds", secondsToConsume);
+        // 2. Consume from base allowance up to limit, then remainder from purchased credits
+        const neededFromCreditsSec = secondsToConsume - baseRemainingSeconds;
+        const neededCreditsMins = Math.ceil(neededFromCreditsSec / 60);
+
+        if (addon.remaining >= neededCreditsMins) {
+          if (baseRemainingSeconds > 0) {
+            await billingStore.incrementUsageQuota(userId, periodKey, "transcription_seconds", baseRemainingSeconds);
+          }
+          await billingStore.consumeAddonCredits(userId, "transcription_minutes", neededCreditsMins);
+          const currentQ = await billingStore.getUsageQuota(userId, periodKey);
+          currentQ.usedVoiceCredits = (currentQ.usedVoiceCredits || 0) + neededCreditsMins;
+          await billingStore.saveUsageQuota(currentQ);
           return {
             allowed: true,
-            currentUsage: Number((monthlyUsedSeconds / 60).toFixed(1)),
+            currentUsage: monthlyLimitMins,
             limit: monthlyLimitMins,
             unit: "mins",
             resetDate: this.getNextQuotaResetDate()
@@ -525,10 +559,35 @@ export class EntitlementService {
       if (feature === "voice_typing") {
         const limit = entitlements.limits.voiceTypingRequests ?? 100;
         const used = quota.voiceTypingUsed ?? 0;
-        if (used + amount <= limit) {
+        const baseRemaining = Math.max(0, limit - used);
+
+        if (amount <= baseRemaining) {
           await billingStore.incrementUsageQuota(userId, periodKey, "voice_typing", amount);
-          return { allowed: true, currentUsage: used + amount, limit, remaining: limit - (used + amount), unit: "requests" };
+          const addon = billingStore.getAvailableAddonCredits(userId, "voice_typing");
+          return { allowed: true, currentUsage: used + amount, limit, remaining: (limit - (used + amount)) + addon.remaining, unit: "requests" };
         }
+
+        // Base exhausted, consume available addon credits
+        const addon = billingStore.getAvailableAddonCredits(userId, "voice_typing");
+        const neededFromAddon = amount - baseRemaining;
+        if (addon.remaining >= neededFromAddon) {
+          if (baseRemaining > 0) {
+            await billingStore.incrementUsageQuota(userId, periodKey, "voice_typing", baseRemaining);
+          }
+          await billingStore.consumeAddonCredits(userId, "voice_typing", neededFromAddon);
+          const currentQ = await billingStore.getUsageQuota(userId, periodKey);
+          currentQ.usedVoiceTypingCredits = (currentQ.usedVoiceTypingCredits || 0) + neededFromAddon;
+          await billingStore.saveUsageQuota(currentQ);
+          return {
+            allowed: true,
+            currentUsage: limit,
+            limit,
+            remaining: addon.remaining - neededFromAddon,
+            unit: "requests",
+            resetDate: this.getNextQuotaResetDate()
+          };
+        }
+
         return {
           allowed: false,
           code: "USAGE_LIMIT_REACHED",
@@ -548,10 +607,31 @@ export class EntitlementService {
       if (feature === "text_correction") {
         const limit = entitlements.limits.textCorrectionRequests ?? 50;
         const used = quota.textCorrectionsUsed ?? 0;
-        if (used + amount <= limit) {
+        const baseRemaining = Math.max(0, limit - used);
+
+        if (amount <= baseRemaining) {
           await billingStore.incrementUsageQuota(userId, periodKey, "text_correction", amount);
-          return { allowed: true, currentUsage: used + amount, limit, remaining: limit - (used + amount), unit: "requests" };
+          const addon = billingStore.getAvailableAddonCredits(userId, "text_correction");
+          return { allowed: true, currentUsage: used + amount, limit, remaining: (limit - (used + amount)) + addon.remaining, unit: "requests" };
         }
+
+        const addon = billingStore.getAvailableAddonCredits(userId, "text_correction");
+        const neededFromAddon = amount - baseRemaining;
+        if (addon.remaining >= neededFromAddon) {
+          if (baseRemaining > 0) {
+            await billingStore.incrementUsageQuota(userId, periodKey, "text_correction", baseRemaining);
+          }
+          await billingStore.consumeAddonCredits(userId, "text_correction", neededFromAddon);
+          return {
+            allowed: true,
+            currentUsage: limit,
+            limit,
+            remaining: addon.remaining - neededFromAddon,
+            unit: "requests",
+            resetDate: this.getNextQuotaResetDate()
+          };
+        }
+
         return {
           allowed: false,
           code: "USAGE_LIMIT_REACHED",
@@ -571,10 +651,31 @@ export class EntitlementService {
       if (feature === "summary") {
         const limit = entitlements.limits.meetingSummaries ?? 3;
         const used = quota.meetingSummariesUsed ?? 0;
-        if (used + amount <= limit) {
+        const baseRemaining = Math.max(0, limit - used);
+
+        if (amount <= baseRemaining) {
           await billingStore.incrementUsageQuota(userId, periodKey, "summary", amount);
-          return { allowed: true, currentUsage: used + amount, limit, remaining: limit - (used + amount), unit: "summaries" };
+          const addon = billingStore.getAvailableAddonCredits(userId, "summary");
+          return { allowed: true, currentUsage: used + amount, limit, remaining: (limit - (used + amount)) + addon.remaining, unit: "summaries" };
         }
+
+        const addon = billingStore.getAvailableAddonCredits(userId, "summary");
+        const neededFromAddon = amount - baseRemaining;
+        if (addon.remaining >= neededFromAddon) {
+          if (baseRemaining > 0) {
+            await billingStore.incrementUsageQuota(userId, periodKey, "summary", baseRemaining);
+          }
+          await billingStore.consumeAddonCredits(userId, "summary", neededFromAddon);
+          return {
+            allowed: true,
+            currentUsage: limit,
+            limit,
+            remaining: addon.remaining - neededFromAddon,
+            unit: "summaries",
+            resetDate: this.getNextQuotaResetDate()
+          };
+        }
+
         return {
           allowed: false,
           code: "USAGE_LIMIT_REACHED",
@@ -594,23 +695,28 @@ export class EntitlementService {
       if (feature === "meeting") {
         const monthlyLimit = entitlements.limits.monthlyMeetings ?? 3;
         const monthlyUsed = quota.meetingsUsed;
-        const purchased = quota.purchasedMeetingCredits || 0;
-        const usedCredits = quota.usedMeetingCredits || 0;
-        const remainingCredits = Math.max(0, purchased - usedCredits);
+        const baseRemaining = Math.max(0, monthlyLimit - monthlyUsed);
 
         // 1. Consume normal monthly allowance first
-        if (monthlyUsed + amount <= monthlyLimit) {
+        if (amount <= baseRemaining) {
           await billingStore.incrementUsageQuota(userId, periodKey, "meeting", amount);
-          return { allowed: true, currentUsage: monthlyUsed + amount, limit: monthlyLimit, unit: "meetings" };
+          const addon = billingStore.getAvailableAddonCredits(userId, "meeting");
+          return { allowed: true, currentUsage: monthlyUsed + amount, limit: monthlyLimit, remaining: (monthlyLimit - (monthlyUsed + amount)) + addon.remaining, unit: "meetings" };
         }
 
         // 2. Consume purchased credits if available
-        if (remainingCredits >= amount) {
-          await billingStore.incrementUsedCredits(userId, periodKey, "meeting", amount);
+        const addon = billingStore.getAvailableAddonCredits(userId, "meeting");
+        const neededFromAddon = amount - baseRemaining;
+        if (addon.remaining >= neededFromAddon) {
+          if (baseRemaining > 0) {
+            await billingStore.incrementUsageQuota(userId, periodKey, "meeting", baseRemaining);
+          }
+          await billingStore.consumeAddonCredits(userId, "meeting", neededFromAddon);
           return {
             allowed: true,
-            currentUsage: monthlyUsed,
+            currentUsage: monthlyLimit,
             limit: monthlyLimit,
+            remaining: addon.remaining - neededFromAddon,
             unit: "meetings",
             resetDate: this.getNextQuotaResetDate()
           };

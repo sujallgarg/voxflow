@@ -138,7 +138,7 @@ describe("VoxFlow Complete Usage Accounting & Quota Enforcement Test Suite", { t
 
     const ent = await entitlementService.getUserEntitlements(userId);
     expect(ent.usage.transcriptionSecondsUsed).toBe(90);
-    expect(ent.breakdown.transcriptionMinutes.used).toBe(1.5); // 90s = 1.5 mins
+    expect(ent.breakdown!.transcriptionMinutes.used).toBe(1.5); // 90s = 1.5 mins
   });
 
   // 6. Failed transcription does not incorrectly count as successful usage
@@ -173,15 +173,26 @@ describe("VoxFlow Complete Usage Accounting & Quota Enforcement Test Suite", { t
     expect(firstResult.allowed).toBe(true);
 
     // Save meeting as completed
-    const completedMeeting: MeetingRecord = {
+    const completedMeeting: Parameters<typeof meetingStore.saveMeeting>[1] = {
       id: meetingId,
       userId,
       title: "Design Sync",
-      transcript: "Transcript content",
-      notes: "Design sync notes",
-      duration: 180,
+      transcript: [
+        {
+          id: "utt-1",
+          speakerId: userId,
+          speakerName: "Host",
+          speakerRole: "Host",
+          isCurrentUser: true,
+          timestamp: "00:00",
+          originalLanguage: "en",
+          originalText: "Transcript content"
+        }
+      ],
+      initialNotes: "Design sync notes",
+      duration: "3 mins",
+      durationSeconds: 180,
       status: "completed",
-      source: "web",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

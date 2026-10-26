@@ -795,10 +795,10 @@ describe("VoxFlow Billing & Security Audit Test Suite", { timeout: 30000 }, () =
     const newEnd = new Date(existingSub!.currentPeriodEnd);
     expect(newEnd.getTime()).toBeGreaterThan(originalEnd.getTime()); // Period extended by 30 days
 
-    // 5. Verify usage quota was reset to 0 so user has fresh quota immediately
+    // 5. Verify usage continuity: existing usage consumed is preserved, NOT reset to 0
     const quota = await billingStore.getUsageQuota(userId, periodKey);
-    expect(quota.voiceTranscriptionsUsed).toBe(0);
-    expect(quota.meetingsUsed).toBe(0);
+    expect(quota.voiceTranscriptionsUsed).toBe(2000);
+    expect(quota.meetingsUsed).toBe(100);
 
     // 6. Verify an invoice for $9 was saved
     const invoices = await billingStore.getInvoicesByUserId(userId);

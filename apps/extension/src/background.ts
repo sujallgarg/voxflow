@@ -154,14 +154,16 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
-    if (userId) {
+    // Only pass x-user-id if explicitly known, and never send fake fallback if token is present
+    if (userId && userId !== "user_me") {
       headers["x-user-id"] = userId;
-    } else {
+    } else if (!token) {
+      // In development / guest mode when no token exists
       headers["x-user-id"] = "user_me";
     }
     return headers;
   } catch {
-    return { "x-user-id": "user_me" };
+    return {};
   }
 }
 

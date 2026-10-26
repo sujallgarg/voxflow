@@ -61,6 +61,33 @@ export function buildServer() {
         }
       }
 
+      // Browser extension origin check
+      if (origin.startsWith("chrome-extension://")) {
+        // In development/test, allow unpacked extension origins
+        if (!isProd) {
+          cb(null, true);
+          return;
+        }
+
+        // In production, require extension ID to match configured VoxFlow extension IDs
+        const allowedExtIds = [
+          process.env.CHROME_EXTENSION_ID,
+          ...(process.env.ALLOWED_EXTENSION_IDS ? process.env.ALLOWED_EXTENSION_IDS.split(",") : [])
+        ]
+          .map((id) => id?.trim())
+          .filter((id): id is string => Boolean(id));
+
+        const extId = origin.replace("chrome-extension://", "").split("/")[0];
+        if (allowedExtIds.length > 0 && allowedExtIds.includes(extId)) {
+          cb(null, true);
+          return;
+        }
+
+        // Reject untrusted extension origins in production
+        cb(null, false);
+        return;
+      }
+
       // Default fallback
       cb(null, false);
     },

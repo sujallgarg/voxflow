@@ -145,8 +145,21 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
   }
 };
 
+export interface AddonCreditRecord {
+  id: string;
+  userId: string;
+  quotaType: "transcription_minutes" | "voice_typing" | "meeting" | "text_correction" | "summary";
+  amount: number;
+  usedAmount: number;
+  paymentId: string;
+  createdAt: string;
+  expiresAt?: string | null;
+}
+
 export interface AddOnPack {
   id: string;
+  quotaType?: "transcription_minutes" | "voice_typing" | "meeting" | "text_correction" | "summary";
+  amount?: number;
   minutes: number;
   priceUsd: number;
   priceCents: number;
@@ -158,6 +171,8 @@ export interface AddOnPack {
 export const ADDON_PACKS: AddOnPack[] = [
   {
     id: "addon_transcription_60",
+    quotaType: "transcription_minutes",
+    amount: 60,
     minutes: 60,
     priceUsd: 2,
     priceCents: 200,
@@ -167,6 +182,8 @@ export const ADDON_PACKS: AddOnPack[] = [
   },
   {
     id: "addon_transcription_150",
+    quotaType: "transcription_minutes",
+    amount: 150,
     minutes: 150,
     priceUsd: 4,
     priceCents: 400,
@@ -176,12 +193,25 @@ export const ADDON_PACKS: AddOnPack[] = [
   },
   {
     id: "addon_transcription_300",
+    quotaType: "transcription_minutes",
+    amount: 300,
     minutes: 300,
     priceUsd: 7,
     priceCents: 700,
     proposed: true,
     label: "300 Additional Minutes",
     description: "300 additional voice transcription minutes (Proposed: $7 USD one-time)"
+  },
+  {
+    id: "addon_requests_100",
+    quotaType: "voice_typing",
+    amount: 100,
+    minutes: 0,
+    priceUsd: 3,
+    priceCents: 300,
+    proposed: true,
+    label: "100 Voice Typing Requests",
+    description: "100 additional voice typing requests (Proposed: $3 USD one-time)"
   }
 ];
 
@@ -232,8 +262,10 @@ export interface UserUsageQuota {
   meetingSummariesUsed?: number;
   purchasedVoiceCredits?: number;
   purchasedMeetingCredits?: number;
+  purchasedVoiceTypingCredits?: number;
   usedVoiceCredits?: number;
   usedMeetingCredits?: number;
+  usedVoiceTypingCredits?: number;
   updatedAt: string;
 }
 

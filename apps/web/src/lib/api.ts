@@ -1,7 +1,9 @@
 import { supabase } from "./supabase";
 
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:3001";
+const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+export const API_BASE_URL = configuredApiUrl
+  ? configuredApiUrl.replace(/\/+$/, "")
+  : (import.meta.env.PROD ? "" : "http://localhost:3001");
 
 export interface LanguageResult {
   primaryLanguage: string;

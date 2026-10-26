@@ -76,6 +76,7 @@ export interface MeetingRecord {
   date: string;
   time: string;
   duration: string;
+  durationSeconds?: number;
   status: "completed" | "upcoming" | "processing";
   primaryLanguages: string[];
   summaryPreview: string;

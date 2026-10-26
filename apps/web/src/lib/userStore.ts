@@ -32,11 +32,11 @@ export interface UserStats {
   totalTranscriptions: number;
 }
 
-// Default current user profile
+// Default current user profile for unauthenticated local state
 const DEFAULT_USER: UserProfile = {
   id: "user_me",
   name: "My Account",
-  email: "user@voxflow.ai",
+  email: "",
   createdAt: new Date().toISOString()
 };
 
