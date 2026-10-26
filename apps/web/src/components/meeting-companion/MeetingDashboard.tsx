@@ -14,6 +14,7 @@ import {
 } from "../../lib/userStore";
 import { UpgradeModal } from "../billing/UpgradeModal";
 import { PremiumBadge } from "../billing/PremiumBadge";
+import { DashboardUpgradeBanner } from "../billing/DashboardUpgradeBanner";
 import { useSubscription } from "../../lib/subscriptionContext";
 
 interface MeetingDashboardProps {
@@ -102,13 +103,13 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
           position: "sticky",
           top: 0,
           zIndex: 40,
-          height: "68px"
+          minHeight: "68px",
+          padding: "8px 0"
         }}
       >
         <div
           className="container"
           style={{
-            height: "100%",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -220,7 +221,15 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
       />
 
       {/* Main Container */}
-      <main className="container" style={{ paddingTop: "32px" }}>
+      <main className="container" style={{ paddingTop: "24px" }}>
+        {/* Dashboard Pro Upgrade Banner (Non-intrusive) */}
+        <DashboardUpgradeBanner
+          entitlements={entitlements}
+          onExplorePro={() => {
+            window.location.hash = "#pricing";
+          }}
+        />
+
         {/* Storage Notice */}
         <div
           style={{

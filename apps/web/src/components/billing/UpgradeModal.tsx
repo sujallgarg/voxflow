@@ -115,10 +115,11 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
           background: "#ffffff",
           borderRadius: "8px",
           border: "1px solid #e5e5e5",
-          padding: "32px 28px",
+          padding: "clamp(20px, 4vw, 32px) clamp(16px, 4vw, 28px)",
           boxShadow: "0 20px 40px rgba(0,0,0,0.12)",
           maxHeight: "90vh",
-          overflowY: "auto"
+          overflowY: "auto",
+          boxSizing: "border-box"
         }}
         onClick={(e) => e.stopPropagation()}
       >

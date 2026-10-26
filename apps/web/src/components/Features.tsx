@@ -126,7 +126,7 @@ export const Features: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
             gap: "24px",
             maxWidth: "1120px",
             margin: "0 auto"
@@ -139,7 +139,7 @@ export const Features: React.FC = () => {
                 background: "#ffffff",
                 border: "1px solid #e5e5e5",
                 borderRadius: "12px",
-                padding: "32px 28px",
+                padding: "clamp(20px, 4vw, 32px) clamp(16px, 3.5vw, 28px)",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",

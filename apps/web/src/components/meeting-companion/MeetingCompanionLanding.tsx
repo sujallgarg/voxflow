@@ -15,8 +15,8 @@ export const MeetingCompanionLanding: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
-            gap: "48px",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+            gap: "clamp(24px, 5vw, 48px)",
             alignItems: "center",
             maxWidth: "1120px",
             margin: "0 auto"

@@ -85,12 +85,15 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
         style={{
           width: "100%",
           maxWidth: "460px",
+          maxHeight: "90vh",
+          overflowY: "auto",
           background: "#ffffff",
           borderRadius: "8px",
-          padding: "32px 28px",
+          padding: "clamp(20px, 4vw, 32px) clamp(16px, 4vw, 28px)",
           position: "relative",
           border: "1px solid #e5e5e5",
-          boxShadow: "0 10px 30px rgba(0, 0, 0, 0.08)"
+          boxShadow: "0 10px 30px rgba(0, 0, 0, 0.08)",
+          boxSizing: "border-box"
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -103,8 +106,8 @@ export const EarlyAccessModal: React.FC<EarlyAccessModalProps> = ({
             position: "absolute",
             top: "16px",
             right: "16px",
-            width: "30px",
-            height: "30px",
+            width: "36px",
+            height: "36px",
             borderRadius: "6px",
             background: "#ffffff",
             border: "1px solid #e5e5e5",

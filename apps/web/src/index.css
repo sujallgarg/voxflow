@@ -281,7 +281,11 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 }
 
 .mobile-toggle {
-  display: flex;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 @media (min-width: 768px) {
@@ -296,6 +300,88 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .mobile-toggle {
     display: none !important;
   }
+}
+
+/* Fluid responsive grid for Interactive Demo */
+.demo-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 900px) {
+  .demo-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Horizontal scroll container for narrow tabs (e.g. Meeting Workspace) */
+.horizontal-scroll-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  max-width: 100%;
+}
+
+.horizontal-scroll-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* Touch-friendly buttons and controls on mobile */
+@media (max-width: 640px) {
+  .btn-primary, .btn-secondary, .btn-outline {
+    min-height: 44px;
+  }
+
+  /* Make flex action rows wrap and stretch cleanly on narrow screens */
+  .mobile-full-width-stack {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+  }
+
+  .mobile-full-width-stack > * {
+    width: 100% !important;
+    text-align: center !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 12px !important;
+  }
+
+  .section-spacing {
+    padding: 36px 0 !important;
+  }
+
+  .section-title-wrap {
+    margin-bottom: 32px !important;
+  }
+
+  .section-title-wrap h2 {
+    font-size: 1.6rem !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .container {
+    padding: 0 10px !important;
+  }
+
+  .section-title-wrap h2 {
+    font-size: 1.45rem !important;
+  }
+}
+
+/* Media element safety: prevent image/svg overflow */
+img, svg, video, canvas, audio, iframe, embed, object {
+  max-width: 100%;
+  height: auto;
 }
 
 /* Waveform pulse animation */

@@ -72,6 +72,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal: _onOpenBetaModal, o
 
           {/* Action CTAs */}
           <div
+            className="mobile-full-width-stack"
             style={{
               display: "flex",
               alignItems: "center",

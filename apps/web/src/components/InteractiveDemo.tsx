@@ -3,6 +3,7 @@ import { DEMO_SCENARIOS } from "../data/demoScenarios";
 import { SUPPORTED_LANGUAGES } from "../data/languages";
 import { useRecorder } from "../hooks/useRecorder";
 import { api, type ProcessPipelineResult } from "../lib/api";
+import { recordMeaningfulAction } from "../lib/upgradeReminders";
 
 export type FlowState = "IDLE" | "RECORDING" | "PROCESSING" | "TRANSCRIBING" | "ANALYZING" | "COMPLETE" | "ERROR";
 
@@ -103,6 +104,8 @@ export const InteractiveDemo: React.FC = () => {
       setFlowState("COMPLETE");
       setActiveStepIndex(4);
       setStatusMessage("Transformation complete.");
+      recordMeaningfulAction();
+      window.dispatchEvent(new CustomEvent("voxflow_meaningful_action"));
     } catch (err: any) {
       console.error("Live pipeline error:", err);
       setFlowState("ERROR");
@@ -351,13 +354,15 @@ export const InteractiveDemo: React.FC = () => {
           {interactionMode === "preset" && (
             <div
               style={{
-                padding: "12px 20px",
+                padding: "12px 16px",
                 background: "#ffffff",
                 borderBottom: "1px solid #e5e5e5",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                flexWrap: "wrap"
+                overflowX: "auto",
+                whiteSpace: "nowrap",
+                scrollbarWidth: "none"
               }}
             >
               <span style={{ fontSize: "0.8125rem", color: "#666666", fontWeight: 500 }}>
@@ -392,10 +397,7 @@ export const InteractiveDemo: React.FC = () => {
           {/* Console Body: 2 Columns */}
           <div
             style={{
-              padding: "24px",
-              display: "grid",
-              gridTemplateColumns: "1fr",
-              gap: "20px"
+              padding: "clamp(14px, 3vw, 24px)"
             }}
             className="demo-grid"
           >
@@ -741,9 +743,10 @@ export const InteractiveDemo: React.FC = () => {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(5, 1fr)",
-                    gap: "6px",
-                    marginBottom: "14px"
+                    gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                    gap: "4px",
+                    marginBottom: "14px",
+                    overflowX: "auto"
                   }}
                 >
                   {pipelineSteps.map((st, i) => {

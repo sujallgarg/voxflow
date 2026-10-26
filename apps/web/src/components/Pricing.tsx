@@ -91,8 +91,8 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-            gap: "28px",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+            gap: "24px",
             maxWidth: "1120px",
             margin: "0 auto"
           }}
@@ -103,7 +103,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
               background: "#ffffff",
               border: "1px solid #e5e5e5",
               borderRadius: "12px",
-              padding: "36px 28px",
+              padding: "clamp(24px, 4vw, 36px) clamp(16px, 3.5vw, 28px)",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
@@ -224,7 +224,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
               background: "#ffffff",
               border: "2px solid #111111",
               borderRadius: "12px",
-              padding: "36px 28px",
+              padding: "clamp(24px, 4vw, 36px) clamp(16px, 3.5vw, 28px)",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
@@ -376,7 +376,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
               background: "#ffffff",
               border: "1px dashed #d4d4d4",
               borderRadius: "12px",
-              padding: "36px 28px",
+              padding: "clamp(24px, 4vw, 36px) clamp(16px, 3.5vw, 28px)",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",

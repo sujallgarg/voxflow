@@ -342,15 +342,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
           style={{
             alignItems: "center",
             justifyContent: "center",
-            width: "38px",
-            height: "38px",
+            minWidth: "44px",
+            minHeight: "44px",
             borderRadius: "6px",
             background: "#ffffff",
             border: "1px solid #e5e5e5",
             color: "#111111",
             cursor: "pointer",
-            fontSize: "1.2rem",
-            display: "none"
+            fontSize: "1.2rem"
           }}
           className="mobile-toggle"
         >

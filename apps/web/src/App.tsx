@@ -27,6 +27,15 @@ import { useAuth } from "./lib/authContext";
 import { AuthPages } from "./components/auth/AuthPages";
 import { BillingDashboard } from "./components/billing/BillingDashboard";
 import { CheckoutSuccessPage, CheckoutCancelPage } from "./components/billing/CheckoutStatus";
+import { useSubscription } from "./lib/subscriptionContext";
+import { UpgradeReminderModal } from "./components/billing/UpgradeReminderModal";
+import {
+  canShowAutomaticPopup,
+  checkUsageThresholdReminder,
+  getOccasionalReminderConfig,
+  getMeetingCompletionReminderConfig,
+  type ReminderConfig
+} from "./lib/upgradeReminders";
 
 export default function App() {
   type AppView =
@@ -60,6 +69,11 @@ export default function App() {
   const [meetingLoadError, setMeetingLoadError] = useState<string | null>(null);
 
   const { user, loading, isConfigured } = useAuth();
+  const { entitlements, isPremium } = useSubscription();
+
+  // Smart Upgrade Reminders State
+  const [activeReminder, setActiveReminder] = useState<ReminderConfig | null>(null);
+  const [isReminderOpen, setIsReminderOpen] = useState(false);
 
   // Sync auth user with userStore
   useEffect(() => {
@@ -162,6 +176,68 @@ export default function App() {
       window.removeEventListener("voxflow_user_changed", handleSync);
     };
   }, []);
+
+  // Smart Upgrade Reminder Trigger Listeners
+  useEffect(() => {
+    const isExcludedView =
+      currentView === "login" ||
+      currentView === "signup" ||
+      currentView === "forgot-password" ||
+      currentView === "reset-password" ||
+      currentView === "verify" ||
+      currentView === "billing-success" ||
+      currentView === "billing-cancel";
+
+    if (isPremium || isExcludedView) return;
+
+    // Trigger A: Meaningful action (voice transcription completed)
+    const handleMeaningfulAction = () => {
+      if (!canShowAutomaticPopup(isPremium, false)) return;
+
+      const thresholdReminder = checkUsageThresholdReminder(entitlements);
+      const reminderToUse = thresholdReminder || getOccasionalReminderConfig();
+
+      setTimeout(() => {
+        if (!isPremium && !isExcludedView) {
+          setActiveReminder(reminderToUse);
+          setIsReminderOpen(true);
+        }
+      }, 1500);
+    };
+
+    // Trigger B: Meeting notes / AI summary completion
+    const handleMeetingCompleted = () => {
+      if (!canShowAutomaticPopup(isPremium, false)) return;
+
+      const thresholdReminder = checkUsageThresholdReminder(entitlements);
+      const reminderToUse = thresholdReminder || getMeetingCompletionReminderConfig();
+
+      setTimeout(() => {
+        if (!isPremium && !isExcludedView) {
+          setActiveReminder(reminderToUse);
+          setIsReminderOpen(true);
+        }
+      }, 1500);
+    };
+
+    // Trigger C: Gentle session active usage timer (after 3 minutes of active visit)
+    const activeSessionTimer = setTimeout(() => {
+      if (canShowAutomaticPopup(isPremium, false) && !isExcludedView) {
+        const thresholdReminder = checkUsageThresholdReminder(entitlements);
+        setActiveReminder(thresholdReminder || getOccasionalReminderConfig());
+        setIsReminderOpen(true);
+      }
+    }, 180000);
+
+    window.addEventListener("voxflow_meaningful_action", handleMeaningfulAction);
+    window.addEventListener("voxflow_meeting_completed", handleMeetingCompleted);
+
+    return () => {
+      clearTimeout(activeSessionTimer);
+      window.removeEventListener("voxflow_meaningful_action", handleMeaningfulAction);
+      window.removeEventListener("voxflow_meeting_completed", handleMeetingCompleted);
+    };
+  }, [isPremium, currentView, entitlements]);
 
   // Asynchronously resolve direct meeting URLs before displaying not-found screen
   useEffect(() => {
@@ -542,6 +618,22 @@ export default function App() {
         onNavigateToCookiePolicy={() => {
           window.location.hash = "#/cookies";
           setCurrentView("cookies");
+        }}
+      />
+
+      {/* Smart Premium Upgrade Reminder Modal */}
+      <UpgradeReminderModal
+        isOpen={isReminderOpen}
+        config={activeReminder}
+        onClose={() => setIsReminderOpen(false)}
+        onExplorePro={() => {
+          if (currentView !== "landing") {
+            window.location.hash = "#pricing";
+            setCurrentView("landing");
+          }
+          setTimeout(() => {
+            document.querySelector("#pricing")?.scrollIntoView({ behavior: "smooth" });
+          }, 150);
         }}
       />
     </div>

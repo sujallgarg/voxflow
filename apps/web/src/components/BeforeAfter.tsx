@@ -198,15 +198,16 @@ export const BeforeAfter: React.FC = () => {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
               borderTop: "none"
             }}
           >
             {/* Left: What You Say */}
             <div
               style={{
-                padding: "28px 24px",
+                padding: "clamp(20px, 4vw, 28px) clamp(16px, 3.5vw, 24px)",
                 borderRight: "1px solid #e5e5e5",
+                borderBottom: "1px solid #e5e5e5",
                 background: "#fcfcfc",
                 display: "flex",
                 flexDirection: "column",
@@ -273,7 +274,7 @@ export const BeforeAfter: React.FC = () => {
             {/* Right: What VoxFlow Produces */}
             <div
               style={{
-                padding: "28px 24px",
+                padding: "clamp(20px, 4vw, 28px) clamp(16px, 3.5vw, 24px)",
                 background: "#ffffff",
                 display: "flex",
                 flexDirection: "column",

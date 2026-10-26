@@ -248,7 +248,8 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
         flexDirection: "column",
         justifyContent: "center",
         alignItems: "center",
-        padding: "40px 20px"
+        padding: "clamp(24px, 5vw, 40px) clamp(12px, 3vw, 20px)",
+        boxSizing: "border-box"
       }}
     >
       <div
@@ -258,8 +259,9 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
           backgroundColor: "#ffffff",
           border: "1px solid #e5e5e5",
           borderRadius: "8px",
-          padding: "36px 32px",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+          padding: "clamp(24px, 5vw, 36px) clamp(16px, 4vw, 32px)",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          boxSizing: "border-box"
         }}
       >
         {/* Top Logo and Header */}

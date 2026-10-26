@@ -86,12 +86,15 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
         style={{
           width: "100%",
           maxWidth: "480px",
+          maxHeight: "90vh",
+          overflowY: "auto",
           background: "#ffffff",
           borderRadius: "8px",
-          padding: "28px",
+          padding: "clamp(20px, 4vw, 28px) clamp(16px, 4vw, 28px)",
           boxShadow: "0 10px 30px rgba(0, 0, 0, 0.08)",
           position: "relative",
-          border: "1px solid #e5e5e5"
+          border: "1px solid #e5e5e5",
+          boxSizing: "border-box"
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -103,8 +106,8 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
             position: "absolute",
             top: "16px",
             right: "16px",
-            width: "30px",
-            height: "30px",
+            width: "36px",
+            height: "36px",
             borderRadius: "6px",
             background: "#ffffff",
             border: "1px solid #e5e5e5",

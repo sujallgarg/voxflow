@@ -6,6 +6,7 @@ import type {
 } from "../../data/meetingCompanionData";
 import { getCurrentUser, saveUserMeeting } from "../../lib/userStore";
 import { api } from "../../lib/api";
+import { recordMeaningfulAction } from "../../lib/upgradeReminders";
 
 export type WorkspaceTabType = "overview" | "transcript" | "action-items" | "notes";
 
@@ -98,6 +99,8 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
     persistMeeting(updated);
     setIsSavingNotes(false);
     setSaveSuccessMsg("Notes saved successfully.");
+    recordMeaningfulAction();
+    window.dispatchEvent(new CustomEvent("voxflow_meeting_completed"));
     setTimeout(() => setSaveSuccessMsg(null), 2500);
   };
 
@@ -168,6 +171,8 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
 
       persistMeeting(updated);
       setSaveSuccessMsg("AI analysis complete. Summary, decisions, and action items updated.");
+      recordMeaningfulAction();
+      window.dispatchEvent(new CustomEvent("voxflow_meeting_completed"));
       setTimeout(() => setSaveSuccessMsg(null), 3500);
     } catch (err: any) {
       console.error("AI meeting notes error:", err);
@@ -240,13 +245,13 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
           position: "sticky",
           top: 0,
           zIndex: 40,
-          height: "68px"
+          minHeight: "68px",
+          padding: "8px 0"
         }}
       >
         <div
           className="container"
           style={{
-            height: "100%",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -396,12 +401,11 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
 
         {/* Tab Switcher */}
         <div
+          className="horizontal-scroll-tabs"
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
             borderBottom: "1px solid #e5e5e5",
-            marginBottom: "28px"
+            marginBottom: "28px",
+            paddingBottom: "1px"
           }}
         >
           {(

@@ -52,8 +52,8 @@ export const HowItWorks: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: "28px",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
+            gap: "24px",
             maxWidth: "1120px",
             margin: "0 auto 40px auto"
           }}
@@ -65,7 +65,7 @@ export const HowItWorks: React.FC = () => {
                 background: "#fafafa",
                 border: "1px solid #e5e5e5",
                 borderRadius: "12px",
-                padding: "32px 28px",
+                padding: "clamp(20px, 4vw, 32px) clamp(16px, 3.5vw, 28px)",
                 display: "flex",
                 flexDirection: "column",
                 position: "relative"
