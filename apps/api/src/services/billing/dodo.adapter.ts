@@ -1,4 +1,4 @@
-import DodoPayments from "dodopayments";
+import { DodoPayments } from "dodopayments";
 import type { IPaymentGatewayAdapter } from "./payment-gateway.interface.js";
 import type {
   CreateCheckoutParams,
