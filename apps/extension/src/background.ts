@@ -1202,7 +1202,10 @@ async function runAiPipeline(
     console.log("VoxFlow: Step 2 → calling /detect-language...");
     const langRes = await fetch(`${API_BASE_URL}/detect-language`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({ transcript })
     });
 
@@ -1222,7 +1225,10 @@ async function runAiPipeline(
     console.log("VoxFlow: Step 3 → calling /understand...");
     const understandRes = await fetch(`${API_BASE_URL}/understand`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({ transcript })
     });
 
@@ -1242,7 +1248,10 @@ async function runAiPipeline(
     console.log("VoxFlow: Step 4 → calling /detect-context...");
     const contextRes = await fetch(`${API_BASE_URL}/detect-context`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({ transcript })
     });
 
@@ -1377,6 +1386,39 @@ async function runAiPipeline(
   }
 }
 
+function isTrustedAuthSender(sender: chrome.runtime.MessageSender): boolean {
+  // Extension internal contexts (popup, options, offscreen) have matching sender.id and NO tab
+  if (!sender.tab && sender.id === chrome.runtime.id) {
+    return true;
+  }
+  // Messages from extension URLs
+  if (sender.url && sender.url.startsWith(`chrome-extension://${chrome.runtime.id}`)) {
+    return true;
+  }
+  // Messages from web tabs must have a verified URL from trusted VoxFlow origins
+  if (sender.url) {
+    try {
+      const parsed = new URL(sender.url);
+      const origin = parsed.origin.toLowerCase();
+      const hostname = parsed.hostname.toLowerCase();
+      if (
+        origin === "http://localhost:5173" ||
+        origin === "http://127.0.0.1:5173" ||
+        origin === "http://localhost:3000" ||
+        origin === "https://voxflow.com" ||
+        origin === "https://www.voxflow.com" ||
+        origin === "https://voxflow-web.onrender.com" ||
+        (parsed.protocol === "https:" && (hostname === "voxflow.com" || hostname.endsWith(".voxflow.com")))
+      ) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 // --------------------------------------------------
 // CHROME RUNTIME MESSAGE HANDLER
 // --------------------------------------------------
@@ -1395,8 +1437,24 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 
   // 0. Auth Session Synchronization from Web App
   if (msg.type === "SYNC_AUTH") {
-    const token = msg.token as string | undefined;
-    const userId = msg.userId as string | undefined;
+    if (!isTrustedAuthSender(sender)) {
+      console.warn("VoxFlow: Rejected unauthorized SYNC_AUTH from sender:", sender.url);
+      sendResponse({ success: false, error: "Unauthorized sender" });
+      return true;
+    }
+
+    const token = typeof msg.token === "string" ? msg.token.trim() : undefined;
+    const userId = typeof msg.userId === "string" ? msg.userId.trim() : undefined;
+
+    if (token && token.length < 10) {
+      sendResponse({ success: false, error: "Invalid token format" });
+      return true;
+    }
+    if (userId && !/^[a-zA-Z0-9_-]{1,64}$/.test(userId)) {
+      sendResponse({ success: false, error: "Invalid user ID format" });
+      return true;
+    }
+
     (async () => {
       const prev = await chrome.storage.local.get(["voxflow_user_id"]);
       // Clear previous user's private data if account switched
@@ -1422,6 +1480,11 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 
   // 0b. Auth Clear / Logout Synchronization from Web App
   if (msg.type === "CLEAR_AUTH") {
+    if (!isTrustedAuthSender(sender)) {
+      console.warn("VoxFlow: Rejected unauthorized CLEAR_AUTH from sender:", sender.url);
+      sendResponse({ success: false, error: "Unauthorized sender" });
+      return true;
+    }
     (async () => {
       await chrome.storage.local.remove(["voxflow_auth_token", "voxflow_user_id"]);
       // Clear user-specific meeting/session state to prevent private data leakage

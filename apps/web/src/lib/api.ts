@@ -113,10 +113,47 @@ class VoxFlowApiClient {
     return res.json();
   }
 
-  async detectLanguage(transcript: string): Promise<LanguageResult> {
+  async demoProcessAudio(
+    audioBlob: Blob,
+    targetLanguage?: string,
+    filename = "voxflow-demo.webm"
+  ): Promise<{
+    success: boolean;
+    isGuestDemo: boolean;
+    text: string;
+    pipeline: ProcessPipelineResult;
+    remainingDemoRequests?: number;
+  }> {
+    const formData = new FormData();
+    formData.append("audio", audioBlob, filename);
+    if (targetLanguage && targetLanguage !== "Auto") {
+      formData.append("targetLanguage", targetLanguage);
+    }
+
+    const res = await fetch(`${this.baseUrl}/demo/process-audio`, {
+      method: "POST",
+      body: formData
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const error: any = new Error(errData.error || `Demo processing failed with HTTP ${res.status}`);
+      error.code = errData.code;
+      error.remainingDemoRequests = errData.remainingDemoRequests;
+      throw error;
+    }
+
+    return res.json();
+  }
+
+  async detectLanguage(transcript: string, userId?: string): Promise<LanguageResult> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/detect-language`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({ transcript })
     });
 
@@ -128,10 +165,14 @@ class VoxFlowApiClient {
     return res.json();
   }
 
-  async understand(transcript: string): Promise<UnderstandingResult> {
+  async understand(transcript: string, userId?: string): Promise<UnderstandingResult> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/understand`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({ transcript })
     });
 
@@ -143,10 +184,14 @@ class VoxFlowApiClient {
     return res.json();
   }
 
-  async detectContext(transcript: string): Promise<ContextResult> {
+  async detectContext(transcript: string, userId?: string): Promise<ContextResult> {
+    const authHeaders = await this.getAuthHeaders(userId);
     const res = await fetch(`${this.baseUrl}/detect-context`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({ transcript })
     });
 

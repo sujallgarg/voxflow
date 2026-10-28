@@ -1,38 +1,55 @@
 import type { FastifyPluginAsync } from "fastify";
 import { detectLanguage } from "../services/language.service.js";
+import { authenticateRequest } from "../services/auth.service.js";
+import { entitlementService } from "../services/entitlement.service.js";
 
 const languageRoute: FastifyPluginAsync = async (app) => {
   app.post("/detect-language", async (request, reply) => {
     try {
+      const user = await authenticateRequest(request, reply);
+      if (!user) return;
+
       const body = request.body as {
         transcript?: string;
       };
 
-      if (!body?.transcript?.trim()) {
+      if (!body?.transcript || typeof body.transcript !== "string" || !body.transcript.trim()) {
         return reply.code(400).send({
-          error: "Transcript is required."
+          error: "Transcript is required.",
+          code: "MISSING_TRANSCRIPT"
         });
       }
 
-      app.log.info({
-        transcript: body.transcript
-      });
+      if (body.transcript.length > 50000) {
+        return reply.code(400).send({
+          error: "Transcript exceeds maximum length limit of 50,000 characters.",
+          code: "PAYLOAD_TOO_LARGE"
+        });
+      }
 
-      const result = await detectLanguage(
-        body.transcript
-      );
+      const preCheck = await entitlementService.checkQuota(user.id, "text_correction", 1);
+      if (!preCheck.allowed) {
+        return reply.code(403).send({
+          error: preCheck.reason,
+          code: preCheck.code,
+          quotaType: preCheck.quotaType,
+          limit: preCheck.limit,
+          currentUsage: preCheck.currentUsage,
+          remaining: preCheck.remaining,
+          unit: preCheck.unit,
+          resetDate: preCheck.resetDate,
+          upgradeUrl: "#/pricing"
+        });
+      }
 
+      const result = await detectLanguage(body.transcript);
       return result;
     } catch (error) {
       app.log.error(error);
-
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unknown language detection error";
-
+      const message = error instanceof Error ? error.message : "Unknown language detection error";
       return reply.code(500).send({
-        error: message
+        error: message,
+        code: "LANGUAGE_DETECTION_ERROR"
       });
     }
   });
