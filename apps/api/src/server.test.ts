@@ -2,9 +2,16 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { buildServer } from "./server.js";
 import { generateAuthToken, verifyAuthToken, setSupabaseClientForTesting } from "./services/auth.service.js";
 import { resetRateLimits } from "./middleware/rate-limiter.js";
+import { resetDemoRateLimitsForTesting } from "./routes/demo.js";
+import { billingStore } from "./services/billing/billing-store.service.js";
+import { entitlementService } from "./services/entitlement.service.js";
 
 describe("VoxFlow API Server Endpoints", () => {
   const app = buildServer();
+
+  beforeEach(() => {
+    billingStore.resetForTesting();
+  });
 
   it("GET /health should return status ok", async () => {
     const res = await app.inject({
@@ -957,5 +964,195 @@ describe("VoxFlow API Server Endpoints", () => {
       });
       expect(finalGetRes.statusCode).toBe(404);
     });
+  });
+
+  describe("Security Hardening: AI Endpoints Input Validation", () => {
+    it("POST /detect-language should reject payload exceeding 50,000 characters", async () => {
+      const hugeText = "a".repeat(50001);
+      const res = await app.inject({
+        method: "POST",
+        url: "/detect-language",
+        payload: { transcript: hugeText }
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("PAYLOAD_TOO_LARGE");
+    });
+
+    it("POST /understand should reject payload exceeding 50,000 characters", async () => {
+      const hugeText = "b".repeat(50001);
+      const res = await app.inject({
+        method: "POST",
+        url: "/understand",
+        payload: { transcript: hugeText }
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("PAYLOAD_TOO_LARGE");
+    });
+
+    it("POST /detect-context should reject payload exceeding 50,000 characters", async () => {
+      const hugeText = "c".repeat(50001);
+      const res = await app.inject({
+        method: "POST",
+        url: "/detect-context",
+        payload: { transcript: hugeText }
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("PAYLOAD_TOO_LARGE");
+    });
+  });
+
+  describe("POST /demo/process-audio (Guest Demo Route)", () => {
+    beforeEach(() => {
+      resetDemoRateLimitsForTesting();
+    });
+
+    it("should reject non-multipart requests with 400 NOT_MULTIPART", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/demo/process-audio",
+        headers: { "content-type": "application/json" },
+        payload: { dummy: true }
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe("NOT_MULTIPART");
+    });
+
+    it("should enforce IP-based rate limiting (max 5 requests per 15 minutes)", async () => {
+      const testIp = "203.0.113.42";
+
+      // 5 requests from the same IP
+      for (let i = 0; i < 5; i++) {
+        const res = await app.inject({
+          method: "POST",
+          url: "/demo/process-audio",
+          remoteAddress: testIp,
+          headers: { "content-type": "application/json" }
+        });
+        // Returns 400 because not multipart, but IP counter is incremented
+        expect(res.statusCode).toBe(400);
+      }
+
+      // 6th request from the same IP is blocked with 429
+      const blockedRes = await app.inject({
+        method: "POST",
+        url: "/demo/process-audio",
+        remoteAddress: testIp,
+        headers: { "content-type": "application/json" }
+      });
+      expect(blockedRes.statusCode).toBe(429);
+      const body = JSON.parse(blockedRes.body);
+      expect(body.code).toBe("DEMO_RATE_LIMIT_EXCEEDED");
+      expect(body.upgradeUrl).toBe("#/signup");
+    });
+
+    it("should isolate guest demo rate limits per distinct IP address", async () => {
+      const ipA = "198.51.100.1";
+      const ipB = "198.51.100.2";
+
+      // Exhaust IP A
+      for (let i = 0; i < 5; i++) {
+        await app.inject({
+          method: "POST",
+          url: "/demo/process-audio",
+          remoteAddress: ipA,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      // IP A is blocked on 6th request
+      const blockedA = await app.inject({
+        method: "POST",
+        url: "/demo/process-audio",
+        remoteAddress: ipA,
+        headers: { "content-type": "application/json" }
+      });
+      expect(blockedA.statusCode).toBe(429);
+
+      // IP B is still permitted (returns 400 for not multipart, NOT 429)
+      const allowedB = await app.inject({
+        method: "POST",
+        url: "/demo/process-audio",
+        remoteAddress: ipB,
+        headers: { "content-type": "application/json" }
+      });
+      expect(allowedB.statusCode).toBe(400);
+      const bodyB = JSON.parse(allowedB.body);
+      expect(bodyB.code).toBe("NOT_MULTIPART");
+    });
+  });
+
+  describe("Multi-Step Pipeline Quota Collision Regression", () => {
+    it("should allow multi-step pipeline (/detect-language, /understand, /detect-context, /transform) on the user's final voice typing allowance", async () => {
+      billingStore.resetForTesting();
+      const testUser = `user_boundary_${Date.now()}`;
+      const token = generateAuthToken(testUser);
+
+      // Consume 99 voice typings and 49 text corrections (Free tier limits: 100 voice typing, 50 text correction)
+      await entitlementService.consumeQuota(testUser, "voice_typing", 99);
+      await entitlementService.consumeQuota(testUser, "text_correction", 49);
+
+      // Now the user has exactly 1 voice typing and 1 text correction remaining
+      const preQuota = await billingStore.getUsageQuota(testUser);
+      expect(preQuota.voiceTypingUsed).toBe(99);
+      expect(preQuota.textCorrectionsUsed).toBe(49);
+
+      // Step 1: /transcribe simulates consuming the 100th voice typing
+      await entitlementService.consumeQuota(testUser, "voice_typing", 1);
+      const postTranscribeQuota = await billingStore.getUsageQuota(testUser);
+      expect(postTranscribeQuota.voiceTypingUsed).toBe(100);
+
+      // Steps 2, 3, 4: Auxiliary AI endpoints must NOT be blocked by voice typing being 100/100
+      const langRes = await app.inject({
+        method: "POST",
+        url: "/detect-language",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { transcript: "Hello world this is a test" }
+      });
+      expect(langRes.statusCode).toBe(200);
+
+      const understandRes = await app.inject({
+        method: "POST",
+        url: "/understand",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { transcript: "Hello world this is a test" }
+      });
+      expect(understandRes.statusCode).toBe(200);
+
+      const contextRes = await app.inject({
+        method: "POST",
+        url: "/detect-context",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { transcript: "Hello world this is a test" }
+      });
+      expect(contextRes.statusCode).toBe(200);
+
+      // Step 5: /transform checks and consumes the 50th text correction
+      const transformRes = await app.inject({
+        method: "POST",
+        url: "/transform",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { transcript: "Hello world this is a test" }
+      });
+      expect(transformRes.statusCode).toBe(200);
+
+      // After completing step 5, text_correction is now at 50/50
+      const finalQuota = await billingStore.getUsageQuota(testUser);
+      expect(finalQuota.textCorrectionsUsed).toBe(50);
+
+      // Subsequent call to /transform must now be blocked with 403
+      const blockedRes = await app.inject({
+        method: "POST",
+        url: "/transform",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { transcript: "Another text to transform" }
+      });
+      expect(blockedRes.statusCode).toBe(403);
+      const blockedBody = JSON.parse(blockedRes.body);
+      expect(blockedBody.code).toBe("USAGE_LIMIT_REACHED");
+    }, 30000);
   });
 });

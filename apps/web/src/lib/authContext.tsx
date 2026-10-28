@@ -191,6 +191,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSession(null);
     setUser(null);
     localStorage.removeItem("voxflow_current_user");
+    window.dispatchEvent(new CustomEvent("voxflow_user_signed_out"));
     window.dispatchEvent(new CustomEvent("voxflow_auth_sync"));
     window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
     window.location.hash = "#/";

@@ -240,7 +240,46 @@ chrome.runtime.onMessage.addListener(
 
 console.log("VoxFlow content script loaded.");
 
+function isTrustedVoxFlowWebOrigin(): boolean {
+  try {
+    const origin = window.location.origin.toLowerCase();
+    const hostname = window.location.hostname.toLowerCase();
+
+    // Strict exact matches for local development
+    if (
+      origin === "http://localhost:5173" ||
+      origin === "http://127.0.0.1:5173" ||
+      origin === "http://localhost:3000"
+    ) {
+      return true;
+    }
+
+    // Strict exact matches for production web app
+    if (
+      origin === "https://voxflow.com" ||
+      origin === "https://www.voxflow.com" ||
+      origin === "https://voxflow-web.onrender.com"
+    ) {
+      return true;
+    }
+
+    // Must be official voxflow.com domain or subdomain with HTTPS
+    if (hostname === "voxflow.com" || hostname.endsWith(".voxflow.com")) {
+      return window.location.protocol === "https:";
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function checkAndSyncVoxFlowAuth() {
+  // CRITICAL: Never inspect localStorage or dispatch sync messages on third-party sites!
+  if (!isTrustedVoxFlowWebOrigin()) {
+    return;
+  }
+
   try {
     let token: string | null = null;
     let userId: string | null = null;
@@ -253,10 +292,10 @@ function checkAndSyncVoxFlowAuth() {
           const raw = localStorage.getItem(key);
           if (raw) {
             const parsed = JSON.parse(raw);
-            if (parsed?.access_token) {
+            if (parsed?.access_token && typeof parsed.access_token === "string") {
               token = parsed.access_token;
             }
-            if (parsed?.user?.id) {
+            if (parsed?.user?.id && typeof parsed.user.id === "string") {
               userId = parsed.user.id;
             }
           }
@@ -271,7 +310,7 @@ function checkAndSyncVoxFlowAuth() {
     if (rawUser) {
       try {
         const parsed = JSON.parse(rawUser);
-        if (parsed?.id && parsed.id !== "user_me") {
+        if (parsed?.id && typeof parsed.id === "string" && parsed.id !== "user_me") {
           userId = parsed.id;
         }
       } catch {
@@ -279,32 +318,49 @@ function checkAndSyncVoxFlowAuth() {
       }
     }
 
+    // Synchronize authenticated session when available
     if (token || userId) {
       chrome.runtime.sendMessage({
         type: "SYNC_AUTH",
         token: token || undefined,
         userId: userId || undefined
       }).catch(() => {});
-    } else {
-      chrome.runtime.sendMessage({
-        type: "CLEAR_AUTH"
-      }).catch(() => {});
     }
+    // CRITICAL: NEVER dispatch CLEAR_AUTH on initial load or simply because the page has no token!
+    // Visiting an unauthenticated page or landing page must NOT wipe an active extension session!
   } catch {
     // Cross-origin or restricted frame security ignore
   }
 }
 
-if (window.location.hostname === "localhost" || window.location.hostname.includes("voxflow")) {
+function handleExplicitSignOut() {
+  if (!isTrustedVoxFlowWebOrigin()) {
+    return;
+  }
+  chrome.runtime.sendMessage({
+    type: "CLEAR_AUTH"
+  }).catch(() => {});
+}
+
+// Only register auth listeners when running on a verified, trusted VoxFlow web origin
+if (isTrustedVoxFlowWebOrigin()) {
   checkAndSyncVoxFlowAuth();
 
   window.addEventListener("storage", (e) => {
     if (e.key === "voxflow_current_user" || (e.key && e.key.startsWith("sb-"))) {
-      checkAndSyncVoxFlowAuth();
+      if (e.newValue === null) {
+        handleExplicitSignOut();
+      } else {
+        checkAndSyncVoxFlowAuth();
+      }
     }
   });
 
   window.addEventListener("voxflow_auth_sync", () => {
     checkAndSyncVoxFlowAuth();
+  });
+
+  window.addEventListener("voxflow_user_signed_out", () => {
+    handleExplicitSignOut();
   });
 }

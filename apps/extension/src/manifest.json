@@ -12,7 +12,11 @@
   ],
   "host_permissions": [
     "http://localhost/*",
-    "https://*/*"
+    "http://127.0.0.1/*",
+    "https://api.voxflow.com/*",
+    "https://*.voxflow.com/*",
+    "https://voxflow.com/*",
+    "https://voxflow-api.onrender.com/*"
   ],
   "icons": {
     "16": "icons/icon-16.png",

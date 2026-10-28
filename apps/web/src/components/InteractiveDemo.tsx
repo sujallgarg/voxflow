@@ -4,10 +4,12 @@ import { SUPPORTED_LANGUAGES } from "../data/languages";
 import { useRecorder } from "../hooks/useRecorder";
 import { api, type ProcessPipelineResult } from "../lib/api";
 import { recordMeaningfulAction } from "../lib/upgradeReminders";
+import { useAuth } from "../lib/authContext";
 
 export type FlowState = "IDLE" | "RECORDING" | "PROCESSING" | "TRANSCRIBING" | "ANALYZING" | "COMPLETE" | "ERROR";
 
 export const InteractiveDemo: React.FC = () => {
+  const { user } = useAuth();
   const [interactionMode, setInteractionMode] = useState<"live" | "preset">("live");
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("email-reply");
   const [targetLang, setTargetLang] = useState<string>("English");
@@ -88,17 +90,40 @@ export const InteractiveDemo: React.FC = () => {
       setStatusMessage("Transcribing speech...");
       setErrorMessage(null);
 
-      const { text } = await api.transcribeAudio(blob);
-      if (!text || !text.trim()) {
-        throw new Error("No spoken words detected in this recording. Please speak louder or closer to the microphone.");
+      let text = "";
+      let pipelineResult: ProcessPipelineResult;
+
+      if (user) {
+        // Authenticated user: use normal authenticated pipeline
+        const transResult = await api.transcribeAudio(blob);
+        text = transResult.text?.trim() || "";
+        if (!text) {
+          throw new Error("No spoken words detected in this recording. Please speak louder or closer to the microphone.");
+        }
+
+        setLiveTranscript(text);
+        setFlowState("ANALYZING");
+        setActiveStepIndex(2);
+        setStatusMessage("Analyzing context and intent...");
+
+        pipelineResult = await api.processVoice(text, targetLang);
+      } else {
+        // Guest visitor on public landing page: use isolated, rate-limited guest demo pipeline
+        setActiveStepIndex(1);
+        setStatusMessage("Transcribing and analyzing demo recording...");
+
+        const demoResult = await api.demoProcessAudio(blob, targetLang);
+        text = demoResult.text?.trim() || "";
+        if (!text) {
+          throw new Error("No spoken words detected in this recording. Please speak louder or closer to the microphone.");
+        }
+
+        setLiveTranscript(text);
+        setFlowState("ANALYZING");
+        setActiveStepIndex(3);
+        pipelineResult = demoResult.pipeline;
       }
 
-      setLiveTranscript(text);
-      setFlowState("ANALYZING");
-      setActiveStepIndex(2);
-      setStatusMessage("Analyzing context and intent...");
-
-      const pipelineResult = await api.processVoice(text, targetLang);
       setLivePipelineData(pipelineResult);
       setLiveTransformedText(pipelineResult.transformation.finalText);
       setFlowState("COMPLETE");
@@ -109,7 +134,14 @@ export const InteractiveDemo: React.FC = () => {
     } catch (err: any) {
       console.error("Live pipeline error:", err);
       setFlowState("ERROR");
-      setErrorMessage(err?.message || "Failed to process audio. Please ensure backend is available.");
+      if (err?.code === "DEMO_RATE_LIMIT_EXCEEDED" || err?.status === 429) {
+        setErrorMessage(
+          err.message ||
+            "Guest demo limit reached (5 requests per 15 minutes). Create a free account to get 100 free voice typings every month!"
+        );
+      } else {
+        setErrorMessage(err?.message || "Failed to process audio. Please ensure backend is available.");
+      }
     }
   };
 
@@ -605,10 +637,33 @@ export const InteractiveDemo: React.FC = () => {
                       background: "#ffffff",
                       border: "1px solid #111111",
                       color: "#111111",
-                      fontSize: "0.8125rem"
+                      fontSize: "0.8125rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      flexWrap: "wrap"
                     }}
                   >
-                    <strong>Error:</strong> {errorMessage}
+                    <div>
+                      <strong>Notice:</strong> {errorMessage}
+                    </div>
+                    {errorMessage.includes("free account") && (
+                      <a
+                        href="#/signup"
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "4px",
+                          background: "#111111",
+                          color: "#ffffff",
+                          fontSize: "0.75rem",
+                          fontWeight: 500,
+                          textDecoration: "none"
+                        }}
+                      >
+                        Create Free Account →
+                      </a>
+                    )}
                   </div>
                 )}
 
