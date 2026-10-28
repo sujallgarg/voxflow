@@ -15,11 +15,14 @@ import meetingNotesRoute from "./routes/meeting-notes.js";
 import meetingsRoute from "./routes/meetings.js";
 import waitlistRoute from "./routes/waitlist.js";
 import billingRoute from "./routes/billing.js";
+import demoRoute from "./routes/demo.js";
 import { createRateLimiter } from "./middleware/rate-limiter.js";
 
 export function buildServer() {
+  const isProd = process.env.NODE_ENV === "production";
   const app = Fastify({
-    logger: true
+    logger: true,
+    trustProxy: isProd || process.env.RENDER === "true" || process.env.TRUST_PROXY === "true"
   });
 
   // Preserve rawBody for secure webhook signature validation
@@ -42,7 +45,6 @@ export function buildServer() {
   );
 
   // CORS Configuration
-  const isProd = process.env.NODE_ENV === "production";
   const corsOriginEnv = process.env.CORS_ORIGIN;
 
   app.register(cors, {
@@ -124,6 +126,7 @@ export function buildServer() {
   app.register(meetingsRoute);
   app.register(waitlistRoute);
   app.register(billingRoute);
+  app.register(demoRoute);
 
   return app;
 }

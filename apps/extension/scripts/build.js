@@ -31,7 +31,7 @@ const isDevFlag = args.includes("--dev") || args.includes("--development");
 const envSetting = (process.env.VOXFLOW_ENV || process.env.NODE_ENV || "").toLowerCase();
 const isProduction = isProdFlag || (!isDevFlag && envSetting === "production");
 
-const rawApiUrl = (process.env.VOXFLOW_API_URL || process.env.API_URL || "").trim();
+const rawApiUrl = (process.env.VOXFLOW_API_URL || process.env.API_URL || (isProduction ? "https://api.voxflow.com" : "")).trim();
 
 let targetApiUrl = "";
 
