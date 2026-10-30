@@ -178,42 +178,73 @@ export function checkUsageThresholdReminder(entitlements: UserEntitlements | nul
   const meetingsLimit = limits.monthlyMeetings || 3;
   const meetingsPct = Math.round((meetingsUsed / meetingsLimit) * 100);
 
-  // Prioritize highest percentage that is between 70% and 100%
+  // Prioritize highest percentage (>= 100% limit reached, or >= 70% approaching)
   const candidates: Array<{
     pct: number;
     metricLabel: string;
     used: number;
     limit: number;
+    isExhausted: boolean;
     benefit: string;
   }> = [];
 
-  if (voicePct >= 70 && voicePct < 100) {
+  if (voicePct >= 100) {
     candidates.push({
       pct: voicePct,
       metricLabel: "Voice Typing Requests",
       used: voiceUsed,
       limit: voiceLimit,
-      benefit: "VoxFlow Pro includes 1,000 voice typing requests per month (10× free tier) and priority processing."
+      isExhausted: true,
+      benefit: "VoxFlow Premium includes 1,000 voice typing requests per month (10× free tier) and priority processing."
+    });
+  } else if (voicePct >= 70) {
+    candidates.push({
+      pct: voicePct,
+      metricLabel: "Voice Typing Requests",
+      used: voiceUsed,
+      limit: voiceLimit,
+      isExhausted: false,
+      benefit: "VoxFlow Premium includes 1,000 voice typing requests per month (10× free tier) and priority processing."
     });
   }
 
-  if (minsPct >= 70 && minsPct < 100) {
+  if (minsPct >= 100) {
     candidates.push({
       pct: minsPct,
       metricLabel: "Voice Transcription Minutes",
       used: minsUsed,
       limit: minsLimit,
-      benefit: "VoxFlow Pro includes 300 minutes of transcription per month (10× free tier) with expanded audio durations."
+      isExhausted: true,
+      benefit: "VoxFlow Premium includes 300 minutes of transcription per month (10× free tier) with expanded audio durations."
+    });
+  } else if (minsPct >= 70) {
+    candidates.push({
+      pct: minsPct,
+      metricLabel: "Voice Transcription Minutes",
+      used: minsUsed,
+      limit: minsLimit,
+      isExhausted: false,
+      benefit: "VoxFlow Premium includes 300 minutes of transcription per month (10× free tier) with expanded audio durations."
     });
   }
 
-  if (meetingsPct >= 70 && meetingsPct < 100) {
+  if (meetingsPct >= 100) {
     candidates.push({
       pct: meetingsPct,
       metricLabel: "Monthly Meeting Records",
       used: meetingsUsed,
       limit: meetingsLimit,
-      benefit: "VoxFlow Pro provides up to 25 meeting notes per month with full history retention and structured action items."
+      isExhausted: true,
+      benefit: "VoxFlow Premium provides up to 25 meeting notes per month with full history retention and structured action items."
+    });
+  } else if (meetingsPct >= 70) {
+    candidates.push({
+      pct: meetingsPct,
+      metricLabel: "Monthly Meeting Records",
+      used: meetingsUsed,
+      limit: meetingsLimit,
+      isExhausted: false,
+      benefit: "VoxFlow Premium provides up to 25 meeting notes per month with full history retention and structured action items."
     });
   }
 
@@ -224,8 +255,12 @@ export function checkUsageThresholdReminder(entitlements: UserEntitlements | nul
 
   return {
     type: "usage_threshold",
-    title: `Approaching your monthly ${top.metricLabel.toLowerCase()} limit`,
-    description: `You have used ${top.pct}% (${top.used} of ${top.limit}) of your included free quota this month. Upgrade to Pro ($9/mo) to keep working without interruption.`,
+    title: top.isExhausted
+      ? `Monthly ${top.metricLabel.toLowerCase()} limit reached`
+      : `Approaching your monthly ${top.metricLabel.toLowerCase()} limit`,
+    description: top.isExhausted
+      ? `You have reached your free plan limit of ${top.limit} ${top.metricLabel.toLowerCase()} this month. Need more voice typing or meeting capacity? Explore the available plans to find the right fit.`
+      : `You have used ${top.pct}% (${top.used} of ${top.limit}) of your included free quota this month. Need more voice typing or meeting capacity? Explore the available plans to find the right fit.`,
     highlight: top.benefit,
     metricLabel: top.metricLabel,
     usedAmount: top.used,
@@ -251,9 +286,9 @@ export function recordMeaningfulAction(): boolean {
 export function getOccasionalReminderConfig(): ReminderConfig {
   return {
     type: "occasional",
-    title: "Get more done with VoxFlow Pro",
-    description: "Spend less time typing and organizing your work. Unlock the additional usage and features included in your Pro plan ($9/mo).",
-    highlight: "Includes 1,000 voice typing requests, 300 transcription minutes, and 25 intelligent meeting records."
+    title: "Unlock more with VoxFlow Premium",
+    description: "Need more voice typing or meeting capacity? Explore the available plans to find the right fit.",
+    highlight: "Includes 1,000 voice typing requests, 300 transcription minutes, and 25 intelligent meeting records per month ($9/mo)."
   };
 }
 
@@ -263,9 +298,9 @@ export function getOccasionalReminderConfig(): ReminderConfig {
 export function getMeetingCompletionReminderConfig(): ReminderConfig {
   return {
     type: "meeting_completion",
-    title: "Save and analyze more meetings with Pro",
-    description: "Your meeting summary has been saved. Free accounts include 3 meetings per month with 7-day history. Upgrade to Pro ($9/mo) for 25 meetings per month and permanent history retention.",
-    highlight: "Pro includes 25 monthly meetings, up to 2-hour audio recordings, and automated decision tracking."
+    title: "Unlock more with VoxFlow Premium",
+    description: "Your meeting summary has been saved. Need more voice typing or meeting capacity? Explore the available plans to find the right fit. Free accounts include 3 meetings per month with 7-day history.",
+    highlight: "VoxFlow Premium provides 25 monthly meetings, up to 2-hour audio recordings, and permanent history retention."
   };
 }
 

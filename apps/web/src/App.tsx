@@ -29,6 +29,8 @@ import { BillingDashboard } from "./components/billing/BillingDashboard";
 import { CheckoutSuccessPage, CheckoutCancelPage } from "./components/billing/CheckoutStatus";
 import { useSubscription } from "./lib/subscriptionContext";
 import { UpgradeReminderModal } from "./components/billing/UpgradeReminderModal";
+import { ExtensionNoticeModal } from "./components/extension/ExtensionNoticeModal";
+import { openExtensionStore } from "./lib/extensionConfig";
 import {
   canShowAutomaticPopup,
   checkUsageThresholdReminder,
@@ -59,6 +61,7 @@ export default function App() {
   const [selectedMeetingId, setSelectedMeetingId] = useState<string>("");
   const [isBetaModalOpen, setIsBetaModalOpen] = useState(false);
   const [isNewMeetingModalOpen, setIsNewMeetingModalOpen] = useState(false);
+  const [isExtensionNoticeOpen, setIsExtensionNoticeOpen] = useState(false);
   const [isCookieSettingsModalOpen, setIsCookieSettingsModalOpen] = useState(false);
 
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
@@ -316,6 +319,12 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleGetExtension = () => {
+    openExtensionStore(() => {
+      setIsExtensionNoticeOpen(true);
+    });
+  };
+
   const activeMeetingRecord: MeetingRecord | undefined = userMeetings.find(
     (m) => m.id === selectedMeetingId
   );
@@ -337,6 +346,7 @@ export default function App() {
           onSelectMeeting={handleSelectMeeting}
           onBackToHome={handleBackToHome}
           onOpenNewMeetingModal={() => setIsNewMeetingModalOpen(true)}
+          onGetExtension={handleGetExtension}
         />
       )}
 
@@ -555,6 +565,7 @@ export default function App() {
             <Hero
               onOpenBetaModal={handleOpenBetaModal}
               onScrollToDemo={handleScrollToDemo}
+              onGetExtension={handleGetExtension}
             />
 
             {/* 3. Interactive Voice Demo */}
@@ -604,11 +615,19 @@ export default function App() {
         }}
       />
 
+      {/* Chrome Extension Store Notice Modal (fallback when listing pending) */}
+      <ExtensionNoticeModal
+        isOpen={isExtensionNoticeOpen}
+        onClose={() => setIsExtensionNoticeOpen(false)}
+        onOpenEarlyAccess={handleOpenBetaModal}
+      />
+
       {/* New Meeting Modal */}
       <NewMeetingModal
         isOpen={isNewMeetingModalOpen}
         onClose={() => setIsNewMeetingModalOpen(false)}
         onStartMeeting={handleSelectMeeting}
+        onGetExtension={handleGetExtension}
       />
 
       {/* Persistent Cookie and Storage Consent Manager */}

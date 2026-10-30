@@ -16,6 +16,7 @@ import { UpgradeModal } from "../billing/UpgradeModal";
 import { PremiumBadge } from "../billing/PremiumBadge";
 import { DashboardUpgradeBanner } from "../billing/DashboardUpgradeBanner";
 import { useSubscription } from "../../lib/subscriptionContext";
+import { useExtensionDetection } from "../../lib/useExtensionDetection";
 
 interface MeetingDashboardProps {
   onSelectMeeting: (
@@ -24,12 +25,14 @@ interface MeetingDashboardProps {
   ) => void;
   onBackToHome: () => void;
   onOpenNewMeetingModal: () => void;
+  onGetExtension?: () => void;
 }
 
 export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
   onSelectMeeting,
   onBackToHome,
-  onOpenNewMeetingModal
+  onOpenNewMeetingModal,
+  onGetExtension
 }) => {
   const [currentUser, setProfile] = useState<UserProfile>(() => getCurrentUser());
   const [meetings, setMeetings] = useState<MeetingRecord[]>(() => getUserMeetings(getCurrentUser().id));
@@ -38,6 +41,13 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
   );
   const [mainTab, setMainTab] = useState<"meetings" | "voice-history">("meetings");
   const [copiedVoiceId, setCopiedVoiceId] = useState<string | null>(null);
+  const { isChecking, isInstalled, isConnected, checkExtension } = useExtensionDetection();
+
+  const handleGetExtensionClick = () => {
+    if (onGetExtension) {
+      onGetExtension();
+    }
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLanguageFilter, setSelectedLanguageFilter] = useState("all");
   const [statusTab, setStatusTab] = useState<"all" | "upcoming" | "completed">("all");
@@ -189,6 +199,26 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
 
             {/* Plan Badge */}
             <PremiumBadge size="md" showFree />
+
+            {!isInstalled && (
+              <button
+                type="button"
+                id="dashboard-header-get-extension-btn"
+                className="btn-secondary"
+                onClick={handleGetExtensionClick}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: "0.8125rem",
+                  borderRadius: "6px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+              >
+                <span aria-hidden="true">🧩</span>
+                <span>Get Our Extension</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -356,6 +386,98 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Extension Prerequisite Banner */}
+        {!isChecking && !isInstalled && (
+          <div
+            style={{
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              borderRadius: "8px",
+              padding: "16px 20px",
+              marginBottom: "24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "14px"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "260px", flex: 1 }}>
+              <span style={{ fontSize: "1.5rem" }} aria-hidden="true">🧩</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#92400e", marginBottom: "2px" }}>
+                  VoxFlow Chrome Extension Required
+                </div>
+                <div style={{ fontSize: "0.8125rem", color: "#78350f", lineHeight: 1.5 }}>
+                  VoxFlow’s Chrome extension is required to create or start a meeting. Install the extension to continue.
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <button
+                type="button"
+                id="dashboard-banner-get-extension-btn"
+                className="btn-primary"
+                onClick={handleGetExtensionClick}
+                style={{ padding: "8px 16px", fontSize: "0.8125rem", borderRadius: "6px" }}
+              >
+                Get Our Extension
+              </button>
+              <button
+                type="button"
+                id="dashboard-banner-check-again-btn"
+                className="btn-secondary"
+                onClick={() => void checkExtension()}
+                disabled={isChecking}
+                style={{ padding: "8px 14px", fontSize: "0.8125rem", borderRadius: "6px" }}
+              >
+                {isChecking ? "Checking..." : "Check Again"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!isChecking && isInstalled && !isConnected && (
+          <div
+            style={{
+              background: "#eff6ff",
+              border: "1px solid #bfdbfe",
+              borderRadius: "8px",
+              padding: "16px 20px",
+              marginBottom: "24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "14px"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "260px", flex: 1 }}>
+              <span style={{ fontSize: "1.5rem" }} aria-hidden="true">🔒</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#1e40af", marginBottom: "2px" }}>
+                  Connect Your Chrome Extension
+                </div>
+                <div style={{ fontSize: "0.8125rem", color: "#1e3a8a", lineHeight: 1.5 }}>
+                  VoxFlow Chrome extension is installed, but not connected to your account. Open the extension to sync.
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <button
+                type="button"
+                id="dashboard-banner-check-again-btn"
+                className="btn-primary"
+                onClick={() => void checkExtension()}
+                disabled={isChecking}
+                style={{ padding: "8px 16px", fontSize: "0.8125rem", borderRadius: "6px" }}
+              >
+                {isChecking ? "Checking..." : "Check Again"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Primary View Switcher */}
         <div

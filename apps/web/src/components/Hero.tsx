@@ -4,9 +4,14 @@ import { useAuth } from "../lib/authContext";
 interface HeroProps {
   onOpenBetaModal?: () => void;
   onScrollToDemo: () => void;
+  onGetExtension?: () => void;
 }
 
-export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal: _onOpenBetaModal, onScrollToDemo }) => {
+export const Hero: React.FC<HeroProps> = ({
+  onOpenBetaModal: _onOpenBetaModal,
+  onScrollToDemo,
+  onGetExtension
+}) => {
   const { user } = useAuth();
 
   const handleScrollToHowItWorks = () => {
@@ -15,6 +20,12 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal: _onOpenBetaModal, o
       el.scrollIntoView({ behavior: "smooth" });
     } else {
       onScrollToDemo();
+    }
+  };
+
+  const handleGetExtensionClick = () => {
+    if (onGetExtension) {
+      onGetExtension();
     }
   };
 
@@ -107,6 +118,23 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBetaModal: _onOpenBetaModal, o
                 Get Started Free →
               </a>
             )}
+
+            <button
+              type="button"
+              id="hero-get-extension-btn"
+              className="btn-secondary"
+              onClick={handleGetExtensionClick}
+              style={{
+                padding: "13px 22px",
+                fontSize: "0.95rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px"
+              }}
+            >
+              <span aria-hidden="true">🧩</span>
+              <span>Get Our Extension</span>
+            </button>
 
             <button
               type="button"
