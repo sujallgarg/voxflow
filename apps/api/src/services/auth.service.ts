@@ -16,37 +16,63 @@ const AUTH_SECRET = process.env.AUTH_SECRET || (IS_PROD ? "" : "voxflow_local_de
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
-let supabase: SupabaseClient | null = null;
-
-if (
-  SUPABASE_URL &&
-  SUPABASE_ANON_KEY &&
-  SUPABASE_URL.startsWith("https://") &&
-  !SUPABASE_URL.includes("placeholder")
-) {
-  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    }
-  });
-}
+let supabaseClientInstance: SupabaseClient | null = null;
+let customTestingClient: SupabaseClient | null | undefined = undefined;
 
 /**
  * Allow injection or mocking of Supabase client in test environments
  */
 export function setSupabaseClientForTesting(client: SupabaseClient | null) {
-  supabase = client;
+  customTestingClient = client;
+}
+
+/**
+ * Get or lazily initialize the Supabase client using production/dev environment variables
+ */
+export function getSupabaseClient(): SupabaseClient | null {
+  if (customTestingClient !== undefined) {
+    return customTestingClient;
+  }
+  if (supabaseClientInstance) {
+    return supabaseClientInstance;
+  }
+
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim().replace(/\/+$/, "");
+  const key = (
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    ""
+  ).trim();
+
+  if (url && key && url.startsWith("https://") && !url.includes("placeholder")) {
+    supabaseClientInstance = createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      }
+    });
+  }
+
+  return supabaseClientInstance;
 }
 
 /**
  * Verify a Supabase JWT access token using the official Supabase Auth API
  */
 export async function verifySupabaseToken(token: string): Promise<AuthenticatedUser | null> {
-  if (!supabase) return null;
+  const client = getSupabaseClient();
+  if (!client) {
+    return null;
+  }
   try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    const { data: { user }, error } = await client.auth.getUser(token);
     if (error || !user || !user.id) {
+      if (error) {
+        // Safe warning log without exposing the access token
+        console.warn(`[auth] Supabase token verification failed: ${error.message} (status: ${error.status || 401})`);
+      }
       return null;
     }
     return {
@@ -54,7 +80,8 @@ export async function verifySupabaseToken(token: string): Promise<AuthenticatedU
       email: user.email,
       role: user.role
     };
-  } catch {
+  } catch (err: any) {
+    console.warn(`[auth] Unexpected error during token verification: ${err?.message || "Unknown error"}`);
     return null;
   }
 }
@@ -135,17 +162,20 @@ export async function authenticateRequest(
 
   let token: string | null = null;
 
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    token = authHeader.slice(7).trim();
+  if (authHeader) {
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (match) {
+      token = match[1].trim().replace(/^"(.*)"$/, "$1");
+    }
   } else if (customAuthHeader) {
-    token = customAuthHeader.trim();
+    token = customAuthHeader.trim().replace(/^"(.*)"$/, "$1");
   }
 
   if (token) {
     let verified: AuthenticatedUser | null = null;
 
     // 1. If Supabase is configured, verify token with Supabase Auth
-    if (supabase) {
+    if (getSupabaseClient()) {
       verified = await verifySupabaseToken(token);
     }
 

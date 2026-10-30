@@ -90,17 +90,34 @@ class VoxFlowApiClient {
   }
 
   async transcribeAudio(audioBlob: Blob, filename = "voxflow-recording.webm", userId?: string): Promise<{ text: string }> {
-    const authHeaders = await this.getAuthHeaders(userId);
-    const formData = new FormData();
-    formData.append("audio", audioBlob, filename);
+    let authHeaders = await this.getAuthHeaders(userId);
+    const createFormData = () => {
+      const formData = new FormData();
+      formData.append("audio", audioBlob, filename);
+      return formData;
+    };
 
-    const res = await fetch(`${this.baseUrl}/transcribe`, {
+    let res = await fetch(`${this.baseUrl}/transcribe`, {
       method: "POST",
       headers: {
         ...authHeaders
       },
-      body: formData
+      body: createFormData()
     });
+
+    // If 401 Unauthorized (invalid or expired token), attempt token refresh and retry once
+    if (res.status === 401 && authHeaders.Authorization) {
+      const freshHeaders = await this.getAuthHeaders(userId, true);
+      if (freshHeaders.Authorization && freshHeaders.Authorization !== authHeaders.Authorization) {
+        res = await fetch(`${this.baseUrl}/transcribe`, {
+          method: "POST",
+          headers: {
+            ...freshHeaders
+          },
+          body: createFormData()
+        });
+      }
+    }
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -237,8 +254,8 @@ class VoxFlowApiClient {
   }
 
   async processVoice(transcript: string, targetLanguage?: string, userId?: string): Promise<ProcessPipelineResult> {
-    const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/process`, {
+    let authHeaders = await this.getAuthHeaders(userId);
+    let res = await fetch(`${this.baseUrl}/process`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -246,6 +263,20 @@ class VoxFlowApiClient {
       },
       body: JSON.stringify({ transcript, targetLanguage })
     });
+
+    if (res.status === 401 && authHeaders.Authorization) {
+      const freshHeaders = await this.getAuthHeaders(userId, true);
+      if (freshHeaders.Authorization && freshHeaders.Authorization !== authHeaders.Authorization) {
+        res = await fetch(`${this.baseUrl}/process`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...freshHeaders
+          },
+          body: JSON.stringify({ transcript, targetLanguage })
+        });
+      }
+    }
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -280,9 +311,60 @@ class VoxFlowApiClient {
     return res.json();
   }
 
-  private async getAuthHeaders(userId?: string): Promise<Record<string, string>> {
+  private refreshPromise: Promise<any> | null = null;
+
+  private async safeRefreshSession(): Promise<any> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = (async () => {
+      try {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error) {
+          // Token is invalid or revoked, notify application cleanly
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("voxflow_session_expired"));
+            window.dispatchEvent(new CustomEvent("voxflow_auth_sync"));
+          }
+          return null;
+        }
+        return data?.session ?? null;
+      } catch {
+        return null;
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
+  }
+
+  private async getAuthHeaders(userId?: string, forceRefresh = false): Promise<Record<string, string>> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      let session: any = null;
+
+      if (forceRefresh) {
+        session = await this.safeRefreshSession();
+      }
+
+      if (!session) {
+        const { data } = await supabase.auth.getSession();
+        session = data?.session;
+      }
+
+      // Preemptive refresh: verify if session token is expired or expiring within 60 seconds
+      if (session && !forceRefresh) {
+        const expiresAtMs = (session.expires_at || 0) * 1000;
+        const isExpiringSoon = expiresAtMs > 0 && expiresAtMs - Date.now() < 60000;
+        if (isExpiringSoon) {
+          const refreshed = await this.safeRefreshSession();
+          if (refreshed?.access_token) {
+            session = refreshed;
+          }
+        }
+      }
+
       if (session?.access_token) {
         return {
           Authorization: `Bearer ${session.access_token}`

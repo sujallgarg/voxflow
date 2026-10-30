@@ -1204,6 +1204,22 @@ describe("VoxFlow API Server Endpoints", () => {
       expect(res.headers["access-control-allow-origin"]).toBe("https://voxflow-one.vercel.app");
     });
 
+    it("should allow OPTIONS preflight requests for billing subscription from Vercel", async () => {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/billing/subscription",
+        headers: {
+          origin: "https://voxflow-one.vercel.app",
+          "access-control-request-method": "GET",
+          "access-control-request-headers": "authorization,content-type"
+        }
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(res.headers["access-control-allow-origin"]).toBe("https://voxflow-one.vercel.app");
+      expect(res.headers["access-control-allow-credentials"]).toBe("true");
+    });
+
     it("should NOT set access-control-allow-origin for untrusted origins", async () => {
       const res = await app.inject({
         method: "OPTIONS",
