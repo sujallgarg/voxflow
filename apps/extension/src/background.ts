@@ -1408,7 +1408,9 @@ function isTrustedAuthSender(sender: chrome.runtime.MessageSender): boolean {
         origin === "https://voxflow.com" ||
         origin === "https://www.voxflow.com" ||
         origin === "https://voxflow-web.onrender.com" ||
-        (parsed.protocol === "https:" && (hostname === "voxflow.com" || hostname.endsWith(".voxflow.com")))
+        origin === "https://voxflow-one.vercel.app" ||
+        (parsed.protocol === "https:" && (hostname === "voxflow.com" || hostname.endsWith(".voxflow.com"))) ||
+        (parsed.protocol === "https:" && (hostname === "voxflow-one.vercel.app" || /^voxflow(-[a-z0-9_-]+)?\.vercel\.app$/i.test(hostname)))
       ) {
         return true;
       }

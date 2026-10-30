@@ -1155,4 +1155,66 @@ describe("VoxFlow API Server Endpoints", () => {
       expect(blockedBody.code).toBe("USAGE_LIMIT_REACHED");
     }, 30000);
   });
+
+  describe("CORS Configuration for Production & Preview Frontends", () => {
+    it("should allow OPTIONS preflight requests from https://voxflow-one.vercel.app", async () => {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/transcribe",
+        headers: {
+          origin: "https://voxflow-one.vercel.app",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "authorization,content-type"
+        }
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(res.headers["access-control-allow-origin"]).toBe("https://voxflow-one.vercel.app");
+      expect(res.headers["access-control-allow-credentials"]).toBe("true");
+      expect(res.headers["access-control-allow-methods"]).toBeDefined();
+    });
+
+    it("should allow OPTIONS preflight requests from Vercel preview domains", async () => {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/demo/process-audio",
+        headers: {
+          origin: "https://voxflow-git-feature-preview.vercel.app",
+          "access-control-request-method": "POST"
+        }
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(res.headers["access-control-allow-origin"]).toBe("https://voxflow-git-feature-preview.vercel.app");
+      expect(res.headers["access-control-allow-credentials"]).toBe("true");
+    });
+
+    it("should allow OPTIONS preflight requests for billing checkout from Vercel", async () => {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/billing/checkout",
+        headers: {
+          origin: "https://voxflow-one.vercel.app",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "authorization,content-type"
+        }
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(res.headers["access-control-allow-origin"]).toBe("https://voxflow-one.vercel.app");
+    });
+
+    it("should NOT set access-control-allow-origin for untrusted origins", async () => {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/transcribe",
+        headers: {
+          origin: "https://evil-phishing-site.com",
+          "access-control-request-method": "POST"
+        }
+      });
+
+      expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    });
+  });
 });

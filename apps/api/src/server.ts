@@ -47,53 +47,110 @@ export function buildServer() {
   // CORS Configuration
   const corsOriginEnv = process.env.CORS_ORIGIN;
 
+  function isAllowedCorsOrigin(origin: string | undefined): boolean {
+    // When no origin header is present (e.g. server-to-server / curl / native apps), allow
+    if (!origin) {
+      return true;
+    }
+
+    // 1. Explicitly configured origins from env
+    if (corsOriginEnv) {
+      const allowedOrigins = corsOriginEnv.split(",").map((o) => o.trim());
+      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        return true;
+      }
+    }
+
+    try {
+      const parsed = new URL(origin);
+      const hostname = parsed.hostname.toLowerCase();
+
+      // 2. Official production and preview Vercel domains
+      if (
+        origin === "https://voxflow-one.vercel.app" ||
+        hostname === "voxflow-one.vercel.app" ||
+        (/^voxflow(-[a-z0-9_-]+)?\.vercel\.app$/i.test(hostname)) ||
+        (parsed.protocol === "https:" && hostname.endsWith(".vercel.app") && hostname.includes("voxflow"))
+      ) {
+        return true;
+      }
+
+      // 3. Official custom production domains
+      if (
+        origin === "https://voxflow.com" ||
+        origin === "https://www.voxflow.com" ||
+        origin === "https://app.voxflow.com" ||
+        origin === "https://voxflow-web.onrender.com" ||
+        (parsed.protocol === "https:" && (hostname === "voxflow.com" || hostname.endsWith(".voxflow.com")))
+      ) {
+        return true;
+      }
+
+      // 4. Local development origins
+      if (
+        hostname === "localhost" ||
+        hostname === "127.0.0.1" ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:")
+      ) {
+        return true;
+      }
+    } catch {
+      // Invalid URL
+    }
+
+    // 5. Browser extension origin check
+    if (origin.startsWith("chrome-extension://")) {
+      if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") {
+        return true;
+      }
+
+      const allowedExtIds = [
+        process.env.CHROME_EXTENSION_ID,
+        ...(process.env.ALLOWED_EXTENSION_IDS ? process.env.ALLOWED_EXTENSION_IDS.split(",") : [])
+      ]
+        .map((id) => id?.trim())
+        .filter((id): id is string => Boolean(id));
+
+      const extId = origin.replace("chrome-extension://", "").split("/")[0];
+      if (allowedExtIds.length > 0 && allowedExtIds.includes(extId)) {
+        return true;
+      }
+      return false;
+    }
+
+    // Default fallback
+    return false;
+  }
+
   app.register(cors, {
     origin: (origin, cb) => {
-      // In development or when no origin header (e.g. mobile apps / curl), allow
-      if (!isProd || !origin) {
-        cb(null, true);
-        return;
-      }
-
-      if (corsOriginEnv) {
-        const allowedOrigins = corsOriginEnv.split(",").map((o) => o.trim());
-        if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
-          cb(null, true);
-          return;
-        }
-      }
-
-      // Browser extension origin check
-      if (origin.startsWith("chrome-extension://")) {
-        // In development/test, allow unpacked extension origins
-        if (!isProd) {
-          cb(null, true);
-          return;
-        }
-
-        // In production, require extension ID to match configured VoxFlow extension IDs
-        const allowedExtIds = [
-          process.env.CHROME_EXTENSION_ID,
-          ...(process.env.ALLOWED_EXTENSION_IDS ? process.env.ALLOWED_EXTENSION_IDS.split(",") : [])
-        ]
-          .map((id) => id?.trim())
-          .filter((id): id is string => Boolean(id));
-
-        const extId = origin.replace("chrome-extension://", "").split("/")[0];
-        if (allowedExtIds.length > 0 && allowedExtIds.includes(extId)) {
-          cb(null, true);
-          return;
-        }
-
-        // Reject untrusted extension origins in production
-        cb(null, false);
-        return;
-      }
-
-      // Default fallback
-      cb(null, false);
+      const allowed = isAllowedCorsOrigin(origin);
+      cb(null, allowed);
     },
-    credentials: true
+    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Origin",
+      "X-Requested-With",
+      "Content-Type",
+      "Accept",
+      "Authorization",
+      "x-idempotency-key",
+      "x-user-id",
+      "x-request-id",
+      "apikey",
+      "x-client-info",
+      "Range"
+    ],
+    exposedHeaders: [
+      "Content-Range",
+      "X-Content-Range",
+      "x-ratelimit-limit",
+      "x-ratelimit-remaining",
+      "x-ratelimit-reset"
+    ],
+    credentials: true,
+    preflight: true
   });
 
   // Rate Limiter PreHandler Hook (120 req/min sliding window)

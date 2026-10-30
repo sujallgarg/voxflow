@@ -50,7 +50,7 @@ services:
     staticPublishPath: ./apps/web/dist
     envVars:
       - key: VITE_API_URL
-        value: https://voxflow-api.onrender.com
+        value: https://voxflow-u7h3.onrender.com
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
