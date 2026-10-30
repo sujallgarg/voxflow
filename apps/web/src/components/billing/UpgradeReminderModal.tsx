@@ -158,7 +158,7 @@ export const UpgradeReminderModal: React.FC<UpgradeReminderModalProps> = ({
               color: "#666666"
             }}
           >
-            VoxFlow Pro Plan
+            VoxFlow Premium
           </span>
         </div>
 
@@ -280,7 +280,7 @@ export const UpgradeReminderModal: React.FC<UpgradeReminderModalProps> = ({
               cursor: "pointer"
             }}
           >
-            Explore Pro →
+            Explore Premium Plans
           </button>
 
           <button

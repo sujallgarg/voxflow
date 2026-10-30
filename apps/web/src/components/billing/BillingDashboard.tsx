@@ -369,6 +369,56 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
               )}
             </div>
 
+            {/* Upgrade banner for Free accounts */}
+            {!entitlements?.isPremium && (
+              <div
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #111111",
+                  borderRadius: "8px",
+                  padding: "20px 24px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "16px",
+                  flexWrap: "wrap",
+                  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)"
+                }}
+              >
+                <div style={{ maxWidth: "620px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                    <strong style={{ fontSize: "1rem", color: "#111111" }}>
+                      Unlock more with VoxFlow Premium
+                    </strong>
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        background: "#f5f5f5",
+                        border: "1px solid #e5e5e5",
+                        color: "#666666",
+                        fontWeight: 600
+                      }}
+                    >
+                      $9/month
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "0.875rem", color: "#666666", margin: 0, lineHeight: 1.5 }}>
+                    Need more voice typing or meeting capacity? Explore the available plans to find the right fit. Free accounts include 3 meetings and 100 voice typing requests per month.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={onNavigateToPricing}
+                  style={{ padding: "9px 18px", fontSize: "0.875rem", flexShrink: 0 }}
+                >
+                  Explore Premium Plans
+                </button>
+              </div>
+            )}
+
             {/* Card 2: Quota & Usage Meters */}
             <div
               style={{

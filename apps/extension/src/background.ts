@@ -1500,6 +1500,34 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     return true;
   }
 
+  // 0c. Extension Presence and Authentication Status Query
+  if (msg.type === "CHECK_EXTENSION_STATUS") {
+    (async () => {
+      try {
+        const data = await chrome.storage.local.get(["voxflow_auth_token", "voxflow_user_id"]);
+        const hasToken = Boolean(
+          data.voxflow_auth_token &&
+          typeof data.voxflow_auth_token === "string" &&
+          data.voxflow_auth_token.length > 10
+        );
+        sendResponse({
+          success: true,
+          installed: true,
+          authenticated: hasToken,
+          version: "0.1.0"
+        });
+      } catch {
+        sendResponse({
+          success: true,
+          installed: true,
+          authenticated: false,
+          version: "0.1.0"
+        });
+      }
+    })();
+    return true;
+  }
+
   // 1. Text Insertion
   if (msg.type === "INSERT_TEXT" && typeof msg.text === "string") {
     void handleInsertText(msg.text, sendResponse);

@@ -346,6 +346,65 @@ function handleExplicitSignOut() {
 if (isTrustedVoxFlowWebOrigin()) {
   checkAndSyncVoxFlowAuth();
 
+  // Set DOM attribute indicating VoxFlow extension is present on trusted origin
+  try {
+    document.documentElement.setAttribute("data-voxflow-extension", "installed");
+  } catch {}
+
+  // Safe bidirectional handshake with VoxFlow web application
+  window.addEventListener("message", (event) => {
+    // Security: Only accept messages originating from current window and trusted web origin
+    if (event.source !== window || event.origin !== window.location.origin) {
+      return;
+    }
+
+    if (
+      event.data &&
+      typeof event.data === "object" &&
+      event.data.type === "VOXFLOW_PING_EXTENSION"
+    ) {
+      try {
+        chrome.runtime.sendMessage(
+          { type: "CHECK_EXTENSION_STATUS" },
+          (response) => {
+            if (chrome.runtime.lastError || !response) {
+              window.postMessage(
+                {
+                  type: "VOXFLOW_PONG_EXTENSION",
+                  installed: true,
+                  authenticated: false,
+                  version: "0.1.0"
+                },
+                window.location.origin
+              );
+            } else {
+              window.postMessage(
+                {
+                  type: "VOXFLOW_PONG_EXTENSION",
+                  installed: true,
+                  authenticated: Boolean(response.authenticated),
+                  version: typeof response.version === "string" ? response.version : "0.1.0"
+                },
+                window.location.origin
+              );
+            }
+          }
+        );
+      } catch {
+        // In case the extension runtime is disconnected or offscreen context is restarting
+        window.postMessage(
+          {
+            type: "VOXFLOW_PONG_EXTENSION",
+            installed: true,
+            authenticated: false,
+            version: "0.1.0"
+          },
+          window.location.origin
+        );
+      }
+    }
+  });
+
   window.addEventListener("storage", (e) => {
     if (e.key === "voxflow_current_user" || (e.key && e.key.startsWith("sb-"))) {
       if (e.newValue === null) {

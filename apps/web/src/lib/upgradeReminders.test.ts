@@ -183,7 +183,51 @@ describe("VoxFlow Smart Premium Upgrade Reminders Suite", () => {
       expect(reminder).not.toBeNull();
       expect(reminder?.percentage).toBe(80);
       expect(reminder?.metricLabel).toBe("Voice Transcription Minutes");
+      expect(reminder?.title).toContain("Approaching your monthly");
+      expect(reminder?.description).toContain("Need more voice typing or meeting capacity?");
       expect(reminder?.highlight).toContain("300 minutes");
+    });
+
+    it("detects when a free user has reached 100% of their meeting limit", () => {
+      const exhaustedMeetings: UserEntitlements = {
+        ...baseEntitlements,
+        usage: {
+          ...baseEntitlements.usage,
+          meetingsUsed: 3,
+          meetingsLimit: 3
+        }
+      };
+
+      const reminder = checkUsageThresholdReminder(exhaustedMeetings);
+      expect(reminder).not.toBeNull();
+      expect(reminder?.percentage).toBe(100);
+      expect(reminder?.metricLabel).toBe("Monthly Meeting Records");
+      expect(reminder?.title).toBe("Monthly monthly meeting records limit reached");
+      expect(reminder?.description).toContain("You have reached your free plan limit of 3 monthly meeting records this month.");
+      expect(reminder?.description).toContain("Need more voice typing or meeting capacity? Explore the available plans to find the right fit.");
+      expect(reminder?.highlight).toContain("VoxFlow Premium provides up to 25 meeting notes");
+    });
+
+    it("reflects actual server-provided quota values dynamically", () => {
+      const customEntitlements: UserEntitlements = {
+        ...baseEntitlements,
+        limits: {
+          ...baseEntitlements.limits,
+          voiceTypingRequests: 200 // Custom limit from server
+        },
+        usage: {
+          ...baseEntitlements.usage,
+          voiceTypingUsed: 160, // 160 / 200 = 80%
+          voiceTypingLimit: 200
+        }
+      };
+
+      const reminder = checkUsageThresholdReminder(customEntitlements);
+      expect(reminder).not.toBeNull();
+      expect(reminder?.usedAmount).toBe(160);
+      expect(reminder?.limitAmount).toBe(200);
+      expect(reminder?.percentage).toBe(80);
+      expect(reminder?.description).toContain("160 of 200");
     });
   });
 
@@ -198,9 +242,10 @@ describe("VoxFlow Smart Premium Upgrade Reminders Suite", () => {
   });
 
   describe("Contextual Reminder copy accuracy", () => {
-    it("occasional reminder cites authentic Pro plan benefits", () => {
+    it("occasional reminder cites exact Premium headline and copy", () => {
       const config = getOccasionalReminderConfig();
-      expect(config.title).toBe("Get more done with VoxFlow Pro");
+      expect(config.title).toBe("Unlock more with VoxFlow Premium");
+      expect(config.description).toBe("Need more voice typing or meeting capacity? Explore the available plans to find the right fit.");
       expect(config.highlight).toContain("1,000 voice typing requests");
       expect(config.highlight).toContain("300 transcription minutes");
       expect(config.highlight).toContain("25 intelligent meeting records");
@@ -208,6 +253,7 @@ describe("VoxFlow Smart Premium Upgrade Reminders Suite", () => {
 
     it("meeting completion reminder cites authentic limits", () => {
       const config = getMeetingCompletionReminderConfig();
+      expect(config.title).toBe("Unlock more with VoxFlow Premium");
       expect(config.description).toContain("Free accounts include 3 meetings per month");
       expect(config.highlight).toContain("25 monthly meetings");
       expect(config.highlight).toContain("up to 2-hour audio recordings");

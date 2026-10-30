@@ -46,7 +46,7 @@ export const DashboardUpgradeBanner: React.FC<DashboardUpgradeBannerProps> = ({
         boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)"
       }}
       role="region"
-      aria-label="Pro plan upgrade suggestion"
+      aria-label="Premium upgrade suggestion"
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", maxWidth: "680px" }}>
         <div
@@ -70,7 +70,7 @@ export const DashboardUpgradeBanner: React.FC<DashboardUpgradeBannerProps> = ({
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
             <strong style={{ fontSize: "0.9375rem", color: "#111111" }}>
-              Unlock the full power of VoxFlow Pro
+              Unlock more with VoxFlow Premium
             </strong>
             <span
               style={{
@@ -87,7 +87,7 @@ export const DashboardUpgradeBanner: React.FC<DashboardUpgradeBannerProps> = ({
             </span>
           </div>
           <p style={{ fontSize: "0.84375rem", color: "#666666", margin: 0, lineHeight: 1.5 }}>
-            You have used {meetingsUsed} of {meetingsLimit} included free monthly meetings. Pro includes 25 monthly meetings, permanent history retention, 300 transcription minutes, and priority processing.
+            Need more voice typing or meeting capacity? Explore the available plans to find the right fit. You have used {meetingsUsed} of {meetingsLimit} included free monthly meetings.
           </p>
         </div>
       </div>
@@ -99,13 +99,13 @@ export const DashboardUpgradeBanner: React.FC<DashboardUpgradeBannerProps> = ({
           onClick={handleExplore}
           style={{ fontSize: "0.8125rem", padding: "7px 14px", borderRadius: "6px" }}
         >
-          Explore Pro →
+          Explore Premium Plans
         </button>
 
         <button
           type="button"
           onClick={handleDismiss}
-          aria-label="Dismiss Pro banner"
+          aria-label="Dismiss Premium banner"
           style={{
             background: "none",
             border: "1px solid #e5e5e5",
