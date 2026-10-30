@@ -37,8 +37,8 @@ export function createRateLimiter(options: RateLimitOptions = {}) {
   const maxRequests = options.maxRequests || 120;
 
   return async function rateLimitHook(request: FastifyRequest, reply: FastifyReply) {
-    // Exclude health check from rate limiting
-    if (request.url === "/health") {
+    // Exclude health check and CORS preflight OPTIONS from rate limiting
+    if (request.url === "/health" || request.method === "OPTIONS") {
       return;
     }
 

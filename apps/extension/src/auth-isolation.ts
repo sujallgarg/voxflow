@@ -23,13 +23,22 @@ export function isTrustedVoxFlowOrigin(urlOrOrigin?: string): boolean {
     if (
       origin === "https://voxflow.com" ||
       origin === "https://www.voxflow.com" ||
-      origin === "https://voxflow-web.onrender.com"
+      origin === "https://voxflow-web.onrender.com" ||
+      origin === "https://voxflow-one.vercel.app"
     ) {
       return true;
     }
 
     // Must be official voxflow.com domain or subdomain with HTTPS
     if (hostname === "voxflow.com" || hostname.endsWith(".voxflow.com")) {
+      return parsed.protocol === "https:";
+    }
+
+    // Official production and preview Vercel domains
+    if (
+      hostname === "voxflow-one.vercel.app" ||
+      (/^voxflow(-[a-z0-9_-]+)?\.vercel\.app$/i.test(hostname))
+    ) {
       return parsed.protocol === "https:";
     }
 

@@ -9,6 +9,8 @@ describe("VoxFlow Chrome Extension Authentication Security Isolation", () => {
       expect(isTrustedVoxFlowOrigin("https://www.voxflow.com")).toBe(true);
       expect(isTrustedVoxFlowOrigin("https://app.voxflow.com")).toBe(true);
       expect(isTrustedVoxFlowOrigin("https://voxflow-web.onrender.com")).toBe(true);
+      expect(isTrustedVoxFlowOrigin("https://voxflow-one.vercel.app")).toBe(true);
+      expect(isTrustedVoxFlowOrigin("https://voxflow-preview-123.vercel.app")).toBe(true);
     });
 
     it("should accept authorized local development origins", () => {

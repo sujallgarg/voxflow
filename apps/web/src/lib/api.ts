@@ -3,7 +3,7 @@ import { supabase } from "./supabase";
 const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
 export const API_BASE_URL = configuredApiUrl
   ? configuredApiUrl.replace(/\/+$/, "")
-  : (import.meta.env.PROD ? "" : "http://localhost:3001");
+  : (import.meta.env.PROD ? "https://voxflow-u7h3.onrender.com" : "http://localhost:3001");
 
 export interface LanguageResult {
   primaryLanguage: string;
