@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api } from "./api";
 import { useAuth } from "./authContext";
-import { getCurrentUser } from "./userStore";
 import type { UserEntitlements, UserSubscription } from "@voxflow/shared";
 
 export interface SubscriptionContextType {
@@ -16,15 +15,14 @@ const SubscriptionContext = createContext<SubscriptionContextType | undefined>(u
 
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const currentUser = getCurrentUser();
-  const userId = user?.id || currentUser.id;
 
   const [entitlements, setEntitlements] = useState<UserEntitlements | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   const fetchSubscription = useCallback(async () => {
-    if (!userId) {
+    // Unauthenticated visitors do not have subscriptions; avoid triggering 401 on protected backend
+    if (!user?.id) {
       setEntitlements(null);
       setSubscription(null);
       setLoading(false);
@@ -32,7 +30,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     try {
-      const res = await api.getSubscription(userId);
+      const res = await api.getSubscription(user.id);
       setEntitlements(res.entitlements || null);
       setSubscription(res.subscription || null);
     } catch (err) {
@@ -43,7 +41,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [user?.id]);
 
   // Initial load and whenever user / userId changes (e.g. login, session restore)
   useEffect(() => {

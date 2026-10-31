@@ -373,9 +373,9 @@ class VoxFlowApiClient {
     } catch {
       // Ignored: fallback to unauthenticated or dev identifier
     }
-    return {
-      "x-user-id": userId || "user_me"
-    };
+    return userId && userId !== "user_me"
+      ? { "x-user-id": userId }
+      : {};
   }
 
   async getMeetings(userId?: string): Promise<{ meetings: any[] }> {
@@ -565,11 +565,29 @@ class VoxFlowApiClient {
     entitlements: any;
     subscription: any;
   }> {
-    const authHeaders = await this.getAuthHeaders(userId);
+    let authHeaders = await this.getAuthHeaders(userId);
+    // Never make protected subscription requests for unauthenticated visitors or placeholder IDs
+    if (!authHeaders.Authorization && (!userId || userId === "user_me")) {
+      return {
+        entitlements: null,
+        subscription: null
+      };
+    }
     const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
-    const res = await fetch(`${this.baseUrl}/billing/subscription${query}`, {
+    let res = await fetch(`${this.baseUrl}/billing/subscription${query}`, {
       headers: { ...authHeaders }
     });
+
+    // If 401 Unauthorized (invalid or expired token), attempt token refresh and retry once
+    if (res.status === 401 && authHeaders.Authorization) {
+      const freshHeaders = await this.getAuthHeaders(userId, true);
+      if (freshHeaders.Authorization && freshHeaders.Authorization !== authHeaders.Authorization) {
+        res = await fetch(`${this.baseUrl}/billing/subscription${query}`, {
+          headers: { ...freshHeaders }
+        });
+      }
+    }
+
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.error || `Failed to fetch subscription (${res.status})`);
