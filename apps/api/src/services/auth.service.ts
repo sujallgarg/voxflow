@@ -9,15 +9,22 @@ export interface AuthenticatedUser {
 }
 
 // Secret key for HMAC token signing (only used in dev / testing, disabled in production)
-const IS_PROD = process.env.NODE_ENV === "production";
-const ENFORCE_AUTH = process.env.AUTH_ENFORCE === "true" || IS_PROD;
-const AUTH_SECRET = process.env.AUTH_SECRET || (IS_PROD ? "" : "voxflow_local_dev_secret_key_32chars_min!");
+export function isProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+export function isAuthEnforced(): boolean {
+  return process.env.AUTH_ENFORCE === "true" || isProduction();
+}
+
+const AUTH_SECRET = process.env.AUTH_SECRET || "voxflow_local_dev_secret_key_32chars_min!";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
 let supabaseClientInstance: SupabaseClient | null = null;
 let customTestingClient: SupabaseClient | null | undefined = undefined;
+let hasLoggedMissingSupabaseWarning = false;
 
 /**
  * Allow injection or mocking of Supabase client in test environments
@@ -53,6 +60,11 @@ export function getSupabaseClient(): SupabaseClient | null {
         autoRefreshToken: false
       }
     });
+  } else if (!hasLoggedMissingSupabaseWarning && !process.env.VITEST) {
+    hasLoggedMissingSupabaseWarning = true;
+    console.warn(
+      "[auth] Supabase is NOT configured on the backend. Ensure SUPABASE_URL and SUPABASE_ANON_KEY (or SUPABASE_SERVICE_ROLE_KEY) are set in environment variables."
+    );
   }
 
   return supabaseClientInstance;
@@ -64,6 +76,7 @@ export function getSupabaseClient(): SupabaseClient | null {
 export async function verifySupabaseToken(token: string): Promise<AuthenticatedUser | null> {
   const client = getSupabaseClient();
   if (!client) {
+    console.warn("[auth] Cannot verify token: Supabase client is not configured.");
     return null;
   }
   try {
@@ -180,7 +193,7 @@ export async function authenticateRequest(
     }
 
     // 2. If not verified by Supabase (or Supabase not active), check HMAC signature ONLY in non-production
-    if (!verified && !IS_PROD && AUTH_SECRET) {
+    if (!verified && !isProduction() && AUTH_SECRET) {
       verified = verifyAuthToken(token, AUTH_SECRET);
     }
 
@@ -206,7 +219,7 @@ export async function authenticateRequest(
   }
 
   // If no token was supplied:
-  if (ENFORCE_AUTH) {
+  if (isAuthEnforced()) {
     await reply.code(401).send({
       error: "Authentication required. Missing Bearer token in Authorization header.",
       code: "MISSING_AUTHENTICATION"
