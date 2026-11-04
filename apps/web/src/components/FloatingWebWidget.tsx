@@ -716,21 +716,6 @@ export const FloatingWebWidget: React.FC = () => {
           language: voiceTargetLang,
           createdAt: now.toISOString()
         });
-      } else {
-        try {
-          const guestKey = "voxflow_user_transcripts_guest";
-          const raw = localStorage.getItem(guestKey);
-          const list = raw ? JSON.parse(raw) : [];
-          list.unshift({
-            id: transcriptionId,
-            title,
-            transcript: rawSpoken,
-            transformedText: finalText,
-            language: voiceTargetLang,
-            createdAt: now.toISOString()
-          });
-          localStorage.setItem(guestKey, JSON.stringify(list.slice(0, 50)));
-        } catch {}
       }
 
       // 2. Save to widget's local voice history
@@ -1220,7 +1205,7 @@ export const FloatingWebWidget: React.FC = () => {
         const id = `meeting_${Date.now()}`;
         meetingRecord = {
           id,
-          userId: user?.id || "user_me",
+          userId: user?.id || "",
           title: notesResult.title || meetingTitle,
           date: now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
           time: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),

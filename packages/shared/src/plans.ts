@@ -253,6 +253,7 @@ export interface DetailedUsageBreakdown {
 
 export interface UserUsageQuota {
   userId: string;
+  userName?: string;
   periodYearMonth: string; // Format: YYYY-MM
   voiceTranscriptionsUsed: number; // legacy alias (in minutes)
   meetingsUsed: number;

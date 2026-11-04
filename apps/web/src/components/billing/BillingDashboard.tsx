@@ -19,19 +19,37 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
   const currentUser = getCurrentUser();
   const userId = user?.id || currentUser.id;
 
-  const [entitlements, setEntitlements] = useState<UserEntitlements | null>(null);
+  const [entitlements, setEntitlements] = useState<UserEntitlements | null>(() => {
+    try {
+      const cached = localStorage.getItem(`voxflow_cached_entitlements_${userId}`);
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
   const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    try {
+      return !localStorage.getItem(`voxflow_cached_entitlements_${userId}`);
+    } catch {
+      return true;
+    }
+  });
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadBillingData = async () => {
     try {
-      setLoading(true);
+      if (!entitlements) setLoading(true);
       setError(null);
       const subRes = await api.getSubscription(userId);
       setEntitlements(subRes.entitlements);
+      try {
+        localStorage.setItem(`voxflow_cached_entitlements_${userId}`, JSON.stringify(subRes.entitlements));
+      } catch {
+        // quota exceeded or private mode
+      }
 
       const invRes = await api.getInvoices(userId);
       setInvoices(invRes.invoices || []);
