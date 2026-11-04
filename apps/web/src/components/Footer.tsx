@@ -48,7 +48,20 @@ export const Footer: React.FC<FooterProps> = ({
         >
           {/* Brand Col */}
           <div style={{ maxWidth: "340px" }}>
-            <Logo size={28} />
+            <a
+              href="#/"
+              onClick={(e) => {
+                e.preventDefault();
+                if (window.location.hash) {
+                  window.location.hash = "";
+                }
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", cursor: "pointer" }}
+              aria-label="VoxFlow Home"
+            >
+              <Logo size={28} />
+            </a>
             <p
               style={{
                 marginTop: "14px",
