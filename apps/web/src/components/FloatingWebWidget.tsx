@@ -1512,6 +1512,7 @@ export const FloatingWebWidget: React.FC = () => {
 
           {/* Keyboard Shortcut Badge */}
           <span
+            className="voxflow-shortcut-badge"
             style={{
               background: "#f4f4f5",
               color: "#71717a",

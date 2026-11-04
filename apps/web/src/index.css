@@ -437,3 +437,84 @@ img, svg, video, canvas, audio, iframe, embed, object {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+/* Performance Boost: Content-visibility for below-the-fold landing page sections */
+#features,
+#how-it-works,
+#pricing,
+#faq,
+footer {
+  content-visibility: auto;
+  contain-intrinsic-size: 600px;
+}
+
+/* Mobile Responsiveness & Polished Look for Floating Web Widget */
+@media (max-width: 640px) {
+  #voxflow-floating-web-widget {
+    bottom: 12px !important;
+    right: 12px !important;
+  }
+
+  .voxflow-shortcut-badge {
+    display: none !important;
+  }
+
+  #voxflow-widget-panel {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100dvh - 28px) !important;
+    bottom: 12px !important;
+    right: 12px !important;
+    border-radius: 12px !important;
+  }
+}
+
+@media (max-width: 400px) {
+  #voxflow-floating-web-widget {
+    bottom: 8px !important;
+    right: 8px !important;
+  }
+
+  #voxflow-widget-panel {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    bottom: 8px !important;
+    right: 8px !important;
+    border-radius: 10px !important;
+  }
+}
+
+/* Billing Dashboard Mobile Header & Card Adaptations */
+.billing-nav-back-short {
+  display: none;
+}
+.billing-nav-back-full {
+  display: inline;
+}
+.billing-nav-title-short {
+  display: none;
+}
+.billing-nav-title-full {
+  display: inline;
+}
+
+@media (max-width: 640px) {
+  .billing-nav-back-full {
+    display: none;
+  }
+  .billing-nav-back-short {
+    display: inline;
+  }
+  .billing-nav-title-full {
+    display: none;
+  }
+  .billing-nav-title-short {
+    display: inline;
+  }
+}
+
+@media (max-width: 480px) {
+  .billing-card {
+    padding: 20px 16px !important;
+  }
+}
