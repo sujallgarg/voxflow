@@ -125,7 +125,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
           position: "sticky",
           top: 0,
           zIndex: 40,
-          height: "68px"
+          minHeight: "60px"
         }}
       >
         <div
@@ -134,10 +134,13 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            height: "100%"
+            minHeight: "60px",
+            paddingTop: "8px",
+            paddingBottom: "8px",
+            gap: "10px"
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
             <button
               type="button"
               onClick={onBackToHome}
@@ -150,28 +153,42 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
                 padding: "6px 0",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "6px"
+                gap: "4px",
+                flexShrink: 0,
+                whiteSpace: "nowrap"
               }}
             >
-              ← Back to App
+              ← <span className="billing-nav-back-full">Back to App</span><span className="billing-nav-back-short">Back</span>
             </button>
-            <span style={{ color: "#cccccc" }}>/</span>
-            <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#111111" }}>
-              Billing & Subscription
+            <span style={{ color: "#cccccc", flexShrink: 0 }}>/</span>
+            <span
+              style={{
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                color: "#111111",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              }}
+            >
+              <span className="billing-nav-title-full">Billing & Subscription</span>
+              <span className="billing-nav-title-short">Billing</span>
             </span>
           </div>
 
-          <div>
+          <div style={{ flexShrink: 0 }}>
             <a
               href="#/pricing"
               style={{
-                fontSize: "0.875rem",
+                fontSize: "0.8125rem",
                 fontWeight: 500,
                 color: "#111111",
                 textDecoration: "none",
-                padding: "8px 14px",
+                padding: "7px 12px",
                 borderRadius: "6px",
-                border: "1px solid #e5e5e5"
+                border: "1px solid #e5e5e5",
+                whiteSpace: "nowrap",
+                display: "inline-block"
               }}
             >
               Plans & Pricing
@@ -242,6 +259,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
           <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
             {/* Card 1: Current Plan Status */}
             <div
+              className="billing-card"
               style={{
                 background: "#ffffff",
                 border: "1px solid #e5e5e5",
@@ -254,7 +272,9 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  marginBottom: "20px"
+                  marginBottom: "20px",
+                  flexWrap: "wrap",
+                  gap: "14px"
                 }}
               >
                 <div>
@@ -421,6 +441,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
 
             {/* Card 2: Quota & Usage Meters */}
             <div
+              className="billing-card"
               style={{
                 background: "#ffffff",
                 border: "1px solid #e5e5e5",
@@ -766,6 +787,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({
 
             {/* Card 3: Invoices & Billing History */}
             <div
+              className="billing-card"
               style={{
                 background: "#ffffff",
                 border: "1px solid #e5e5e5",

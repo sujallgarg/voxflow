@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import "./index.css";
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
@@ -11,27 +11,31 @@ import { FinalCTA } from "./components/FinalCTA";
 import { Pricing } from "./components/Pricing";
 import { FAQ } from "./components/FAQ";
 import { Footer } from "./components/Footer";
-import { EarlyAccessModal } from "./components/EarlyAccessModal";
-import { MeetingDashboard } from "./components/meeting-companion/MeetingDashboard";
-import { MeetingWorkspace } from "./components/meeting-companion/MeetingWorkspace";
-import { NewMeetingModal } from "./components/meeting-companion/NewMeetingModal";
 import { getCurrentUser, getUserMeetings, saveUserMeeting, setCurrentUser as setStoredUser } from "./lib/userStore";
 import { api } from "./lib/api";
 import type { MeetingRecord } from "./data/meetingCompanionData";
-import { PrivacyPolicy } from "./components/legal/PrivacyPolicy";
-import { TermsOfService } from "./components/legal/TermsOfService";
-import { RefundPolicy } from "./components/legal/RefundPolicy";
-import { CookiePolicy } from "./components/legal/CookiePolicy";
 import { CookieConsentBanner } from "./components/legal/CookieConsentBanner";
 import { useAuth } from "./lib/authContext";
-import { AuthPages } from "./components/auth/AuthPages";
-import { BillingDashboard } from "./components/billing/BillingDashboard";
-import { CheckoutSuccessPage, CheckoutCancelPage } from "./components/billing/CheckoutStatus";
 import { useSubscription } from "./lib/subscriptionContext";
-import { UpgradeReminderModal } from "./components/billing/UpgradeReminderModal";
 import { FloatingWebWidget } from "./components/FloatingWebWidget";
-import { ExtensionNoticeModal } from "./components/extension/ExtensionNoticeModal";
 import { openExtensionStore } from "./lib/extensionConfig";
+
+// Code-split heavy dashboard, auth, modal and policy components for faster initial load
+const MeetingDashboard = lazy(() => import("./components/meeting-companion/MeetingDashboard").then(m => ({ default: m.MeetingDashboard })));
+const MeetingWorkspace = lazy(() => import("./components/meeting-companion/MeetingWorkspace").then(m => ({ default: m.MeetingWorkspace })));
+const NewMeetingModal = lazy(() => import("./components/meeting-companion/NewMeetingModal").then(m => ({ default: m.NewMeetingModal })));
+const BillingDashboard = lazy(() => import("./components/billing/BillingDashboard").then(m => ({ default: m.BillingDashboard })));
+const CheckoutSuccessPage = lazy(() => import("./components/billing/CheckoutStatus").then(m => ({ default: m.CheckoutSuccessPage })));
+const CheckoutCancelPage = lazy(() => import("./components/billing/CheckoutStatus").then(m => ({ default: m.CheckoutCancelPage })));
+const AuthPages = lazy(() => import("./components/auth/AuthPages").then(m => ({ default: m.AuthPages })));
+const PrivacyPolicy = lazy(() => import("./components/legal/PrivacyPolicy").then(m => ({ default: m.PrivacyPolicy })));
+const TermsOfService = lazy(() => import("./components/legal/TermsOfService").then(m => ({ default: m.TermsOfService })));
+const RefundPolicy = lazy(() => import("./components/legal/RefundPolicy").then(m => ({ default: m.RefundPolicy })));
+const CookiePolicy = lazy(() => import("./components/legal/CookiePolicy").then(m => ({ default: m.CookiePolicy })));
+const EarlyAccessModal = lazy(() => import("./components/EarlyAccessModal").then(m => ({ default: m.EarlyAccessModal })));
+const ExtensionNoticeModal = lazy(() => import("./components/extension/ExtensionNoticeModal").then(m => ({ default: m.ExtensionNoticeModal })));
+const UpgradeReminderModal = lazy(() => import("./components/billing/UpgradeReminderModal").then(m => ({ default: m.UpgradeReminderModal })));
+
 import {
   canShowAutomaticPopup,
   checkUsageThresholdReminder,
@@ -341,15 +345,17 @@ export default function App() {
       {/* Subtle ambient background glow */}
       <div className="ambient-bg" aria-hidden="true" />
 
-      {/* VIEW 1: MEETING DASHBOARD */}
-      {currentView === "companion-dashboard" && (
-        <MeetingDashboard
-          onSelectMeeting={handleSelectMeeting}
-          onBackToHome={handleBackToHome}
-          onOpenNewMeetingModal={() => setIsNewMeetingModalOpen(true)}
-          onGetExtension={handleGetExtension}
-        />
-      )}
+      {/* NON-LANDING SUB-VIEWS (Lazy Loaded for maximum site speed) */}
+      <Suspense fallback={<div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#666", fontSize: "14px" }}>Loading...</div>}>
+        {/* VIEW 1: MEETING DASHBOARD */}
+        {currentView === "companion-dashboard" && (
+          <MeetingDashboard
+            onSelectMeeting={handleSelectMeeting}
+            onBackToHome={handleBackToHome}
+            onOpenNewMeetingModal={() => setIsNewMeetingModalOpen(true)}
+            onGetExtension={handleGetExtension}
+          />
+        )}
 
       {/* VIEW 2: MEETING WORKSPACE */}
       {currentView === "companion-workspace" && (
@@ -553,6 +559,7 @@ export default function App() {
           />
         </>
       )}
+      </Suspense>
 
       {/* VIEW 8: MAIN LANDING PAGE */}
       {currentView === "landing" && (
@@ -606,30 +613,49 @@ export default function App() {
         </>
       )}
 
-      {/* Early Access / Beta Modal */}
-      <EarlyAccessModal
-        isOpen={isBetaModalOpen}
-        onClose={handleCloseBetaModal}
-        onNavigateToPrivacy={() => {
-          window.location.hash = "#/privacy";
-          setCurrentView("privacy");
-        }}
-      />
+      {/* Modals wrapped in Suspense for zero initial load penalty */}
+      <Suspense fallback={null}>
+        {/* Early Access / Beta Modal */}
+        <EarlyAccessModal
+          isOpen={isBetaModalOpen}
+          onClose={handleCloseBetaModal}
+          onNavigateToPrivacy={() => {
+            window.location.hash = "#/privacy";
+            setCurrentView("privacy");
+          }}
+        />
 
-      {/* Chrome Extension Store Notice Modal (fallback when listing pending) */}
-      <ExtensionNoticeModal
-        isOpen={isExtensionNoticeOpen}
-        onClose={() => setIsExtensionNoticeOpen(false)}
-        onOpenEarlyAccess={handleOpenBetaModal}
-      />
+        {/* Chrome Extension Store Notice Modal (fallback when listing pending) */}
+        <ExtensionNoticeModal
+          isOpen={isExtensionNoticeOpen}
+          onClose={() => setIsExtensionNoticeOpen(false)}
+          onOpenEarlyAccess={handleOpenBetaModal}
+        />
 
-      {/* New Meeting Modal */}
-      <NewMeetingModal
-        isOpen={isNewMeetingModalOpen}
-        onClose={() => setIsNewMeetingModalOpen(false)}
-        onStartMeeting={handleSelectMeeting}
-        onGetExtension={handleGetExtension}
-      />
+        {/* New Meeting Modal */}
+        <NewMeetingModal
+          isOpen={isNewMeetingModalOpen}
+          onClose={() => setIsNewMeetingModalOpen(false)}
+          onStartMeeting={handleSelectMeeting}
+          onGetExtension={handleGetExtension}
+        />
+
+        {/* Smart Premium Upgrade Reminder Modal */}
+        <UpgradeReminderModal
+          isOpen={isReminderOpen}
+          config={activeReminder}
+          onClose={() => setIsReminderOpen(false)}
+          onExplorePro={() => {
+            if (currentView !== "landing") {
+              window.location.hash = "#pricing";
+              setCurrentView("landing");
+            }
+            setTimeout(() => {
+              document.querySelector("#pricing")?.scrollIntoView({ behavior: "smooth" });
+            }, 150);
+          }}
+        />
+      </Suspense>
 
       {/* Persistent Cookie and Storage Consent Manager */}
       <CookieConsentBanner
@@ -638,22 +664,6 @@ export default function App() {
         onNavigateToCookiePolicy={() => {
           window.location.hash = "#/cookies";
           setCurrentView("cookies");
-        }}
-      />
-
-      {/* Smart Premium Upgrade Reminder Modal */}
-      <UpgradeReminderModal
-        isOpen={isReminderOpen}
-        config={activeReminder}
-        onClose={() => setIsReminderOpen(false)}
-        onExplorePro={() => {
-          if (currentView !== "landing") {
-            window.location.hash = "#pricing";
-            setCurrentView("landing");
-          }
-          setTimeout(() => {
-            document.querySelector("#pricing")?.scrollIntoView({ behavior: "smooth" });
-          }, 150);
         }}
       />
 
