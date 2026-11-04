@@ -29,6 +29,7 @@ import { BillingDashboard } from "./components/billing/BillingDashboard";
 import { CheckoutSuccessPage, CheckoutCancelPage } from "./components/billing/CheckoutStatus";
 import { useSubscription } from "./lib/subscriptionContext";
 import { UpgradeReminderModal } from "./components/billing/UpgradeReminderModal";
+import { FloatingWebWidget } from "./components/FloatingWebWidget";
 import { ExtensionNoticeModal } from "./components/extension/ExtensionNoticeModal";
 import { openExtensionStore } from "./lib/extensionConfig";
 import {
@@ -655,6 +656,9 @@ export default function App() {
           }, 150);
         }}
       />
+
+      {/* Unified Authoritative VoxFlow Floating Website Widget */}
+      <FloatingWebWidget />
     </div>
   );
 }

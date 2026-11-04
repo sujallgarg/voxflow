@@ -427,3 +427,13 @@ img, svg, video, canvas, audio, iframe, embed, object {
     scroll-behavior: auto !important;
   }
 }
+
+/* Suppress duplicate extension-injected overlays on the web app so only the native widget renders */
+#voxflow-extension-root,
+[data-voxflow-extension-host],
+#voxflow-overlay-container,
+.voxflow-capsule {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
