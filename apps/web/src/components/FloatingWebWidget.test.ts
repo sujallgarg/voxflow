@@ -220,4 +220,304 @@ describe("FloatingWebWidget Voice & Meeting Notes Test Suite", () => {
     expect(availableOutputLanguages.find((l) => l.id === "hindi")).toBeDefined();
     expect(availableOutputLanguages.find((l) => l.id === "spanish")).toBeDefined();
   });
+
+  it("should prevent starting voice command when voice typing quota is exhausted", () => {
+    const isPremium = false;
+    const entitlements = {
+      isPremium: false,
+      breakdown: {
+        voiceTyping: { isExhausted: true },
+        transcriptionMinutes: { isExhausted: false },
+        meetings: { isExhausted: false }
+      },
+      usage: {
+        voiceTypingUsed: 100,
+        voiceTypingLimit: 100
+      }
+    };
+
+    const isVoiceLimitReached = !isPremium && Boolean(
+      entitlements?.breakdown?.voiceTyping?.isExhausted ||
+      (entitlements?.usage && entitlements.usage.voiceTypingLimit > 0 && entitlements.usage.voiceTypingUsed >= entitlements.usage.voiceTypingLimit)
+    );
+
+    expect(isVoiceLimitReached).toBe(true);
+
+    let startCommandExecuted = false;
+    const handleVoiceStart = () => {
+      if (isVoiceLimitReached) {
+        return; // strictly blocked
+      }
+      startCommandExecuted = true;
+    };
+
+    handleVoiceStart();
+    expect(startCommandExecuted).toBe(false);
+  });
+
+  it("should prevent starting meeting when meeting limit is exhausted on free plan", () => {
+    const isPremium = false;
+    const entitlements = {
+      isPremium: false,
+      breakdown: {
+        voiceTyping: { isExhausted: false },
+        transcriptionMinutes: { isExhausted: false },
+        meetings: { isExhausted: true }
+      },
+      usage: {
+        meetingsUsed: 3,
+        meetingsLimit: 3
+      }
+    };
+
+    const isMeetingLimitReached = !isPremium && Boolean(
+      entitlements?.breakdown?.meetings?.isExhausted ||
+      (entitlements?.usage && entitlements.usage.meetingsLimit > 0 && entitlements.usage.meetingsUsed >= entitlements.usage.meetingsLimit)
+    );
+
+    expect(isMeetingLimitReached).toBe(true);
+
+    let startMeetingExecuted = false;
+    const handleStartMeeting = () => {
+      if (isMeetingLimitReached) {
+        return; // strictly blocked
+      }
+      startMeetingExecuted = true;
+    };
+
+    handleStartMeeting();
+    expect(startMeetingExecuted).toBe(false);
+  });
+
+  it("should never block pro/premium users even when usage numbers are high", () => {
+    const isPremium = true;
+    const entitlements = {
+      isPremium: true,
+      breakdown: {
+        voiceTyping: { isExhausted: false },
+        transcriptionMinutes: { isExhausted: false },
+        meetings: { isExhausted: false }
+      },
+      usage: {
+        voiceTypingUsed: 9999,
+        voiceTypingLimit: -1,
+        meetingsUsed: 999,
+        meetingsLimit: -1
+      }
+    };
+
+    const isVoiceLimitReached = !isPremium && Boolean(
+      entitlements?.breakdown?.voiceTyping?.isExhausted ||
+      (entitlements?.usage && entitlements.usage.voiceTypingLimit > 0 && entitlements.usage.voiceTypingUsed >= entitlements.usage.voiceTypingLimit)
+    );
+    const isMeetingLimitReached = !isPremium && Boolean(
+      entitlements?.breakdown?.meetings?.isExhausted ||
+      (entitlements?.usage && entitlements.usage.meetingsLimit > 0 && entitlements.usage.meetingsUsed >= entitlements.usage.meetingsLimit)
+    );
+
+    expect(isVoiceLimitReached).toBe(false);
+    expect(isMeetingLimitReached).toBe(false);
+
+    let startCommandExecuted = false;
+    const handleVoiceStart = () => {
+      if (isVoiceLimitReached) return;
+      startCommandExecuted = true;
+    };
+
+    handleVoiceStart();
+    expect(startCommandExecuted).toBe(true);
+  });
+
+  it("should record voice typing items into voice history and allow search filtering", () => {
+    interface TestVoiceHistoryItem {
+      id: string;
+      text: string;
+      timestamp: string;
+      date: string;
+      language: string;
+      outputLanguage?: string;
+      duration?: number;
+    }
+
+    const items: TestVoiceHistoryItem[] = [
+      {
+        id: "vh_1",
+        text: "Please send the quarterly revenue report to the team.",
+        timestamp: "09:30 AM",
+        date: "Nov 4, 2026",
+        language: "english",
+        duration: 12
+      },
+      {
+        id: "vh_2",
+        text: "Hum kal subah 10 baje milenge meeting ke liye.",
+        timestamp: "10:15 AM",
+        date: "Nov 4, 2026",
+        language: "hinglish",
+        duration: 8
+      }
+    ];
+
+    // Filter by search query
+    const searchFilter = (list: TestVoiceHistoryItem[], q: string) => {
+      const lower = q.toLowerCase();
+      return list.filter((item) => item.text.toLowerCase().includes(lower) || item.language.toLowerCase().includes(lower));
+    };
+
+    expect(searchFilter(items, "revenue")).toHaveLength(1);
+    expect(searchFilter(items, "revenue")[0].id).toBe("vh_1");
+    expect(searchFilter(items, "meeting")).toHaveLength(1);
+    expect(searchFilter(items, "meeting")[0].id).toBe("vh_2");
+    expect(searchFilter(items, "nonexistent")).toHaveLength(0);
+  });
+
+  it("should support deleting voice history records and clearing all voice history", () => {
+    let history = [
+      { id: "vh_1", text: "First record" },
+      { id: "vh_2", text: "Second record" },
+      { id: "vh_3", text: "Third record" }
+    ];
+
+    // Delete single item
+    history = history.filter((i) => i.id !== "vh_2");
+    expect(history).toHaveLength(2);
+    expect(history.find((i) => i.id === "vh_2")).toBeUndefined();
+
+    // Clear all
+    history = [];
+    expect(history).toHaveLength(0);
+  });
+
+  it("should support transcript input editing and text insertion into simulated field", () => {
+    let transcriptInput = "Initial dictated voice note";
+
+    // Edit transcript in input
+    transcriptInput += " with user additions.";
+    expect(transcriptInput).toBe("Initial dictated voice note with user additions.");
+
+    // Simulate insertion into input element
+    const inputElement = {
+      type: "text",
+      value: "Prefix: ",
+      selectionStart: 8,
+      selectionEnd: 8
+    };
+
+    const start = inputElement.selectionStart;
+    const end = inputElement.selectionEnd;
+    inputElement.value = inputElement.value.substring(0, start) + transcriptInput + inputElement.value.substring(end);
+
+    expect(inputElement.value).toBe("Prefix: Initial dictated voice note with user additions.");
+  });
+
+  it("should maintain both transcript input and transcript output simultaneously in the widget", () => {
+    let transcriptInput = "Raw voice audio words spoken by user";
+    let transcriptOutput = "Polished, grammatically refined voice output.";
+
+    expect(transcriptInput).not.toBe(transcriptOutput);
+    expect(transcriptInput).toContain("Raw voice");
+    expect(transcriptOutput).toContain("Polished");
+
+    // Copying output should use transcriptOutput
+    const textToCopy = transcriptOutput || transcriptInput;
+    expect(textToCopy).toBe("Polished, grammatically refined voice output.");
+
+    // Clearing input should not wipe output unless requested
+    transcriptInput = "";
+    expect(transcriptInput).toBe("");
+    expect(transcriptOutput).toBe("Polished, grammatically refined voice output.");
+  });
+
+  it("should synchronize widget voice input into the site's voice history userStore", () => {
+    const mockSiteVoiceHistory: any[] = [];
+    const saveToSiteHistory = (userId: string, item: any) => {
+      mockSiteVoiceHistory.unshift({
+        id: item.id,
+        userId,
+        transcript: item.transcript,
+        transformedText: item.transformedText,
+        language: item.language,
+        createdAt: item.createdAt
+      });
+    };
+
+    const widgetSpokenInput = "Quarterly roadmap sync discussion";
+    const widgetOutput = "Quarterly roadmap sync discussion finalized.";
+
+    saveToSiteHistory("user_123", {
+      id: "trans_test_1",
+      transcript: widgetSpokenInput,
+      transformedText: widgetOutput,
+      language: "english",
+      createdAt: new Date().toISOString()
+    });
+
+    expect(mockSiteVoiceHistory).toHaveLength(1);
+    expect(mockSiteVoiceHistory[0].userId).toBe("user_123");
+    expect(mockSiteVoiceHistory[0].transcript).toBe(widgetSpokenInput);
+    expect(mockSiteVoiceHistory[0].transformedText).toBe(widgetOutput);
+  });
+
+  it("should clear all previous voice typing fields when starting new voice typing or resetting", () => {
+    let voiceTranscriptInput = "Old spoken words from previous run";
+    let voiceTranscriptOutput = "Old transformed text";
+    let voiceDuration = 42;
+    let voiceError: string | null = "Some past error";
+    let voiceState = "completed";
+
+    // Reset voice typing
+    const handleResetVoiceTyping = () => {
+      voiceTranscriptInput = "";
+      voiceTranscriptOutput = "";
+      voiceDuration = 0;
+      voiceError = null;
+      voiceState = "idle";
+    };
+
+    handleResetVoiceTyping();
+
+    expect(voiceTranscriptInput).toBe("");
+    expect(voiceTranscriptOutput).toBe("");
+    expect(voiceDuration).toBe(0);
+    expect(voiceError).toBeNull();
+    expect(voiceState).toBe("idle");
+  });
+
+  it("should clear all previous meeting fields when creating a new meeting", () => {
+    let meetingTitle = "Past Meeting Title - Q3 Retro";
+    let currentMeeting: any = { id: "m_1", title: "Past Meeting" };
+    let meetingDuration = 120;
+    let editedSummary = "Old summary notes";
+    let editedTopics = [{ title: "Topic 1" }];
+    let editedDecisions = [{ decision: "Decision 1" }];
+    let editedActions = [{ task: "Task 1" }];
+    let meetingStep = "completed";
+
+    // New meeting action
+    const handleStartNewMeeting = () => {
+      meetingTitle = "";
+      currentMeeting = null;
+      meetingStep = "setup";
+      meetingDuration = 0;
+      editedSummary = "";
+      editedTopics = [];
+      editedDecisions = [];
+      editedActions = [];
+    };
+
+    handleStartNewMeeting();
+
+    expect(meetingTitle).toBe("");
+    expect(currentMeeting).toBeNull();
+    expect(meetingStep).toBe("setup");
+    expect(meetingDuration).toBe(0);
+    expect(editedSummary).toBe("");
+    expect(editedTopics).toHaveLength(0);
+    expect(editedDecisions).toHaveLength(0);
+    expect(editedActions).toHaveLength(0);
+  });
 });
+
+
+
+

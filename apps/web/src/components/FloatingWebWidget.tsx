@@ -2,17 +2,67 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { api } from "../lib/api";
 import { useAuth } from "../lib/authContext";
 import { useSubscription } from "../lib/subscriptionContext";
+import { saveUserTranscription, getUserTranscriptions, deleteUserTranscription } from "../lib/userStore";
 import { SUPPORTED_LANGUAGES } from "../data/languages";
 import type { MeetingRecord, TopicItem, DecisionItem, ActionItem } from "@voxflow/shared";
 
 export type WidgetMode = "voice" | "meeting" | "history" | "settings";
 export type VoiceState = "idle" | "recording" | "paused" | "transcribing" | "completed" | "error";
 export type MeetingStep = "setup" | "recording" | "processing" | "completed" | "history";
+
+export interface VoiceHistoryItem {
+  id: string;
+  text: string;
+  rawInput?: string;
+  timestamp: string;
+  date: string;
+  language: string;
+  outputLanguage?: string;
+  duration?: number;
+}
 export type AudioSourceType = "mic" | "system" | "combined";
 
 export const FloatingWebWidget: React.FC = () => {
   const { user } = useAuth();
-  const { entitlements, isPremium } = useSubscription();
+  const { entitlements, isPremium, refreshSubscription } = useSubscription();
+
+  // 1. Voice typing quota calculation
+  const voiceUsage = entitlements?.usage?.voiceTypingUsed ?? 0;
+  const voiceLimit = entitlements?.limits?.voiceTypingRequests ?? entitlements?.usage?.voiceTypingLimit ?? 100;
+  const voiceMinsUsed = entitlements?.usage?.transcriptionMinutesUsed ?? Math.ceil((entitlements?.usage?.transcriptionSecondsUsed ?? 0) / 60);
+  const voiceMinsLimit = entitlements?.limits?.transcriptionMinutes ?? entitlements?.usage?.transcriptionMinutesLimit ?? 30;
+
+  const isVoiceLimitReached = Boolean(
+    user && !isPremium && (
+      entitlements?.breakdown?.voiceTyping?.isExhausted ||
+      entitlements?.breakdown?.transcriptionMinutes?.isExhausted ||
+      (voiceLimit > 0 && voiceUsage >= voiceLimit) ||
+      (voiceMinsLimit > 0 && voiceMinsUsed >= voiceMinsLimit)
+    )
+  );
+
+  // 2. Meeting quota calculation
+  const meetingsUsed = entitlements?.usage?.meetingsUsed ?? 0;
+  const meetingsLimit = entitlements?.limits?.monthlyMeetings ?? entitlements?.usage?.meetingsLimit ?? 3;
+
+  const isMeetingLimitReached = Boolean(
+    user && !isPremium && (
+      entitlements?.breakdown?.meetings?.isExhausted ||
+      (meetingsLimit > 0 && meetingsUsed >= meetingsLimit)
+    )
+  );
+
+  // 3. Guest demo limit state
+  const [isGuestLimitReached, setIsGuestLimitReached] = useState(false);
+
+  // Navigation to site pricing/upgrade
+  const handleUpgradeNavigation = useCallback(() => {
+    window.location.hash = "#pricing";
+    setIsOpen(false);
+    setTimeout(() => {
+      document.querySelector("#pricing")?.scrollIntoView({ behavior: "smooth" });
+    }, 150);
+  }, []);
 
   // Settings stored in localStorage
   const [preferredLang, setPreferredLang] = useState(() => {
@@ -78,9 +128,41 @@ export const FloatingWebWidget: React.FC = () => {
   const [voiceTargetLang, setVoiceTargetLang] = useState(preferredLang);
   const [voiceOutputLang, setVoiceOutputLang] = useState(preferredOutputLang);
   const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceTranscriptInput, setVoiceTranscriptInput] = useState("");
+  const [voiceTranscriptOutput, setVoiceTranscriptOutput] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceDuration, setVoiceDuration] = useState(0);
   const [voiceWaveform, setVoiceWaveform] = useState<number[]>(new Array(16).fill(0.08));
+
+  // Reset Voice Typing fields
+  const handleResetVoiceTyping = useCallback(() => {
+    setVoiceTranscriptInput("");
+    setVoiceTranscriptOutput("");
+    setVoiceTranscript("");
+    setVoiceError(null);
+    setVoiceDuration(0);
+    setVoiceState("idle");
+    voiceChunksRef.current = [];
+    voiceIsCancelledRef.current = false;
+  }, []);
+
+  // Reset & Start New Meeting (clears all previous fields)
+  const handleStartNewMeeting = useCallback(() => {
+    setMeetingTitle("");
+    setCurrentMeeting(null);
+    setMeetingStep("setup");
+    setMeetingDuration(0);
+    setIsMeetingPaused(false);
+    setMeetingError(null);
+    setSourceNotice(null);
+    setEditedSummary("");
+    setEditedTopics([]);
+    setEditedDecisions([]);
+    setEditedActions([]);
+    setIsEditingMeeting(false);
+    meetingChunksRef.current = [];
+    setActiveMode("meeting");
+  }, []);
 
   // Voice recording refs
   const voiceMediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -121,6 +203,17 @@ export const FloatingWebWidget: React.FC = () => {
   const [editedTopics, setEditedTopics] = useState<TopicItem[]>([]);
   const [editedDecisions, setEditedDecisions] = useState<DecisionItem[]>([]);
   const [editedActions, setEditedActions] = useState<ActionItem[]>([]);
+
+  // Voice history state
+  const [voiceHistory, setVoiceHistory] = useState<VoiceHistoryItem[]>(() => {
+    try {
+      const raw = localStorage.getItem("voxflow_voice_history");
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
+  const [historyCategory, setHistoryCategory] = useState<"voice" | "meeting">("voice");
+  const [voiceSearch, setVoiceSearch] = useState("");
 
   // Meeting history state
   const [storedMeetings, setStoredMeetings] = useState<MeetingRecord[]>([]);
@@ -179,6 +272,49 @@ export const FloatingWebWidget: React.FC = () => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // Sync widget voice history with site userStore and events
+  useEffect(() => {
+    const syncSiteVoiceHistory = () => {
+      try {
+        const widgetLocalRaw = localStorage.getItem("voxflow_voice_history");
+        const widgetLocal: VoiceHistoryItem[] = widgetLocalRaw ? JSON.parse(widgetLocalRaw) : [];
+
+        if (user?.id) {
+          const siteTranscripts = getUserTranscriptions(user.id);
+          const map = new Map<string, VoiceHistoryItem>();
+          for (const item of widgetLocal) {
+            map.set(item.id, item);
+          }
+          for (const st of siteTranscripts) {
+            const d = st.createdAt ? new Date(st.createdAt) : new Date();
+            if (!map.has(st.id)) {
+              map.set(st.id, {
+                id: st.id,
+                text: st.transformedText || st.transcript,
+                rawInput: st.transcript,
+                timestamp: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                date: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+                language: st.language || "auto",
+                outputLanguage: "same"
+              });
+            }
+          }
+          setVoiceHistory(Array.from(map.values()));
+        } else {
+          setVoiceHistory(widgetLocal);
+        }
+      } catch {}
+    };
+
+    syncSiteVoiceHistory();
+    window.addEventListener("voxflow_data_changed", syncSiteVoiceHistory);
+    window.addEventListener("voxflow_voice_history_updated", syncSiteVoiceHistory);
+    return () => {
+      window.removeEventListener("voxflow_data_changed", syncSiteVoiceHistory);
+      window.removeEventListener("voxflow_voice_history_updated", syncSiteVoiceHistory);
+    };
+  }, [user?.id]);
 
   // Suppress duplicate extension-injected overlays on the official website so only one clean capsule displays
   useEffect(() => {
@@ -355,6 +491,18 @@ export const FloatingWebWidget: React.FC = () => {
     voiceChunksRef.current = [];
     voiceIsCancelledRef.current = false;
 
+    if (isVoiceLimitReached) {
+      setVoiceError("Monthly voice typing limit reached. Upgrade to Pro to continue recording.");
+      showToast("Monthly limit reached. Please upgrade to Pro.");
+      return;
+    }
+
+    if (!user && isGuestLimitReached) {
+      setVoiceError("Guest demo limit reached. Please sign in or upgrade to continue.");
+      showToast("Guest limit reached. Sign up for 100 free voice typings!");
+      return;
+    }
+
     if (!navigator.mediaDevices?.getUserMedia) {
       setVoiceError("Microphone capture is not supported in this browser. Please use Chrome or Edge.");
       setVoiceState("error");
@@ -506,22 +654,24 @@ export const FloatingWebWidget: React.FC = () => {
         voiceMediaStreamRef.current = null;
       }
 
-      let text = "";
+      let rawSpoken = "";
+      let finalText = "";
       if (user) {
         const res = await api.transcribeAudio(blob, "voice-typing.webm", user.id);
-        text = res.text?.trim() || "";
+        rawSpoken = res.text?.trim() || "";
+        finalText = rawSpoken;
 
         // If user requested a specific output language
-        if (text && voiceOutputLang && voiceOutputLang !== "same") {
+        if (finalText && voiceOutputLang && voiceOutputLang !== "same") {
           const targetLangObj = SUPPORTED_LANGUAGES.find((l) => l.id === voiceOutputLang);
           const targetLangName = targetLangObj ? targetLangObj.name : voiceOutputLang;
           try {
             const transformed = await api.transform({
-              transcript: text,
+              transcript: rawSpoken,
               targetLanguage: targetLangName
             }, user.id);
             if (transformed?.finalText || transformed?.transformation) {
-              text = (transformed.finalText || transformed.transformation).trim();
+              finalText = (transformed.finalText || transformed.transformation).trim();
             }
           } catch (transformErr) {
             console.warn("Target output language transformation fallback:", transformErr);
@@ -537,38 +687,92 @@ export const FloatingWebWidget: React.FC = () => {
           blob,
           langParam
         );
-        text = demoRes.pipeline?.transformation?.finalText?.trim() || demoRes.text?.trim() || "";
+        rawSpoken = demoRes.text?.trim() || "";
+        finalText = demoRes.pipeline?.transformation?.finalText?.trim() || demoRes.text?.trim() || "";
       }
 
-      if (!text) {
+      if (!finalText && !rawSpoken) {
         throw new Error("No speech detected. Please speak closer to your microphone and try again.");
       }
+      if (!rawSpoken) rawSpoken = finalText;
+      if (!finalText) finalText = rawSpoken;
 
-      setVoiceTranscript(text);
+      setVoiceTranscriptInput(rawSpoken);
+      setVoiceTranscriptOutput(finalText);
+      setVoiceTranscript(finalText);
       setVoiceState("completed");
+
+      const now = new Date();
+      const transcriptionId = `trans_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const title = rawSpoken.length > 35 ? rawSpoken.substring(0, 35) + "..." : rawSpoken;
+
+      // 1. Save to site's voice history (userStore)
+      if (user?.id) {
+        saveUserTranscription(user.id, {
+          id: transcriptionId,
+          title,
+          transcript: rawSpoken,
+          transformedText: finalText,
+          language: voiceTargetLang,
+          createdAt: now.toISOString()
+        });
+      } else {
+        try {
+          const guestKey = "voxflow_user_transcripts_guest";
+          const raw = localStorage.getItem(guestKey);
+          const list = raw ? JSON.parse(raw) : [];
+          list.unshift({
+            id: transcriptionId,
+            title,
+            transcript: rawSpoken,
+            transformedText: finalText,
+            language: voiceTargetLang,
+            createdAt: now.toISOString()
+          });
+          localStorage.setItem(guestKey, JSON.stringify(list.slice(0, 50)));
+        } catch {}
+      }
+
+      // 2. Save to widget's local voice history
+      const newVoiceItem: VoiceHistoryItem = {
+        id: transcriptionId,
+        text: finalText,
+        rawInput: rawSpoken,
+        timestamp: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        date: now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        language: voiceTargetLang,
+        outputLanguage: voiceOutputLang,
+        duration: voiceDuration
+      };
+
+      setVoiceHistory((prev) => {
+        const updated = [newVoiceItem, ...prev.filter((p) => p.id !== transcriptionId)].slice(0, 100);
+        try {
+          localStorage.setItem("voxflow_voice_history", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
+      // 3. Dispatch global events so site components update voice history in real-time
+      window.dispatchEvent(new Event("voxflow_data_changed"));
+      window.dispatchEvent(new CustomEvent("voxflow_voice_history_updated"));
     } catch (err: any) {
       console.error("Voice typing transcription error:", err);
       let friendly = err?.message || "Failed to transcribe audio. Please try again.";
       if (err?.code === "DEMO_RATE_LIMIT_EXCEEDED" || err?.status === 429) {
-        friendly = "Guest rate limit reached. Sign in for full quota!";
+        setIsGuestLimitReached(true);
+        friendly = "Guest demo limit reached (5 requests / 15m). Sign up for 100 free voice typings!";
+      } else if (err?.code === "QUOTA_EXCEEDED" || err?.status === 403) {
+        void refreshSubscription?.();
+        friendly = "Monthly usage limit reached. Upgrade to Pro to continue recording!";
       }
       setVoiceError(friendly);
       setVoiceState("error");
     }
   };
 
-  const handleVoiceCopy = async () => {
-    if (!voiceTranscript) return;
-    try {
-      await navigator.clipboard.writeText(voiceTranscript);
-      showToast("Copied to clipboard!");
-    } catch {
-      showToast("Could not copy to clipboard.");
-    }
-  };
-
-  const handleVoiceInsert = () => {
-    if (!voiceTranscript) return;
+  const handleInsertSpecificText = (text: string) => {
+    if (!text) return;
     const el = lastActiveInputRef.current;
     if (el && document.body.contains(el)) {
       try {
@@ -577,9 +781,9 @@ export const FloatingWebWidget: React.FC = () => {
           const start = input.selectionStart || input.value.length;
           const end = input.selectionEnd || input.value.length;
           const prev = input.value;
-          const next = prev.substring(0, start) + voiceTranscript + prev.substring(end);
+          const next = prev.substring(0, start) + text + prev.substring(end);
           input.value = next;
-          input.selectionStart = input.selectionEnd = start + voiceTranscript.length;
+          input.selectionStart = input.selectionEnd = start + text.length;
           input.dispatchEvent(new Event("input", { bubbles: true }));
           input.dispatchEvent(new Event("change", { bubbles: true }));
           input.focus();
@@ -587,7 +791,74 @@ export const FloatingWebWidget: React.FC = () => {
           return;
         } else if (el.isContentEditable) {
           el.focus();
-          document.execCommand("insertText", false, voiceTranscript);
+          document.execCommand("insertText", false, text);
+          showToast("Inserted into active field!");
+          return;
+        }
+      } catch (err) {
+        console.warn("Insert into element failed:", err);
+      }
+    }
+    navigator.clipboard.writeText(text).catch(() => {});
+    showToast("Copied to clipboard! (Focus any text field to paste)");
+  };
+
+  const deleteVoiceHistoryItem = (id: string) => {
+    if (user?.id) {
+      deleteUserTranscription(user.id, id);
+    }
+    setVoiceHistory((prev) => {
+      const updated = prev.filter((item) => item.id !== id);
+      try {
+        localStorage.setItem("voxflow_voice_history", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    window.dispatchEvent(new Event("voxflow_data_changed"));
+    showToast("Voice record deleted");
+  };
+
+  const clearAllVoiceHistory = () => {
+    setVoiceHistory([]);
+    try {
+      localStorage.removeItem("voxflow_voice_history");
+    } catch {}
+    showToast("Voice history cleared");
+  };
+
+  const handleVoiceCopy = async () => {
+    const textToCopy = voiceTranscriptOutput || voiceTranscriptInput || voiceTranscript;
+    if (!textToCopy) return;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      showToast("Transcript copied to clipboard!");
+    } catch {
+      showToast("Could not copy to clipboard.");
+    }
+  };
+
+  const handleVoiceInsert = () => {
+    const textToInsert = voiceTranscriptOutput || voiceTranscriptInput || voiceTranscript;
+    if (!textToInsert) return;
+    const el = lastActiveInputRef.current;
+    if (el && document.body.contains(el)) {
+      try {
+        if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+          const input = el as HTMLInputElement | HTMLTextAreaElement;
+          const start = input.selectionStart || input.value.length;
+          const end = input.selectionEnd || input.value.length;
+          const prev = input.value;
+          const next = prev.substring(0, start) + textToInsert + prev.substring(end);
+          input.value = next;
+          input.selectionStart = input.selectionEnd = start + textToInsert.length;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          input.focus();
+          showToast("Inserted into active field!");
+          return;
+        } else if (el.isContentEditable) {
+          el.focus();
+          document.execCommand("insertText", false, textToInsert);
           showToast("Inserted into active field!");
           return;
         }
@@ -596,7 +867,7 @@ export const FloatingWebWidget: React.FC = () => {
       }
     }
 
-    navigator.clipboard.writeText(voiceTranscript).catch(() => {});
+    navigator.clipboard.writeText(textToInsert).catch(() => {});
     showToast("Copied to clipboard! (Click any text field to paste)");
   };
 
@@ -656,6 +927,12 @@ export const FloatingWebWidget: React.FC = () => {
     setMeetingDuration(0);
     setIsMeetingPaused(false);
     meetingChunksRef.current = [];
+
+    if (isMeetingLimitReached) {
+      setMeetingError("Monthly meeting limit reached. Upgrade to Pro for 25 meetings per month.");
+      showToast("Monthly meeting limit reached. Upgrade to Pro.");
+      return;
+    }
 
     try {
       const tracksToStop: MediaStreamTrack[] = [];
@@ -926,7 +1203,10 @@ export const FloatingWebWidget: React.FC = () => {
         try {
           notesResult = await api.generateMeetingNotes(transcriptText, meetingTitle, user?.id);
         } catch (notesErr) {
-          console.warn("api.generateMeetingNotes recovery, building structured notes from transcript:", notesErr);
+          if ((notesErr as any)?.code === "QUOTA_EXCEEDED" || (notesErr as any)?.status === 403) {
+          void refreshSubscription?.();
+        }
+        console.warn("api.generateMeetingNotes recovery, building structured notes from transcript:", notesErr);
           notesResult = {
             title: meetingTitle || "Recorded Meeting Session",
             summary: transcriptText.length > 300 ? `${transcriptText.slice(0, 300)}...` : transcriptText,
@@ -1083,6 +1363,18 @@ export const FloatingWebWidget: React.FC = () => {
     showToast(`Exported as .${format.toUpperCase()}`);
   };
 
+  // Filtered voice typing history
+  const filteredVoiceHistory = useMemo(() => {
+    if (!voiceSearch.trim()) return voiceHistory;
+    const q = voiceSearch.toLowerCase();
+    return voiceHistory.filter(
+      (v) =>
+        v.text.toLowerCase().includes(q) ||
+        v.date.toLowerCase().includes(q) ||
+        (v.language || "").toLowerCase().includes(q)
+    );
+  }, [voiceHistory, voiceSearch]);
+
   // Filtered and sorted meeting history
   const filteredMeetings = useMemo(() => {
     let list = storedMeetings;
@@ -1138,14 +1430,14 @@ export const FloatingWebWidget: React.FC = () => {
             display: "inline-flex",
             alignItems: "center",
             gap: "8px",
-            background: "#09090b",
-            color: "#ffffff",
-            border: isAnyRecording ? "1px solid #ef4444" : "1px solid rgba(255, 255, 255, 0.14)",
+            background: "#ffffff",
+            color: "#18181b",
+            border: isAnyRecording ? "1.5px solid #ef4444" : "1px solid #e4e4e7",
             padding: "8px 16px",
             borderRadius: "9999px",
             boxShadow: isAnyRecording
-              ? "0 4px 20px rgba(239, 68, 68, 0.35)"
-              : "0 4px 20px rgba(0, 0, 0, 0.4)",
+              ? "0 4px 20px rgba(239, 68, 68, 0.25)"
+              : "0 4px 20px rgba(0, 0, 0, 0.08)",
             cursor: "pointer",
             fontWeight: 500,
             fontSize: "13px",
@@ -1158,14 +1450,14 @@ export const FloatingWebWidget: React.FC = () => {
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = isAnyRecording ? "#ef4444" : "#10b981";
             e.currentTarget.style.boxShadow = isAnyRecording
-              ? "0 6px 24px rgba(239, 68, 68, 0.45)"
-              : "0 6px 24px rgba(16, 185, 129, 0.25)";
+              ? "0 6px 24px rgba(239, 68, 68, 0.35)"
+              : "0 6px 24px rgba(16, 185, 129, 0.2)";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = isAnyRecording ? "#ef4444" : "rgba(255, 255, 255, 0.14)";
+            e.currentTarget.style.borderColor = isAnyRecording ? "#ef4444" : "#e4e4e7";
             e.currentTarget.style.boxShadow = isAnyRecording
-              ? "0 4px 20px rgba(239, 68, 68, 0.35)"
-              : "0 4px 20px rgba(0, 0, 0, 0.4)";
+              ? "0 4px 20px rgba(239, 68, 68, 0.25)"
+              : "0 4px 20px rgba(0, 0, 0, 0.08)";
           }}
         >
           {/* Emerald Green Microphone Icon or Pulsing Red Recording Dot */}
@@ -1210,7 +1502,7 @@ export const FloatingWebWidget: React.FC = () => {
           </div>
 
           {/* White VoxFlow Branding */}
-          <span style={{ fontWeight: 600, color: "#ffffff", fontSize: "13px" }}>
+          <span style={{ fontWeight: 600, color: "#18181b", fontSize: "13px" }}>
             {voiceState === "recording" || voiceState === "paused"
               ? `REC ${formatTimer(voiceDuration)}`
               : meetingStep === "recording"
@@ -1221,13 +1513,13 @@ export const FloatingWebWidget: React.FC = () => {
           {/* Keyboard Shortcut Badge */}
           <span
             style={{
-              background: "#18181b",
-              color: "#a1a1aa",
+              background: "#f4f4f5",
+              color: "#71717a",
               fontSize: "10px",
               fontWeight: 600,
               padding: "3px 6px",
               borderRadius: "4px",
-              border: "1px solid #27272a",
+              border: "1px solid #e4e4e7",
               letterSpacing: "0.04em",
               fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
             }}
@@ -1253,11 +1545,11 @@ export const FloatingWebWidget: React.FC = () => {
             maxHeight: "88vh",
             display: "flex",
             flexDirection: "column",
-            background: "#0a0a0c",
-            color: "#fafafa",
-            border: "1px solid #27272a",
+            background: "#ffffff",
+            color: "#18181b",
+            border: "1px solid #e4e4e7",
             borderRadius: "16px",
-            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.7), 0 4px 16px rgba(0, 0, 0, 0.5)",
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.05)",
             overflow: "hidden",
             transition: "width 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
           }}
@@ -1269,8 +1561,8 @@ export const FloatingWebWidget: React.FC = () => {
               alignItems: "center",
               justifyContent: "space-between",
               padding: "12px 16px",
-              borderBottom: "1px solid #1e1e24",
-              background: "#0e0e11"
+              borderBottom: "1px solid #f4f4f5",
+              background: "#ffffff"
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -1285,24 +1577,24 @@ export const FloatingWebWidget: React.FC = () => {
                   justifyContent: "center",
                   fontWeight: 700,
                   fontSize: "12px",
-                  color: "#09090b"
+                  color: "#ffffff"
                 }}
               >
                 V
               </div>
-              <span style={{ fontWeight: 600, fontSize: "14px", letterSpacing: "-0.01em", color: "#ffffff" }}>
+              <span style={{ fontWeight: 600, fontSize: "14px", letterSpacing: "-0.01em", color: "#18181b" }}>
                 VoxFlow
               </span>
               {isPremium && (
                 <span
                   style={{
-                    background: "rgba(16, 185, 129, 0.15)",
-                    color: "#10b981",
+                    background: "rgba(16, 185, 129, 0.12)",
+                    color: "#059669",
                     fontSize: "10px",
                     fontWeight: 600,
                     padding: "2px 6px",
                     borderRadius: "4px",
-                    border: "1px solid rgba(16, 185, 129, 0.3)"
+                    border: "1px solid rgba(16, 185, 129, 0.25)"
                   }}
                 >
                   PRO
@@ -1350,7 +1642,7 @@ export const FloatingWebWidget: React.FC = () => {
                   fontSize: "16px",
                   lineHeight: 1
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#ffffff")}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#18181b")}
                 onMouseLeave={(e) => (e.currentTarget.style.color = "#71717a")}
               >
                 ✕
@@ -1362,8 +1654,8 @@ export const FloatingWebWidget: React.FC = () => {
           <div
             style={{
               display: "flex",
-              background: "#141417",
-              borderBottom: "1px solid #27272a",
+              background: "#f4f4f5",
+              borderBottom: "1px solid #e4e4e7",
               padding: "4px",
               gap: "4px"
             }}
@@ -1383,9 +1675,9 @@ export const FloatingWebWidget: React.FC = () => {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "5px",
-                background: activeMode === "voice" ? "#0a0a0c" : "transparent",
-                color: activeMode === "voice" ? "#ffffff" : "#a1a1aa",
-                boxShadow: activeMode === "voice" ? "0 2px 8px rgba(0,0,0,0.5)" : "none",
+                background: activeMode === "voice" ? "#ffffff" : "transparent",
+                color: activeMode === "voice" ? "#18181b" : "#71717a",
+                boxShadow: activeMode === "voice" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
                 transition: "all 0.15s ease"
               }}
             >
@@ -1415,9 +1707,9 @@ export const FloatingWebWidget: React.FC = () => {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "5px",
-                background: activeMode === "meeting" ? "#0a0a0c" : "transparent",
-                color: activeMode === "meeting" ? "#ffffff" : "#a1a1aa",
-                boxShadow: activeMode === "meeting" ? "0 2px 8px rgba(0,0,0,0.5)" : "none",
+                background: activeMode === "meeting" ? "#ffffff" : "transparent",
+                color: activeMode === "meeting" ? "#18181b" : "#71717a",
+                boxShadow: activeMode === "meeting" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
                 transition: "all 0.15s ease"
               }}
             >
@@ -1442,14 +1734,14 @@ export const FloatingWebWidget: React.FC = () => {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "5px",
-                background: activeMode === "history" ? "#0a0a0c" : "transparent",
-                color: activeMode === "history" ? "#ffffff" : "#a1a1aa",
-                boxShadow: activeMode === "history" ? "0 2px 8px rgba(0,0,0,0.5)" : "none",
+                background: activeMode === "history" ? "#ffffff" : "transparent",
+                color: activeMode === "history" ? "#18181b" : "#71717a",
+                boxShadow: activeMode === "history" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
                 transition: "all 0.15s ease"
               }}
             >
               <span>📁</span>
-              <span>History ({storedMeetings.length})</span>
+              <span>History ({voiceHistory.length + storedMeetings.length})</span>
             </button>
             <button
               id="voxflow-tab-settings"
@@ -1465,9 +1757,9 @@ export const FloatingWebWidget: React.FC = () => {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "4px",
-                background: activeMode === "settings" ? "#0a0a0c" : "transparent",
-                color: activeMode === "settings" ? "#ffffff" : "#a1a1aa",
-                boxShadow: activeMode === "settings" ? "0 2px 8px rgba(0,0,0,0.5)" : "none",
+                background: activeMode === "settings" ? "#ffffff" : "transparent",
+                color: activeMode === "settings" ? "#18181b" : "#71717a",
+                boxShadow: activeMode === "settings" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
                 transition: "all 0.15s ease"
               }}
             >
@@ -1484,7 +1776,7 @@ export const FloatingWebWidget: React.FC = () => {
               {/* Spoken Language & Output Language Row */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  <label style={{ fontSize: "11px", color: "#a1a1aa", fontWeight: 500 }}>
+                  <label style={{ fontSize: "11px", color: "#52525b", fontWeight: 500 }}>
                     Spoken Language
                   </label>
                   <select
@@ -1498,9 +1790,9 @@ export const FloatingWebWidget: React.FC = () => {
                     }}
                     disabled={voiceState === "recording" || voiceState === "transcribing"}
                     style={{
-                      background: "#18181b",
-                      color: "#fafafa",
-                      border: "1px solid #27272a",
+                      background: "#ffffff",
+                      color: "#18181b",
+                      border: "1px solid #e4e4e7",
                       borderRadius: "6px",
                       padding: "6px 8px",
                       fontSize: "12px",
@@ -1518,7 +1810,7 @@ export const FloatingWebWidget: React.FC = () => {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  <label style={{ fontSize: "11px", color: "#a1a1aa", fontWeight: 500 }}>
+                  <label style={{ fontSize: "11px", color: "#52525b", fontWeight: 500 }}>
                     Output Language
                   </label>
                   <select
@@ -1533,9 +1825,9 @@ export const FloatingWebWidget: React.FC = () => {
                     }}
                     disabled={voiceState === "recording" || voiceState === "transcribing"}
                     style={{
-                      background: "#18181b",
-                      color: "#fafafa",
-                      border: "1px solid #27272a",
+                      background: "#ffffff",
+                      color: "#18181b",
+                      border: "1px solid #e4e4e7",
                       borderRadius: "6px",
                       padding: "6px 8px",
                       fontSize: "12px",
@@ -1555,7 +1847,7 @@ export const FloatingWebWidget: React.FC = () => {
 
               {/* Microphone Input Selector Row */}
               <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                <label style={{ fontSize: "11px", color: "#a1a1aa", fontWeight: 500 }}>
+                <label style={{ fontSize: "11px", color: "#52525b", fontWeight: 500 }}>
                   Microphone Input
                 </label>
                 <select
@@ -1568,9 +1860,9 @@ export const FloatingWebWidget: React.FC = () => {
                   }}
                   disabled={voiceState === "recording" || voiceState === "transcribing"}
                   style={{
-                    background: "#18181b",
-                    color: "#fafafa",
-                    border: "1px solid #27272a",
+                    background: "#ffffff",
+                    color: "#18181b",
+                    border: "1px solid #e4e4e7",
                     borderRadius: "6px",
                     padding: "6px 8px",
                     fontSize: "12px",
@@ -1591,9 +1883,9 @@ export const FloatingWebWidget: React.FC = () => {
               {voiceError && (
                 <div
                   style={{
-                    background: "#2a1215",
-                    border: "1px solid #7f1d1d",
-                    color: "#fecaca",
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    color: "#991b1b",
                     padding: "8px 12px",
                     borderRadius: "8px",
                     fontSize: "12px",
@@ -1605,7 +1897,7 @@ export const FloatingWebWidget: React.FC = () => {
                   <span>{voiceError}</span>
                   <button
                     onClick={() => setVoiceError(null)}
-                    style={{ background: "transparent", border: "none", color: "#fecaca", cursor: "pointer", fontSize: "12px" }}
+                    style={{ background: "transparent", border: "none", color: "#991b1b", cursor: "pointer", fontSize: "12px" }}
                   >
                     ✕
                   </button>
@@ -1619,41 +1911,287 @@ export const FloatingWebWidget: React.FC = () => {
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
-                    gap: "12px",
-                    padding: "20px 0"
+                    gap: "14px",
+                    padding: "16px 0"
                   }}
                 >
+                  {(isVoiceLimitReached || (!user && isGuestLimitReached)) && (
+                    <div
+                      style={{
+                        width: "100%",
+                        background: "#fffbeb",
+                        border: "1px solid #fde68a",
+                        borderRadius: "10px",
+                        padding: "12px 14px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                        textAlign: "center",
+                        boxSizing: "border-box"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontWeight: 600, fontSize: "13px", color: "#92400e" }}>
+                        <span>⚠️</span>
+                        <span>Monthly Voice Limit Reached</span>
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#b45309", lineHeight: 1.5 }}>
+                        {user
+                          ? `You have reached your monthly allowance (${voiceUsage}/${voiceLimit} requests, ${voiceMinsUsed}/${voiceMinsLimit} mins). Upgrade to Pro to continue.`
+                          : "Guest demo limit reached. Sign up to get 100 free voice typings every month!"}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleUpgradeNavigation}
+                        style={{
+                          background: "#18181b",
+                          color: "#ffffff",
+                          border: "none",
+                          padding: "8px 14px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          alignSelf: "center",
+                          marginTop: "2px",
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.1)"
+                        }}
+                      >
+                        {user ? "Upgrade to Pro ⚡" : "Create Free Account →"}
+                      </button>
+                    </div>
+                  )}
+
                   <button
                     id="voxflow-voice-start-btn"
-                    onClick={handleVoiceStart}
+                    onClick={isVoiceLimitReached || (!user && isGuestLimitReached) ? undefined : handleVoiceStart}
+                    disabled={isVoiceLimitReached || (!user && isGuestLimitReached)}
+                    title={isVoiceLimitReached ? "Monthly voice limit reached — Upgrade to Pro" : "Click to speak"}
                     style={{
                       width: "60px",
                       height: "60px",
                       borderRadius: "50%",
-                      background: "#10b981",
+                      background: isVoiceLimitReached || (!user && isGuestLimitReached) ? "#e4e4e7" : "#10b981",
                       border: "none",
-                      color: "#09090b",
+                      color: isVoiceLimitReached || (!user && isGuestLimitReached) ? "#a1a1aa" : "#ffffff",
                       fontSize: "24px",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      cursor: "pointer",
-                      boxShadow: "0 6px 20px rgba(16, 185, 129, 0.4)",
-                      transition: "transform 0.15s ease"
+                      cursor: isVoiceLimitReached || (!user && isGuestLimitReached) ? "not-allowed" : "pointer",
+                      boxShadow: isVoiceLimitReached || (!user && isGuestLimitReached) ? "none" : "0 6px 20px rgba(16, 185, 129, 0.35)",
+                      transition: "transform 0.15s ease",
+                      opacity: isVoiceLimitReached || (!user && isGuestLimitReached) ? 0.6 : 1
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.06)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                    onMouseEnter={(e) => {
+                      if (!isVoiceLimitReached && (user || !isGuestLimitReached)) {
+                        e.currentTarget.style.transform = "scale(1.06)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "scale(1)";
+                    }}
                   >
                     🎙️
                   </button>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: "14px", fontWeight: 600 }}>Click to speak</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "#18181b" }}>
+                      {isVoiceLimitReached ? "Voice Typing Locked" : "Click to speak"}
+                    </div>
                     <div style={{ fontSize: "12px", color: "#71717a", marginTop: "2px" }}>
-                      Speaks naturally in any language — text is inserted into focused input
+                      {isVoiceLimitReached
+                        ? "Upgrade your plan to unlock more transcription minutes."
+                        : "Speaks naturally in any language — text is inserted into focused input"}
                     </div>
                   </div>
                 </div>
               )}
+
+              {/* DUAL TRANSCRIPT FIELDS: INPUT & OUTPUT */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {/* 1. TRANSCRIPT INPUT (Spoken voice input) */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label htmlFor="voxflow-voice-transcript-input" style={{ fontSize: "11px", color: "#52525b", fontWeight: 600 }}>
+                      Transcript Input (Spoken)
+                    </label>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      {voiceTranscriptInput && (
+                        <button
+                          type="button"
+                          id="voxflow-voice-clear-input-btn"
+                          onClick={() => {
+                            setVoiceTranscriptInput("");
+                            if (!voiceTranscriptOutput) setVoiceState("idle");
+                          }}
+                          style={{ background: "transparent", border: "none", color: "#71717a", fontSize: "11px", cursor: "pointer" }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                      {(voiceTranscriptInput || voiceTranscriptOutput) && (
+                        <button
+                          type="button"
+                          id="voxflow-voice-clear-all-btn"
+                          onClick={handleResetVoiceTyping}
+                          style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "11px", cursor: "pointer" }}
+                          title="Clear both input and output fields"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <textarea
+                    id="voxflow-voice-transcript-input"
+                    value={voiceTranscriptInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setVoiceTranscriptInput(val);
+                      if (!voiceTranscriptOutput || voiceTranscriptOutput === voiceTranscriptInput) {
+                        setVoiceTranscriptOutput(val);
+                        setVoiceTranscript(val);
+                      }
+                    }}
+                    placeholder="Spoken voice input will appear here... you can also type or edit speech input."
+                    rows={2}
+                    style={{
+                      width: "100%",
+                      background: "#f9fafb",
+                      border: "1px solid #e4e4e7",
+                      borderRadius: "8px",
+                      padding: "8px 10px",
+                      fontSize: "12px",
+                      lineHeight: "1.5",
+                      color: "#18181b",
+                      resize: "vertical",
+                      outline: "none",
+                      boxSizing: "border-box",
+                      fontFamily: "inherit",
+                      minHeight: "56px"
+                    }}
+                  />
+                </div>
+
+                {/* 2. TRANSCRIPT OUTPUT (Processed / Formatted / Translated) */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label htmlFor="voxflow-voice-transcript-output" style={{ fontSize: "11px", color: "#52525b", fontWeight: 600 }}>
+                      Transcript Output (Formatted / Final)
+                    </label>
+                    {voiceTranscriptOutput && (
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          type="button"
+                          onClick={handleVoiceCopy}
+                          style={{ background: "transparent", border: "none", color: "#10b981", fontSize: "11px", cursor: "pointer", fontWeight: 500 }}
+                        >
+                          📋 Copy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleVoiceInsert}
+                          style={{ background: "transparent", border: "none", color: "#3b82f6", fontSize: "11px", cursor: "pointer", fontWeight: 500 }}
+                        >
+                          ↵ Insert
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVoiceTranscriptOutput("");
+                            setVoiceTranscript("");
+                            if (voiceState === "completed") setVoiceState("idle");
+                          }}
+                          style={{ background: "transparent", border: "none", color: "#71717a", fontSize: "11px", cursor: "pointer" }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <textarea
+                    id="voxflow-voice-transcript-output"
+                    value={voiceTranscriptOutput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setVoiceTranscriptOutput(val);
+                      setVoiceTranscript(val);
+                    }}
+                    placeholder="Processed transcript output ready to copy or insert into web forms..."
+                    rows={3}
+                    style={{
+                      width: "100%",
+                      background: "#ffffff",
+                      border: "1px solid #e4e4e7",
+                      borderRadius: "8px",
+                      padding: "8px 10px",
+                      fontSize: "12px",
+                      lineHeight: "1.5",
+                      color: "#18181b",
+                      resize: "vertical",
+                      outline: "none",
+                      boxSizing: "border-box",
+                      fontFamily: "inherit",
+                      minHeight: "68px"
+                    }}
+                  />
+                </div>
+
+                {/* Quick Action Buttons for Output */}
+                {(voiceTranscriptOutput || voiceTranscriptInput) && (
+                  <div style={{ display: "flex", gap: "8px", marginTop: "2px" }}>
+                    <button
+                      id="voxflow-voice-insert-btn"
+                      onClick={handleVoiceInsert}
+                      style={{
+                        flex: 1.5,
+                        background: "#10b981",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: "8px",
+                        padding: "8px 12px",
+                        fontWeight: 600,
+                        fontSize: "12px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      ↵ Insert into Field
+                    </button>
+                    <button
+                      id="voxflow-voice-copy-btn"
+                      onClick={handleVoiceCopy}
+                      style={{
+                        background: "#f4f4f5",
+                        color: "#18181b",
+                        border: "1px solid #e4e4e7",
+                        borderRadius: "8px",
+                        padding: "8px 12px",
+                        fontWeight: 500,
+                        fontSize: "12px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      📋 Copy
+                    </button>
+                    {(voiceState === "completed" || voiceTranscriptOutput || voiceTranscriptInput) && (
+                      <button
+                        id="voxflow-voice-reset-btn"
+                        onClick={handleResetVoiceTyping}
+                        style={{
+                          background: "transparent",
+                          color: "#71717a",
+                          border: "1px solid #e4e4e7",
+                          borderRadius: "8px",
+                          padding: "8px 10px",
+                          fontSize: "12px",
+                          cursor: "pointer"
+                        }}
+                      >
+                        New
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* RECORDING / PAUSED STATE */}
               {(voiceState === "recording" || voiceState === "paused") && (
@@ -1717,9 +2255,9 @@ export const FloatingWebWidget: React.FC = () => {
                         onClick={handleVoicePause}
                         style={{
                           flex: 1,
-                          background: "#18181b",
-                          color: "#fafafa",
-                          border: "1px solid #27272a",
+                          background: "#ffffff",
+                          color: "#18181b",
+                          border: "1px solid #e4e4e7",
                           borderRadius: "8px",
                           padding: "10px",
                           fontSize: "12px",
@@ -1734,8 +2272,8 @@ export const FloatingWebWidget: React.FC = () => {
                         onClick={handleVoiceResume}
                         style={{
                           flex: 1,
-                          background: "#18181b",
-                          color: "#10b981",
+                          background: "#ecfdf5",
+                          color: "#065f46",
                           border: "1px solid #10b981",
                           borderRadius: "8px",
                           padding: "10px",
@@ -1753,7 +2291,7 @@ export const FloatingWebWidget: React.FC = () => {
                       style={{
                         flex: 1.5,
                         background: "#10b981",
-                        color: "#09090b",
+                        color: "#ffffff",
                         border: "none",
                         borderRadius: "8px",
                         padding: "10px",
@@ -1770,7 +2308,7 @@ export const FloatingWebWidget: React.FC = () => {
                       style={{
                         background: "transparent",
                         color: "#71717a",
-                        border: "1px solid #27272a",
+                        border: "1px solid #e4e4e7",
                         borderRadius: "8px",
                         padding: "10px 14px",
                         fontSize: "13px",
@@ -1799,7 +2337,7 @@ export const FloatingWebWidget: React.FC = () => {
                       width: "28px",
                       height: "28px",
                       borderRadius: "50%",
-                      border: "3px solid #27272a",
+                      border: "3px solid #e4e4e7",
                       borderTopColor: "#10b981",
                       animation: "spin 0.8s linear infinite"
                     }}
@@ -1810,97 +2348,7 @@ export const FloatingWebWidget: React.FC = () => {
                 </div>
               )}
 
-              {/* COMPLETED STATE */}
-              {voiceState === "completed" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: "12px", color: "#a1a1aa", fontWeight: 600 }}>
-                      Transcript Output:
-                    </span>
-                    <button
-                      onClick={() => setVoiceTranscript("")}
-                      style={{ background: "transparent", border: "none", color: "#71717a", fontSize: "11px", cursor: "pointer" }}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <textarea
-                    id="voxflow-voice-transcript-output"
-                    value={voiceTranscript}
-                    onChange={(e) => setVoiceTranscript(e.target.value)}
-                    placeholder="Transcribed text..."
-                    rows={4}
-                    style={{
-                      width: "100%",
-                      background: "#18181b",
-                      border: "1px solid #27272a",
-                      borderRadius: "8px",
-                      padding: "10px 12px",
-                      fontSize: "13px",
-                      lineHeight: "1.5",
-                      color: "#fafafa",
-                      resize: "vertical",
-                      outline: "none",
-                      boxSizing: "border-box",
-                      fontFamily: "inherit"
-                    }}
-                  />
 
-                  <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
-                    <button
-                      id="voxflow-voice-insert-btn"
-                      onClick={handleVoiceInsert}
-                      style={{
-                        flex: 1.5,
-                        background: "#10b981",
-                        color: "#09090b",
-                        border: "none",
-                        borderRadius: "8px",
-                        padding: "9px 12px",
-                        fontWeight: 600,
-                        fontSize: "12px",
-                        cursor: "pointer"
-                      }}
-                    >
-                      ↵ Insert into Field
-                    </button>
-                    <button
-                      id="voxflow-voice-copy-btn"
-                      onClick={handleVoiceCopy}
-                      style={{
-                        background: "#18181b",
-                        color: "#fafafa",
-                        border: "1px solid #27272a",
-                        borderRadius: "8px",
-                        padding: "9px 14px",
-                        fontWeight: 500,
-                        fontSize: "12px",
-                        cursor: "pointer"
-                      }}
-                    >
-                      📋 Copy
-                    </button>
-                    <button
-                      id="voxflow-voice-reset-btn"
-                      onClick={() => {
-                        setVoiceTranscript("");
-                        setVoiceState("idle");
-                      }}
-                      style={{
-                        background: "transparent",
-                        color: "#71717a",
-                        border: "1px solid #27272a",
-                        borderRadius: "8px",
-                        padding: "9px 12px",
-                        fontSize: "12px",
-                        cursor: "pointer"
-                      }}
-                    >
-                      New
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -1933,8 +2381,8 @@ export const FloatingWebWidget: React.FC = () => {
                     <div
                       style={{
                         background: "#2a1215",
-                        border: "1px solid #7f1d1d",
-                        color: "#fecaca",
+                        border: "1px solid #fecdd3",
+                        color: "#9f1239",
                         padding: "8px 12px",
                         borderRadius: "8px",
                         fontSize: "12px",
@@ -1946,7 +2394,7 @@ export const FloatingWebWidget: React.FC = () => {
                       <span>{meetingError}</span>
                       <button
                         onClick={() => setMeetingError(null)}
-                        style={{ background: "transparent", border: "none", color: "#fecaca", cursor: "pointer", fontSize: "12px" }}
+                        style={{ background: "transparent", border: "none", color: "#991b1b", cursor: "pointer", fontSize: "12px" }}
                       >
                         ✕
                       </button>
@@ -1955,9 +2403,21 @@ export const FloatingWebWidget: React.FC = () => {
 
                   {/* Meeting Title Input */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label style={{ fontSize: "12px", color: "#a1a1aa", fontWeight: 500 }}>
-                      Meeting Title
-                    </label>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <label htmlFor="voxflow-meeting-title-input" style={{ fontSize: "12px", color: "#52525b", fontWeight: 500 }}>
+                        Meeting Title
+                      </label>
+                      {meetingTitle && (
+                        <button
+                          type="button"
+                          id="voxflow-meeting-clear-title-btn"
+                          onClick={() => setMeetingTitle("")}
+                          style={{ background: "transparent", border: "none", color: "#71717a", fontSize: "11px", cursor: "pointer" }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                     <input
                       id="voxflow-meeting-title-input"
                       type="text"
@@ -1965,9 +2425,9 @@ export const FloatingWebWidget: React.FC = () => {
                       onChange={(e) => setMeetingTitle(e.target.value)}
                       placeholder="e.g. Sprint Planning, Client Review"
                       style={{
-                        background: "#18181b",
-                        border: "1px solid #27272a",
-                        color: "#fafafa",
+                        background: "#ffffff",
+                        border: "1px solid #e4e4e7",
+                        color: "#18181b",
                         borderRadius: "8px",
                         padding: "8px 12px",
                         fontSize: "13px",
@@ -1978,7 +2438,7 @@ export const FloatingWebWidget: React.FC = () => {
 
                   {/* Audio Source Selection */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label style={{ fontSize: "12px", color: "#a1a1aa", fontWeight: 500 }}>
+                    <label style={{ fontSize: "12px", color: "#52525b", fontWeight: 500 }}>
                       Audio Capture Source
                     </label>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
@@ -1986,9 +2446,9 @@ export const FloatingWebWidget: React.FC = () => {
                         type="button"
                         onClick={() => setMeetingSource("mic")}
                         style={{
-                          background: meetingSource === "mic" ? "#062419" : "#18181b",
-                          border: `1px solid ${meetingSource === "mic" ? "#10b981" : "#27272a"}`,
-                          color: meetingSource === "mic" ? "#10b981" : "#a1a1aa",
+                          background: meetingSource === "mic" ? "#ecfdf5" : "#ffffff",
+                          border: `1px solid ${meetingSource === "mic" ? "#10b981" : "#e4e4e7"}`,
+                          color: meetingSource === "mic" ? "#065f46" : "#52525b",
                           borderRadius: "8px",
                           padding: "8px 6px",
                           fontSize: "11px",
@@ -2007,9 +2467,9 @@ export const FloatingWebWidget: React.FC = () => {
                         type="button"
                         onClick={() => setMeetingSource("system")}
                         style={{
-                          background: meetingSource === "system" ? "#062419" : "#18181b",
-                          border: `1px solid ${meetingSource === "system" ? "#10b981" : "#27272a"}`,
-                          color: meetingSource === "system" ? "#10b981" : "#a1a1aa",
+                          background: meetingSource === "system" ? "#ecfdf5" : "#ffffff",
+                          border: `1px solid ${meetingSource === "system" ? "#10b981" : "#e4e4e7"}`,
+                          color: meetingSource === "system" ? "#065f46" : "#52525b",
                           borderRadius: "8px",
                           padding: "8px 6px",
                           fontSize: "11px",
@@ -2028,9 +2488,9 @@ export const FloatingWebWidget: React.FC = () => {
                         type="button"
                         onClick={() => setMeetingSource("combined")}
                         style={{
-                          background: meetingSource === "combined" ? "#062419" : "#18181b",
-                          border: `1px solid ${meetingSource === "combined" ? "#10b981" : "#27272a"}`,
-                          color: meetingSource === "combined" ? "#10b981" : "#a1a1aa",
+                          background: meetingSource === "combined" ? "#ecfdf5" : "#ffffff",
+                          border: `1px solid ${meetingSource === "combined" ? "#10b981" : "#e4e4e7"}`,
+                          color: meetingSource === "combined" ? "#065f46" : "#52525b",
                           borderRadius: "8px",
                           padding: "8px 6px",
                           fontSize: "11px",
@@ -2056,7 +2516,7 @@ export const FloatingWebWidget: React.FC = () => {
 
                   {/* Language Selection */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <label style={{ fontSize: "12px", color: "#a1a1aa", fontWeight: 500 }}>
+                    <label style={{ fontSize: "12px", color: "#52525b", fontWeight: 500 }}>
                       Meeting Language
                     </label>
                     <select
@@ -2064,9 +2524,9 @@ export const FloatingWebWidget: React.FC = () => {
                       value={meetingLanguage}
                       onChange={(e) => setMeetingLanguage(e.target.value)}
                       style={{
-                        background: "#18181b",
-                        color: "#fafafa",
-                        border: "1px solid #27272a",
+                        background: "#f4f4f5",
+                        color: "#18181b",
+                        border: "1px solid #e4e4e7",
                         borderRadius: "6px",
                         padding: "4px 8px",
                         fontSize: "12px",
@@ -2084,23 +2544,70 @@ export const FloatingWebWidget: React.FC = () => {
                     </select>
                   </div>
 
+                  {isMeetingLimitReached && (
+                    <div
+                      style={{
+                        width: "100%",
+                        background: "#fffbeb",
+                        border: "1px solid #fde68a",
+                        borderRadius: "10px",
+                        padding: "12px 14px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                        textAlign: "center",
+                        boxSizing: "border-box"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontWeight: 600, fontSize: "13px", color: "#92400e" }}>
+                        <span>⚠️</span>
+                        <span>Monthly Meeting Limit Reached</span>
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#b45309", lineHeight: 1.5 }}>
+                        You have recorded {meetingsUsed}/{meetingsLimit} meetings of your monthly allowance. Upgrade to Pro for 25 meetings per month!
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleUpgradeNavigation}
+                        style={{
+                          background: "#18181b",
+                          color: "#ffffff",
+                          border: "none",
+                          padding: "8px 14px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          alignSelf: "center",
+                          marginTop: "2px",
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.1)"
+                        }}
+                      >
+                        Upgrade to Pro ⚡
+                      </button>
+                    </div>
+                  )}
+
                   <button
                     id="voxflow-meeting-start-btn"
-                    onClick={handleStartMeeting}
+                    onClick={isMeetingLimitReached ? undefined : handleStartMeeting}
+                    disabled={isMeetingLimitReached}
+                    title={isMeetingLimitReached ? "Monthly meeting limit reached — Upgrade to Pro" : "Start Meeting Recording"}
                     style={{
-                      background: "#10b981",
-                      color: "#09090b",
+                      background: isMeetingLimitReached ? "#e4e4e7" : "#10b981",
+                      color: isMeetingLimitReached ? "#a1a1aa" : "#ffffff",
                       border: "none",
                       borderRadius: "8px",
                       padding: "12px",
                       fontWeight: 600,
                       fontSize: "13px",
-                      cursor: "pointer",
+                      cursor: isMeetingLimitReached ? "not-allowed" : "pointer",
                       marginTop: "6px",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      gap: "8px"
+                      gap: "8px",
+                      opacity: isMeetingLimitReached ? 0.6 : 1
                     }}
                   >
                     <span>🔴</span>
@@ -2170,9 +2677,9 @@ export const FloatingWebWidget: React.FC = () => {
                       onClick={handleToggleMeetingPause}
                       style={{
                         flex: 1,
-                        background: "#18181b",
-                        border: "1px solid #27272a",
-                        color: "#fafafa",
+                        background: "#ffffff",
+                        border: "1px solid #e4e4e7",
+                        color: "#18181b",
                         borderRadius: "8px",
                         padding: "10px",
                         fontWeight: 600,
@@ -2189,7 +2696,7 @@ export const FloatingWebWidget: React.FC = () => {
                         flex: 1.5,
                         background: "#10b981",
                         border: "none",
-                        color: "#09090b",
+                        color: "#ffffff",
                         borderRadius: "8px",
                         padding: "10px",
                         fontWeight: 600,
@@ -2204,7 +2711,7 @@ export const FloatingWebWidget: React.FC = () => {
                       onClick={handleCancelMeeting}
                       style={{
                         background: "transparent",
-                        border: "1px solid #27272a",
+                        border: "1px solid #e4e4e7",
                         color: "#71717a",
                         borderRadius: "8px",
                         padding: "10px",
@@ -2226,7 +2733,7 @@ export const FloatingWebWidget: React.FC = () => {
                       width: "36px",
                       height: "36px",
                       borderRadius: "50%",
-                      border: "3px solid #27272a",
+                      border: "3px solid #e4e4e7",
                       borderTopColor: "#10b981",
                       animation: "spin 0.8s linear infinite"
                     }}
@@ -2247,15 +2754,15 @@ export const FloatingWebWidget: React.FC = () => {
                   <div
                     style={{
                       padding: "12px 16px",
-                      borderBottom: "1px solid #27272a",
-                      background: "#0e0e11",
+                      borderBottom: "1px solid #e4e4e7",
+                      background: "#f9fafb",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between"
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: "14px", color: "#fafafa" }}>{currentMeeting.title}</div>
+                      <div style={{ fontWeight: 600, fontSize: "14px", color: "#18181b" }}>{currentMeeting.title}</div>
                       <div style={{ fontSize: "11px", color: "#71717a" }}>
                         {currentMeeting.date} • {currentMeeting.duration}
                       </div>
@@ -2265,9 +2772,9 @@ export const FloatingWebWidget: React.FC = () => {
                         onClick={handleCopyMeetingMarkdown}
                         title="Copy Markdown"
                         style={{
-                          background: "#18181b",
-                          border: "1px solid #27272a",
-                          color: "#fafafa",
+                          background: "#ffffff",
+                          border: "1px solid #e4e4e7",
+                          color: "#18181b",
                           borderRadius: "6px",
                           padding: "4px 8px",
                           fontSize: "11px",
@@ -2281,9 +2788,9 @@ export const FloatingWebWidget: React.FC = () => {
                         onClick={() => handleExportMeeting("md")}
                         title="Export as Markdown"
                         style={{
-                          background: "#18181b",
-                          border: "1px solid #27272a",
-                          color: "#fafafa",
+                          background: "#ffffff",
+                          border: "1px solid #e4e4e7",
+                          color: "#18181b",
                           borderRadius: "6px",
                           padding: "4px 8px",
                           fontSize: "11px",
@@ -2297,9 +2804,9 @@ export const FloatingWebWidget: React.FC = () => {
                         onClick={() => handleExportMeeting("txt")}
                         title="Export as Text"
                         style={{
-                          background: "#18181b",
-                          border: "1px solid #27272a",
-                          color: "#fafafa",
+                          background: "#ffffff",
+                          border: "1px solid #e4e4e7",
+                          color: "#18181b",
                           borderRadius: "6px",
                           padding: "4px 8px",
                           fontSize: "11px",
@@ -2316,8 +2823,8 @@ export const FloatingWebWidget: React.FC = () => {
                   <div
                     style={{
                       display: "flex",
-                      borderBottom: "1px solid #27272a",
-                      background: "#141417",
+                      borderBottom: "1px solid #e4e4e7",
+                      background: "#ffffff",
                       fontSize: "12px"
                     }}
                   >
@@ -2338,7 +2845,7 @@ export const FloatingWebWidget: React.FC = () => {
                           border: "none",
                           borderBottom: meetingTab === tab.id ? "2px solid #10b981" : "2px solid transparent",
                           background: "transparent",
-                          color: meetingTab === tab.id ? "#10b981" : "#a1a1aa",
+                          color: meetingTab === tab.id ? "#059669" : "#71717a",
                           fontWeight: meetingTab === tab.id ? 600 : 400,
                           cursor: "pointer",
                           fontSize: "11px",
@@ -2357,19 +2864,19 @@ export const FloatingWebWidget: React.FC = () => {
                       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                         {/* Metrics Grid */}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-                          <div style={{ background: "#18181b", border: "1px solid #27272a", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
+                          <div style={{ background: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
                             <div style={{ fontSize: "18px", fontWeight: 700, color: "#10b981" }}>
                               {currentMeeting.topics?.length || 0}
                             </div>
                             <div style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "2px" }}>Key Topics</div>
                           </div>
-                          <div style={{ background: "#18181b", border: "1px solid #27272a", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
+                          <div style={{ background: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
                             <div style={{ fontSize: "18px", fontWeight: 700, color: "#3b82f6" }}>
                               {currentMeeting.decisions?.length || 0}
                             </div>
                             <div style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "2px" }}>Decisions</div>
                           </div>
-                          <div style={{ background: "#18181b", border: "1px solid #27272a", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
+                          <div style={{ background: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: "8px", padding: "10px", textAlign: "center" }}>
                             <div style={{ fontSize: "18px", fontWeight: 700, color: "#f59e0b" }}>
                               {currentMeeting.actionItems?.length || 0}
                             </div>
@@ -2378,9 +2885,9 @@ export const FloatingWebWidget: React.FC = () => {
                         </div>
 
                         {/* Executive Summary Card */}
-                        <div style={{ background: "#18181b", border: "1px solid #27272a", borderRadius: "8px", padding: "12px" }}>
+                        <div style={{ background: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: "8px", padding: "12px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                            <span style={{ fontSize: "12px", fontWeight: 600, color: "#fafafa" }}>Executive Brief</span>
+                            <span style={{ fontSize: "12px", fontWeight: 600, color: "#18181b" }}>Executive Brief</span>
                             <button
                               onClick={() => {
                                 navigator.clipboard.writeText(currentMeeting.summaryPreview || currentMeeting.fullSummary || "");
@@ -2391,16 +2898,16 @@ export const FloatingWebWidget: React.FC = () => {
                               📋 Copy Brief
                             </button>
                           </div>
-                          <p style={{ margin: 0, fontSize: "12px", color: "#d4d4d8", lineHeight: "1.5" }}>
+                          <p style={{ margin: 0, fontSize: "12px", color: "#3f3f46", lineHeight: "1.5" }}>
                             {currentMeeting.summaryPreview || currentMeeting.fullSummary || "No summary available."}
                           </p>
                         </div>
 
                         {/* Top Actions Preview */}
                         {currentMeeting.actionItems && currentMeeting.actionItems.length > 0 && (
-                          <div style={{ background: "#18181b", border: "1px solid #27272a", borderRadius: "8px", padding: "12px" }}>
+                          <div style={{ background: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: "8px", padding: "12px" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                              <span style={{ fontSize: "12px", fontWeight: 600, color: "#fafafa" }}>Top Action Items</span>
+                              <span style={{ fontSize: "12px", fontWeight: 600, color: "#18181b" }}>Top Action Items</span>
                               <button
                                 onClick={() => setMeetingTab("actions")}
                                 style={{ background: "transparent", border: "none", color: "#10b981", fontSize: "11px", cursor: "pointer" }}
@@ -2410,7 +2917,7 @@ export const FloatingWebWidget: React.FC = () => {
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                               {currentMeeting.actionItems.slice(0, 3).map((act, idx) => (
-                                <div key={act.id || idx} style={{ fontSize: "12px", color: "#d4d4d8", display: "flex", alignItems: "flex-start", gap: "6px" }}>
+                                <div key={act.id || idx} style={{ fontSize: "12px", color: "#3f3f46", display: "flex", alignItems: "flex-start", gap: "6px" }}>
                                   <span style={{ color: "#f59e0b" }}>•</span>
                                   <span>{act.task} {act.assignee ? <span style={{ color: "#71717a" }}>({act.assignee})</span> : null}</span>
                                 </div>
@@ -2431,9 +2938,9 @@ export const FloatingWebWidget: React.FC = () => {
                             style={{
                               width: "100%",
                               height: "180px",
-                              background: "#18181b",
-                              border: "1px solid #27272a",
-                              color: "#fafafa",
+                              background: "#ffffff",
+                              border: "1px solid #e4e4e7",
+                              color: "#18181b",
                               borderRadius: "8px",
                               padding: "10px",
                               fontSize: "12px",
@@ -2443,7 +2950,7 @@ export const FloatingWebWidget: React.FC = () => {
                             }}
                           />
                         ) : (
-                          <div style={{ whiteSpace: "pre-wrap", color: "#e4e4e7" }}>
+                          <div style={{ whiteSpace: "pre-wrap", color: "#18181b" }}>
                             {currentMeeting.fullSummary || currentMeeting.summaryPreview || "No summary available."}
                           </div>
                         )}
@@ -2460,8 +2967,8 @@ export const FloatingWebWidget: React.FC = () => {
                             <div
                               key={t.id || idx}
                               style={{
-                                background: "#18181b",
-                                border: "1px solid #27272a",
+                                background: "#f9fafb",
+                                border: "1px solid #e4e4e7",
                                 borderRadius: "8px",
                                 padding: "10px 12px"
                               }}
@@ -2481,7 +2988,7 @@ export const FloatingWebWidget: React.FC = () => {
                                   📋 Copy
                                 </button>
                               </div>
-                              <div style={{ fontSize: "12px", color: "#d4d4d8", marginTop: "4px" }}>
+                              <div style={{ fontSize: "12px", color: "#3f3f46", marginTop: "4px" }}>
                                 {t.summary}
                               </div>
                             </div>
@@ -2500,8 +3007,8 @@ export const FloatingWebWidget: React.FC = () => {
                             <div
                               key={d.id || idx}
                               style={{
-                                background: "#18181b",
-                                border: "1px solid #27272a",
+                                background: "#f9fafb",
+                                border: "1px solid #e4e4e7",
                                 borderRadius: "8px",
                                 padding: "10px 12px"
                               }}
@@ -2556,8 +3063,8 @@ export const FloatingWebWidget: React.FC = () => {
                             <div
                               key={a.id || idx}
                               style={{
-                                background: "#18181b",
-                                border: "1px solid #27272a",
+                                background: "#f9fafb",
+                                border: "1px solid #e4e4e7",
                                 borderRadius: "8px",
                                 padding: "10px 12px",
                                 display: "flex",
@@ -2613,14 +3120,14 @@ export const FloatingWebWidget: React.FC = () => {
                             <div
                               key={u.id || idx}
                               style={{
-                                borderBottom: "1px solid #1e1e24",
+                                borderBottom: "1px solid #e4e4e7",
                                 paddingBottom: "8px"
                               }}
                             >
                               <div style={{ fontSize: "11px", color: "#71717a", fontWeight: 600 }}>
                                 {u.speakerName || "Speaker"} • {u.timestamp || "00:00"}
                               </div>
-                              <div style={{ fontSize: "12px", color: "#d4d4d8", marginTop: "2px" }}>
+                              <div style={{ fontSize: "12px", color: "#3f3f46", marginTop: "2px" }}>
                                 {u.originalText}
                               </div>
                             </div>
@@ -2634,8 +3141,8 @@ export const FloatingWebWidget: React.FC = () => {
                   <div
                     style={{
                       padding: "10px 14px",
-                      borderTop: "1px solid #27272a",
-                      background: "#0e0e11",
+                      borderTop: "1px solid #e4e4e7",
+                      background: "#f9fafb",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between"
@@ -2647,7 +3154,7 @@ export const FloatingWebWidget: React.FC = () => {
                         style={{
                           background: "#10b981",
                           border: "none",
-                          color: "#09090b",
+                          color: "#ffffff",
                           borderRadius: "6px",
                           padding: "6px 12px",
                           fontSize: "12px",
@@ -2661,9 +3168,9 @@ export const FloatingWebWidget: React.FC = () => {
                       <button
                         onClick={() => setIsEditingMeeting(true)}
                         style={{
-                          background: "#18181b",
-                          border: "1px solid #27272a",
-                          color: "#fafafa",
+                          background: "#ffffff",
+                          border: "1px solid #e4e4e7",
+                          color: "#18181b",
                           borderRadius: "6px",
                           padding: "6px 12px",
                           fontSize: "12px",
@@ -2688,14 +3195,12 @@ export const FloatingWebWidget: React.FC = () => {
                         All Meetings
                       </button>
                       <button
-                        onClick={() => {
-                          setCurrentMeeting(null);
-                          setMeetingStep("setup");
-                        }}
+                        id="voxflow-completed-new-meeting-btn"
+                        onClick={handleStartNewMeeting}
                         style={{
                           background: "#10b981",
                           border: "none",
-                          color: "#09090b",
+                          color: "#ffffff",
                           borderRadius: "6px",
                           padding: "6px 12px",
                           fontSize: "12px",
@@ -2713,38 +3218,276 @@ export const FloatingWebWidget: React.FC = () => {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 3: PAST MEETINGS HISTORY VIEW                        */}
+          {/* TAB 3: PAST HISTORY VIEW (VOICE TYPING & MEETINGS)       */}
           {/* ======================================================== */}
           {(activeMode === "history" || (activeMode === "meeting" && meetingStep === "history")) && (
             <div style={{ padding: "16px", display: "flex", flexDirection: "column", height: "100%", gap: "12px" }}>
-              {/* Header Bar */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <span style={{ fontSize: "14px", fontWeight: 600 }}>Past Meetings</span>
-                  <span style={{ fontSize: "11px", color: "#71717a", marginLeft: "8px" }}>
-                    ({storedMeetings.length} saved)
-                  </span>
-                </div>
+              {/* Header Bar with Sub-Category Switcher */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", background: "#f4f4f5", padding: "4px", borderRadius: "8px" }}>
                 <button
-                  onClick={() => {
-                    setCurrentMeeting(null);
-                    setMeetingStep("setup");
-                    setActiveMode("meeting");
-                  }}
+                  id="voxflow-history-subtab-voice"
+                  type="button"
+                  onClick={() => setHistoryCategory("voice")}
                   style={{
-                    background: "#10b981",
-                    border: "none",
-                    color: "#09090b",
+                    padding: "6px 10px",
                     borderRadius: "6px",
-                    padding: "6px 12px",
+                    border: "none",
                     fontSize: "12px",
                     fontWeight: 600,
-                    cursor: "pointer"
+                    cursor: "pointer",
+                    background: historyCategory === "voice" ? "#ffffff" : "transparent",
+                    color: historyCategory === "voice" ? "#18181b" : "#71717a",
+                    boxShadow: historyCategory === "voice" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+                    transition: "all 0.15s ease"
                   }}
                 >
-                  + New Meeting
+                  🎙️ Voice History ({voiceHistory.length})
+                </button>
+                <button
+                  id="voxflow-history-subtab-meeting"
+                  type="button"
+                  onClick={() => setHistoryCategory("meeting")}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: "6px",
+                    border: "none",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    background: historyCategory === "meeting" ? "#ffffff" : "transparent",
+                    color: historyCategory === "meeting" ? "#18181b" : "#71717a",
+                    boxShadow: historyCategory === "meeting" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  👥 Meetings ({storedMeetings.length})
                 </button>
               </div>
+
+              {/* VOICE TYPING HISTORY LIST */}
+              {historyCategory === "voice" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", height: "100%" }}>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <input
+                      id="voxflow-voice-history-search"
+                      type="text"
+                      value={voiceSearch}
+                      onChange={(e) => setVoiceSearch(e.target.value)}
+                      placeholder="Search voice transcripts..."
+                      style={{
+                        flex: 1,
+                        background: "#ffffff",
+                        border: "1px solid #e4e4e7",
+                        color: "#18181b",
+                        borderRadius: "6px",
+                        padding: "7px 10px",
+                        fontSize: "12px",
+                        outline: "none"
+                      }}
+                    />
+                    {voiceHistory.length > 0 && (
+                      <button
+                        onClick={clearAllVoiceHistory}
+                        title="Clear all voice history"
+                        style={{
+                          background: "transparent",
+                          border: "1px solid #e4e4e7",
+                          color: "#71717a",
+                          borderRadius: "6px",
+                          padding: "7px 10px",
+                          fontSize: "11px",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      flex: 1,
+                      overflowY: "auto",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                      maxHeight: "360px"
+                    }}
+                  >
+                    {filteredVoiceHistory.length === 0 ? (
+                      <div
+                        style={{
+                          color: "#71717a",
+                          fontSize: "13px",
+                          textAlign: "center",
+                          padding: "36px 16px",
+                          background: "#f9fafb",
+                          borderRadius: "8px",
+                          border: "1px dashed #e4e4e7"
+                        }}
+                      >
+                        <div>No voice transcripts found.</div>
+                        <div style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "4px" }}>
+                          When you speak in Voice Typing, transcripts will automatically appear here.
+                        </div>
+                        <button
+                          onClick={() => setActiveMode("voice")}
+                          style={{
+                            marginTop: "12px",
+                            background: "#10b981",
+                            border: "none",
+                            color: "#ffffff",
+                            borderRadius: "6px",
+                            padding: "6px 14px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            cursor: "pointer"
+                          }}
+                        >
+                          🎙️ Go to Voice Typing
+                        </button>
+                      </div>
+                    ) : (
+                      filteredVoiceHistory.map((item) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            background: "#ffffff",
+                            border: "1px solid #e4e4e7",
+                            borderRadius: "8px",
+                            padding: "10px 12px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                            transition: "all 0.15s ease",
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.02)"
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = "#10b981";
+                            e.currentTarget.style.boxShadow = "0 3px 8px rgba(0,0,0,0.05)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = "#e4e4e7";
+                            e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.02)";
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#71717a" }}>
+                              <span style={{ fontWeight: 600, color: "#18181b" }}>{item.date}</span>
+                              <span>•</span>
+                              <span>{item.timestamp}</span>
+                              {item.duration !== undefined && item.duration > 0 && (
+                                <span style={{ color: "#a1a1aa" }}>({formatTimer(item.duration)})</span>
+                              )}
+                              {item.outputLanguage && item.outputLanguage !== "same" && (
+                                <span
+                                  style={{
+                                    fontSize: "10px",
+                                    background: "#f4f4f5",
+                                    color: "#52525b",
+                                    padding: "1px 5px",
+                                    borderRadius: "4px"
+                                  }}
+                                >
+                                  → {item.outputLanguage}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              <button
+                                onClick={() => handleInsertSpecificText(item.text)}
+                                title="Insert into active input field on page"
+                                style={{
+                                  background: "#ecfdf5",
+                                  border: "1px solid #10b981",
+                                  color: "#065f46",
+                                  borderRadius: "4px",
+                                  padding: "3px 8px",
+                                  fontSize: "11px",
+                                  fontWeight: 500,
+                                  cursor: "pointer"
+                                }}
+                              >
+                                ↵ Insert
+                              </button>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(item.text);
+                                  showToast("Transcript copied!");
+                                }}
+                                title="Copy transcript to clipboard"
+                                style={{
+                                  background: "#f4f4f5",
+                                  border: "1px solid #e4e4e7",
+                                  color: "#18181b",
+                                  borderRadius: "4px",
+                                  padding: "3px 7px",
+                                  fontSize: "11px",
+                                  cursor: "pointer"
+                                }}
+                              >
+                                📋 Copy
+                              </button>
+                              <button
+                                onClick={() => deleteVoiceHistoryItem(item.id)}
+                                title="Delete record"
+                                style={{
+                                  background: "transparent",
+                                  border: "none",
+                                  color: "#a1a1aa",
+                                  fontSize: "13px",
+                                  cursor: "pointer",
+                                  padding: "2px 4px"
+                                }}
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              lineHeight: "1.5",
+                              color: "#18181b",
+                              whiteSpace: "pre-wrap",
+                              maxHeight: "100px",
+                              overflowY: "auto"
+                            }}
+                          >
+                            {item.text}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* MEETING NOTES HISTORY */}
+              {historyCategory === "meeting" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", height: "100%" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "12px", color: "#71717a", fontWeight: 500 }}>
+                      Saved Meetings ({storedMeetings.length})
+                    </span>
+                    <button
+                      id="voxflow-history-new-meeting-btn"
+                      onClick={handleStartNewMeeting}
+                      style={{
+                        background: "#10b981",
+                        border: "none",
+                        color: "#ffffff",
+                        borderRadius: "6px",
+                        padding: "6px 12px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      + New Meeting
+                    </button>
+                  </div>
 
               {/* Search & Sort Controls */}
               <div style={{ display: "flex", gap: "8px" }}>
@@ -2755,9 +3498,9 @@ export const FloatingWebWidget: React.FC = () => {
                   placeholder="Search meetings by title or summary..."
                   style={{
                     flex: 1,
-                    background: "#18181b",
-                    border: "1px solid #27272a",
-                    color: "#fafafa",
+                    background: "#ffffff",
+                    border: "1px solid #e4e4e7",
+                    color: "#18181b",
                     borderRadius: "6px",
                     padding: "7px 10px",
                     fontSize: "12px",
@@ -2768,9 +3511,9 @@ export const FloatingWebWidget: React.FC = () => {
                   value={historySort}
                   onChange={(e) => setHistorySort(e.target.value as any)}
                   style={{
-                    background: "#18181b",
-                    border: "1px solid #27272a",
-                    color: "#fafafa",
+                    background: "#ffffff",
+                    border: "1px solid #e4e4e7",
+                    color: "#18181b",
                     borderRadius: "6px",
                     padding: "7px 10px",
                     fontSize: "12px",
@@ -2788,8 +3531,8 @@ export const FloatingWebWidget: React.FC = () => {
               {meetingToDelete && (
                 <div
                   style={{
-                    background: "#2a1215",
-                    border: "1px solid #7f1d1d",
+                    background: "#fff1f2",
+                    border: "1px solid #fecdd3",
                     borderRadius: "8px",
                     padding: "10px 12px",
                     display: "flex",
@@ -2798,7 +3541,7 @@ export const FloatingWebWidget: React.FC = () => {
                     gap: "8px"
                   }}
                 >
-                  <span style={{ fontSize: "12px", color: "#fecaca" }}>
+                  <span style={{ fontSize: "12px", color: "#9f1239" }}>
                     Delete "{meetingToDelete.title}"?
                   </span>
                   <div style={{ display: "flex", gap: "6px" }}>
@@ -2821,8 +3564,8 @@ export const FloatingWebWidget: React.FC = () => {
                       onClick={() => setMeetingToDelete(null)}
                       style={{
                         background: "transparent",
-                        border: "1px solid #7f1d1d",
-                        color: "#fecaca",
+                        border: "1px solid #fecdd3",
+                        color: "#9f1239",
                         borderRadius: "4px",
                         padding: "4px 8px",
                         fontSize: "11px",
@@ -2853,23 +3596,20 @@ export const FloatingWebWidget: React.FC = () => {
                       fontSize: "13px",
                       textAlign: "center",
                       padding: "36px 16px",
-                      background: "#121214",
+                      background: "#f9fafb",
                       borderRadius: "8px",
-                      border: "1px dashed #27272a"
+                      border: "1px dashed #e4e4e7"
                     }}
                   >
                     <div>No saved meetings found.</div>
                     <button
-                      onClick={() => {
-                        setCurrentMeeting(null);
-                        setMeetingStep("setup");
-                        setActiveMode("meeting");
-                      }}
+                      id="voxflow-empty-new-meeting-btn"
+                      onClick={handleStartNewMeeting}
                       style={{
                         marginTop: "12px",
                         background: "#10b981",
                         border: "none",
-                        color: "#09090b",
+                        color: "#ffffff",
                         borderRadius: "6px",
                         padding: "6px 14px",
                         fontSize: "12px",
@@ -2891,25 +3631,28 @@ export const FloatingWebWidget: React.FC = () => {
                         setActiveMode("meeting");
                       }}
                       style={{
-                        background: "#141417",
-                        border: "1px solid #27272a",
+                        background: "#ffffff",
+                        border: "1px solid #e4e4e7",
                         borderRadius: "10px",
                         padding: "12px",
                         display: "flex",
                         flexDirection: "column",
                         gap: "6px",
                         cursor: "pointer",
-                        transition: "border-color 0.15s ease"
+                        transition: "all 0.15s ease",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.02)"
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.borderColor = "#10b981";
+                        e.currentTarget.style.boxShadow = "0 3px 8px rgba(0,0,0,0.05)";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = "#27272a";
+                        e.currentTarget.style.borderColor = "#e4e4e7";
+                        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.02)";
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <div style={{ fontWeight: 600, fontSize: "13px", color: "#fafafa" }}>{m.title}</div>
+                        <div style={{ fontWeight: 600, fontSize: "13px", color: "#18181b" }}>{m.title}</div>
                         <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                           <button
                             onClick={(e) => {
@@ -2920,9 +3663,9 @@ export const FloatingWebWidget: React.FC = () => {
                             }}
                             title="Copy Markdown notes"
                             style={{
-                              background: "#1f1f23",
-                              border: "1px solid #2e2e33",
-                              color: "#fafafa",
+                              background: "#f4f4f5",
+                              border: "1px solid #e4e4e7",
+                              color: "#18181b",
                               borderRadius: "4px",
                               padding: "3px 7px",
                               fontSize: "11px",
@@ -2951,7 +3694,7 @@ export const FloatingWebWidget: React.FC = () => {
                         </div>
                       </div>
 
-                      <div style={{ fontSize: "11px", color: "#a1a1aa" }}>
+                      <div style={{ fontSize: "11px", color: "#71717a" }}>
                         {m.date} • {m.duration}
                       </div>
 
@@ -2959,7 +3702,7 @@ export const FloatingWebWidget: React.FC = () => {
                         <div
                           style={{
                             fontSize: "12px",
-                            color: "#a1a1aa",
+                            color: "#52525b",
                             lineHeight: "1.4",
                             display: "-webkit-box",
                             WebkitLineClamp: 2,
@@ -3013,6 +3756,8 @@ export const FloatingWebWidget: React.FC = () => {
                   ))
                 )}
               </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3022,13 +3767,13 @@ export const FloatingWebWidget: React.FC = () => {
           {activeMode === "settings" && (
             <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
               {/* Preferences Card */}
-              <div style={{ background: "#141417", border: "1px solid #27272a", borderRadius: "10px", padding: "14px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "#fafafa", marginBottom: "10px" }}>
+              <div style={{ background: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: "10px", padding: "14px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#18181b", marginBottom: "10px" }}>
                   Widget Preferences
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                   <div>
-                    <label style={{ fontSize: "11px", color: "#a1a1aa", display: "block", marginBottom: "4px" }}>
+                    <label style={{ fontSize: "11px", color: "#52525b", display: "block", marginBottom: "4px" }}>
                       Default Starting Tab
                     </label>
                     <select
@@ -3042,9 +3787,9 @@ export const FloatingWebWidget: React.FC = () => {
                       }}
                       style={{
                         width: "100%",
-                        background: "#18181b",
-                        border: "1px solid #27272a",
-                        color: "#fafafa",
+                        background: "#ffffff",
+                        border: "1px solid #e4e4e7",
+                        color: "#18181b",
                         borderRadius: "6px",
                         padding: "6px 8px",
                         fontSize: "12px",
@@ -3057,7 +3802,7 @@ export const FloatingWebWidget: React.FC = () => {
                   </div>
 
                   <div>
-                    <label style={{ fontSize: "11px", color: "#a1a1aa", display: "block", marginBottom: "4px" }}>
+                    <label style={{ fontSize: "11px", color: "#52525b", display: "block", marginBottom: "4px" }}>
                       Preferred Spoken Language
                     </label>
                     <select
@@ -3071,9 +3816,9 @@ export const FloatingWebWidget: React.FC = () => {
                       }}
                       style={{
                         width: "100%",
-                        background: "#18181b",
-                        border: "1px solid #27272a",
-                        color: "#fafafa",
+                        background: "#ffffff",
+                        border: "1px solid #e4e4e7",
+                        color: "#18181b",
                         borderRadius: "6px",
                         padding: "6px 8px",
                         fontSize: "12px",
@@ -3090,7 +3835,7 @@ export const FloatingWebWidget: React.FC = () => {
                   </div>
 
                   <div>
-                    <label style={{ fontSize: "11px", color: "#a1a1aa", display: "block", marginBottom: "4px" }}>
+                    <label style={{ fontSize: "11px", color: "#52525b", display: "block", marginBottom: "4px" }}>
                       Default Output Language
                     </label>
                     <select
@@ -3104,9 +3849,9 @@ export const FloatingWebWidget: React.FC = () => {
                       }}
                       style={{
                         width: "100%",
-                        background: "#18181b",
-                        border: "1px solid #27272a",
-                        color: "#fafafa",
+                        background: "#ffffff",
+                        border: "1px solid #e4e4e7",
+                        color: "#18181b",
                         borderRadius: "6px",
                         padding: "6px 8px",
                         fontSize: "12px",
@@ -3125,12 +3870,12 @@ export const FloatingWebWidget: React.FC = () => {
               </div>
 
               {/* Audio Filters Card */}
-              <div style={{ background: "#141417", border: "1px solid #27272a", borderRadius: "10px", padding: "14px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "#fafafa", marginBottom: "10px" }}>
+              <div style={{ background: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: "10px", padding: "14px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#18181b", marginBottom: "10px" }}>
                   Audio Processing Filters
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", color: "#d4d4d8", cursor: "pointer" }}>
+                  <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", color: "#3f3f46", cursor: "pointer" }}>
                     <span>Echo Cancellation</span>
                     <input
                       type="checkbox"
@@ -3138,7 +3883,7 @@ export const FloatingWebWidget: React.FC = () => {
                       onChange={(e) => setAudioConstraints((prev) => ({ ...prev, echoCancellation: e.target.checked }))}
                     />
                   </label>
-                  <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", color: "#d4d4d8", cursor: "pointer" }}>
+                  <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", color: "#3f3f46", cursor: "pointer" }}>
                     <span>Noise Suppression</span>
                     <input
                       type="checkbox"
@@ -3146,7 +3891,7 @@ export const FloatingWebWidget: React.FC = () => {
                       onChange={(e) => setAudioConstraints((prev) => ({ ...prev, noiseSuppression: e.target.checked }))}
                     />
                   </label>
-                  <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", color: "#d4d4d8", cursor: "pointer" }}>
+                  <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", color: "#3f3f46", cursor: "pointer" }}>
                     <span>Auto Gain Control</span>
                     <input
                       type="checkbox"
@@ -3158,17 +3903,17 @@ export const FloatingWebWidget: React.FC = () => {
               </div>
 
               {/* Keyboard Shortcuts Card */}
-              <div style={{ background: "#141417", border: "1px solid #27272a", borderRadius: "10px", padding: "14px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "#fafafa", marginBottom: "8px" }}>
+              <div style={{ background: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: "10px", padding: "14px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#18181b", marginBottom: "8px" }}>
                   Keyboard Shortcuts
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
                   <span style={{ color: "#a1a1aa" }}>Toggle Capsule / Panel</span>
                   <span
                     style={{
-                      background: "#18181b",
-                      border: "1px solid #27272a",
-                      color: "#fafafa",
+                      background: "#ffffff",
+                      border: "1px solid #e4e4e7",
+                      color: "#18181b",
                       padding: "2px 6px",
                       borderRadius: "4px",
                       fontFamily: "monospace",
@@ -3181,9 +3926,9 @@ export const FloatingWebWidget: React.FC = () => {
               </div>
 
               {/* Account and Quota Card */}
-              <div style={{ background: "#141417", border: "1px solid #27272a", borderRadius: "10px", padding: "14px" }}>
+              <div style={{ background: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: "10px", padding: "14px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#fafafa" }}>Account & Quotas</span>
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#18181b" }}>Account & Quotas</span>
                   <span
                     style={{
                       background: isPremium ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.08)",
@@ -3201,12 +3946,12 @@ export const FloatingWebWidget: React.FC = () => {
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", color: "#a1a1aa" }}>
                     <span>Account Email:</span>
-                    <span style={{ color: "#fafafa" }}>{user?.email || "Guest (Unauthenticated)"}</span>
+                    <span style={{ color: "#18181b" }}>{user?.email || "Guest (Unauthenticated)"}</span>
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "space-between", color: "#a1a1aa" }}>
                     <span>Transcription Usage:</span>
-                    <span style={{ color: "#fafafa" }}>
+                    <span style={{ color: "#18181b" }}>
                       {entitlements?.usage?.transcriptionMinutesUsed ?? 0} /{" "}
                       {entitlements?.usage?.transcriptionMinutesLimit ?? 30} mins
                     </span>
@@ -3214,7 +3959,7 @@ export const FloatingWebWidget: React.FC = () => {
 
                   <div style={{ display: "flex", justifyContent: "space-between", color: "#a1a1aa" }}>
                     <span>Meeting Recordings:</span>
-                    <span style={{ color: "#fafafa" }}>
+                    <span style={{ color: "#18181b" }}>
                       {entitlements?.usage?.meetingsUsed ?? 0} /{" "}
                       {entitlements?.usage?.meetingsLimit ?? 5} recorded
                     </span>
@@ -3236,7 +3981,7 @@ export const FloatingWebWidget: React.FC = () => {
                       style={{
                         marginTop: "8px",
                         background: "#10b981",
-                        color: "#09090b",
+                        color: "#ffffff",
                         borderRadius: "6px",
                         padding: "8px 12px",
                         textAlign: "center",
