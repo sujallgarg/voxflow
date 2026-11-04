@@ -118,7 +118,7 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
         }}
       >
         <div
-          className="container"
+          className="container dashboard-header-wrap"
           style={{
             display: "flex",
             alignItems: "center",
@@ -127,7 +127,7 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
             gap: "12px"
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div className="dashboard-header-brand" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button
               type="button"
               className="btn-secondary"
@@ -166,10 +166,10 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* User Account Switcher */}
+          <div className="dashboard-header-actions" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             {/* User Account Info */}
             <div
+              className="dashboard-account-pill"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -204,7 +204,7 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
               <button
                 type="button"
                 id="dashboard-header-get-extension-btn"
-                className="btn-secondary"
+                className="btn-secondary dashboard-header-btn"
                 onClick={handleGetExtensionClick}
                 style={{
                   padding: "8px 14px",
@@ -222,7 +222,7 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
 
             <button
               type="button"
-              className="btn-primary"
+              className="btn-primary dashboard-header-btn"
               onClick={() => {
                 const meetingsExhausted =
                   (entitlements?.meetings?.isExhausted) ||
@@ -317,15 +317,15 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
           </div>
 
           {/* Quick Metrics */}
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <div className="dashboard-stats-grid">
             <div
+              className="dashboard-stat-card"
               style={{
                 background: "#ffffff",
                 border: "1px solid #e5e5e5",
                 borderRadius: "6px",
-                padding: "8px 16px",
-                textAlign: "center",
-                minWidth: "90px"
+                padding: "10px 16px",
+                textAlign: "center"
               }}
             >
               <span style={{ display: "block", fontSize: "1.25rem", fontWeight: 700, color: "#111111" }}>
@@ -335,13 +335,13 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
             </div>
 
             <div
+              className="dashboard-stat-card"
               style={{
                 background: "#ffffff",
                 border: "1px solid #e5e5e5",
                 borderRadius: "6px",
-                padding: "8px 16px",
-                textAlign: "center",
-                minWidth: "90px"
+                padding: "10px 16px",
+                textAlign: "center"
               }}
             >
               <span style={{ display: "block", fontSize: "1.25rem", fontWeight: 700, color: "#111111" }}>
@@ -351,13 +351,13 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
             </div>
 
             <div
+              className="dashboard-stat-card"
               style={{
                 background: "#ffffff",
                 border: "1px solid #e5e5e5",
                 borderRadius: "6px",
-                padding: "8px 16px",
-                textAlign: "center",
-                minWidth: "90px"
+                padding: "10px 16px",
+                textAlign: "center"
               }}
             >
               <span style={{ display: "block", fontSize: "1.25rem", fontWeight: 700, color: "#111111" }}>
@@ -367,15 +367,16 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
             </div>
 
             <div
+              className="dashboard-stat-card"
               onClick={() => setMainTab("voice-history")}
               style={{
                 background: mainTab === "voice-history" ? "#f5f5f5" : "#ffffff",
                 border: mainTab === "voice-history" ? "1px solid #111111" : "1px solid #e5e5e5",
                 borderRadius: "6px",
-                padding: "8px 16px",
+                padding: "10px 16px",
                 textAlign: "center",
-                minWidth: "90px",
-                cursor: "pointer"
+                cursor: "pointer",
+                transition: "all 0.15s ease"
               }}
               title="Click to view saved voice input dictations"
             >
@@ -414,7 +415,7 @@ export const MeetingDashboard: React.FC<MeetingDashboardProps> = ({
                 </div>
               </div>
             </div>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <div className="dashboard-banner-actions" style={{ display: "flex", gap: "10px", alignItems: "center" }}>
               <button
                 type="button"
                 id="dashboard-banner-get-extension-btn"

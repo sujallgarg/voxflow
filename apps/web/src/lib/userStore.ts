@@ -32,12 +32,12 @@ export interface UserStats {
   totalTranscriptions: number;
 }
 
-// Default current user profile for unauthenticated local state
+// Default empty user profile when no authenticated session is active
 const DEFAULT_USER: UserProfile = {
-  id: "user_me",
-  name: "My Account",
+  id: "",
+  name: "Account",
   email: "",
-  createdAt: new Date().toISOString()
+  createdAt: ""
 };
 
 const USER_SESSION_KEY = "voxflow_current_user";
@@ -49,7 +49,14 @@ export function getCurrentUser(): UserProfile {
   try {
     const raw = localStorage.getItem(USER_SESSION_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      // Remove legacy guest user if present
+      if (parsed && parsed.id && parsed.id !== "user_me") {
+        return parsed;
+      }
+      if (parsed?.id === "user_me") {
+        localStorage.removeItem(USER_SESSION_KEY);
+      }
     }
   } catch (e) {
     console.warn("Error reading user profile:", e);
@@ -76,6 +83,7 @@ import { api } from "./api";
  * Returns empty array [] for any new user.
  */
 export function getUserMeetings(userId: string): MeetingRecord[] {
+  if (!userId || userId === "user_me") return [];
   try {
     const key = `voxflow_user_meetings_${userId}`;
     const raw = localStorage.getItem(key);
@@ -130,6 +138,7 @@ export function saveUserMeeting(
   meeting: MeetingRecord,
   syncBackend = true
 ): void {
+  if (!userId || userId === "user_me") return;
   try {
     const meetings = getUserMeetings(userId);
     const existingIndex = meetings.findIndex((m) => m.id === meeting.id);
@@ -176,6 +185,7 @@ export function deleteUserMeeting(userId: string, meetingId: string): void {
  * Returns empty array [] for any new user.
  */
 export function getUserTranscriptions(userId: string): SavedTranscription[] {
+  if (!userId || userId === "user_me") return [];
   try {
     const key = `voxflow_user_transcripts_${userId}`;
     const raw = localStorage.getItem(key);
@@ -234,6 +244,7 @@ export function saveUserTranscription(
   item: SavedTranscription,
   syncBackend = true
 ): void {
+  if (!userId || userId === "user_me") return;
   try {
     const items = getUserTranscriptions(userId);
     const existingIndex = items.findIndex((t) => t.id === item.id);

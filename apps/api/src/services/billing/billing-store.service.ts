@@ -442,8 +442,23 @@ export class BillingStoreService {
           ? Math.max(0, quota.purchasedVoiceCredits - (quota.usedVoiceCredits || 0))
           : 0;
 
+        let userName = quota.userName;
+        if (!userName && supabase) {
+          try {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("full_name, email")
+              .eq("id", quota.userId)
+              .maybeSingle();
+            if (profile) {
+              userName = profile.full_name || profile.email?.split("@")[0] || null;
+            }
+          } catch {}
+        }
+
         const payload: Record<string, any> = {
           user_id: quota.userId,
+          user_name: userName || null,
           period_year_month: quota.periodYearMonth,
           voice_transcriptions_used: quota.voiceTranscriptionsUsed || 0,
           meetings_used: quota.meetingsUsed || 0,
@@ -460,11 +475,23 @@ export class BillingStoreService {
           .upsert(payload, { onConflict: "user_id,period_year_month" });
 
         if (error) {
-          console.error(`[BillingStore] Supabase usage_quotas upsert failed for user ${quota.userId}:`, error.message, error.code);
+          // If the user_name column is not yet applied in production Supabase, gracefully retry without it
+          if (error.message?.includes("user_name") || error.code === "42703" || (error.message && error.message.includes("column"))) {
+            delete payload.user_name;
+            const retryRes = await supabase
+              .from("usage_quotas")
+              .upsert(payload, { onConflict: "user_id,period_year_month" });
+            if (retryRes.error) {
+              console.error(`[BillingStore] Supabase usage_quotas retry failed for user ${quota.userId}:`, retryRes.error.message);
+            }
+          } else {
+            console.error(`[BillingStore] Supabase usage_quotas upsert failed for user ${quota.userId}:`, error.message, error.code);
+          }
         } else {
           console.log(JSON.stringify({
             event: "usage_quota_persisted",
             userId: quota.userId.length > 8 ? `${quota.userId.slice(0, 4)}...${quota.userId.slice(-4)}` : quota.userId,
+            userName: userName || null,
             period: quota.periodYearMonth,
             typing: quota.voiceTypingUsed,
             seconds: quota.transcriptionSecondsUsed,
@@ -496,6 +523,7 @@ export class BillingStoreService {
         if (data && !error) {
           const mapped: UserUsageQuota = {
             userId: data.user_id,
+            userName: data.user_name || undefined,
             periodYearMonth: data.period_year_month,
             voiceTranscriptionsUsed: data.voice_transcriptions_used || 0,
             meetingsUsed: data.meetings_used || 0,

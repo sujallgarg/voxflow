@@ -17,10 +17,10 @@ import type { MeetingRecord } from "./data/meetingCompanionData";
 import { CookieConsentBanner } from "./components/legal/CookieConsentBanner";
 import { useAuth } from "./lib/authContext";
 import { useSubscription } from "./lib/subscriptionContext";
-import { FloatingWebWidget } from "./components/FloatingWebWidget";
 import { openExtensionStore } from "./lib/extensionConfig";
 
-// Code-split heavy dashboard, auth, modal and policy components for faster initial load
+// Code-split heavy dashboard, auth, modal, widget and policy components for faster initial load
+const FloatingWebWidget = lazy(() => import("./components/FloatingWebWidget").then(m => ({ default: m.FloatingWebWidget })));
 const MeetingDashboard = lazy(() => import("./components/meeting-companion/MeetingDashboard").then(m => ({ default: m.MeetingDashboard })));
 const MeetingWorkspace = lazy(() => import("./components/meeting-companion/MeetingWorkspace").then(m => ({ default: m.MeetingWorkspace })));
 const NewMeetingModal = lazy(() => import("./components/meeting-companion/NewMeetingModal").then(m => ({ default: m.NewMeetingModal })));
@@ -668,7 +668,9 @@ export default function App() {
       />
 
       {/* Unified Authoritative VoxFlow Floating Website Widget */}
-      <FloatingWebWidget />
+      <Suspense fallback={null}>
+        <FloatingWebWidget />
+      </Suspense>
     </div>
   );
 }

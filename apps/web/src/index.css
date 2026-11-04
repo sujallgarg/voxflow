@@ -518,3 +518,86 @@ footer {
     padding: 20px 16px !important;
   }
 }
+
+/* Meeting Dashboard Mobile Optimizations */
+.dashboard-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-header-wrap {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .dashboard-header-brand {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+  }
+
+  .dashboard-header-actions {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .dashboard-account-pill {
+    flex: 1 1 auto !important;
+    min-width: 110px !important;
+    max-width: 170px !important;
+    padding: 6px 10px !important;
+  }
+
+  .dashboard-header-btn {
+    flex: 1 1 auto !important;
+    padding: 7px 12px !important;
+    font-size: 0.78125rem !important;
+    text-align: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+  }
+
+  .dashboard-banner-actions {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .dashboard-banner-actions > button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .dashboard-stat-card {
+    padding: 8px 10px !important;
+  }
+  .dashboard-stat-card span:first-child {
+    font-size: 1.1rem !important;
+  }
+  .dashboard-stat-card span:last-child {
+    font-size: 0.7rem !important;
+  }
+}
