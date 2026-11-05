@@ -291,7 +291,7 @@ export const Footer: React.FC<FooterProps> = ({
             <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "10px", margin: 0, padding: 0 }}>
               <li>
                 <a
-                  href="mailto:support@voxflow.ai?subject=VoxFlow%20Inquiry"
+                  href="mailto:sujalgarg1207@gmail.com?subject=VoxFlow%20Inquiry"
                   style={{ fontSize: "0.875rem", color: "#111111", fontWeight: 500, textDecoration: "none" }}
                 >
                   support@voxflow.ai

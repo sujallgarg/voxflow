@@ -52,9 +52,6 @@ export const FloatingWebWidget: React.FC = () => {
     )
   );
 
-  // 3. Guest demo limit state
-  const [isGuestLimitReached, setIsGuestLimitReached] = useState(false);
-
   // Navigation to site pricing/upgrade
   const handleUpgradeNavigation = useCallback(() => {
     window.location.hash = "#pricing";
@@ -491,15 +488,16 @@ export const FloatingWebWidget: React.FC = () => {
     voiceChunksRef.current = [];
     voiceIsCancelledRef.current = false;
 
-    if (isVoiceLimitReached) {
-      setVoiceError("Monthly voice typing limit reached. Upgrade to Pro to continue recording.");
-      showToast("Monthly limit reached. Please upgrade to Pro.");
+    if (!user) {
+      setVoiceError("Sign in required. Please log in or create an account to use Voice Typing.");
+      showToast("Please sign in to use Voice Typing");
+      window.location.hash = "#/login";
       return;
     }
 
-    if (!user && isGuestLimitReached) {
-      setVoiceError("Guest demo limit reached. Please sign in or upgrade to continue.");
-      showToast("Guest limit reached. Sign up for 100 free voice typings!");
+    if (isVoiceLimitReached) {
+      setVoiceError("Monthly voice typing limit reached. Upgrade to Pro to continue recording.");
+      showToast("Monthly limit reached. Please upgrade to Pro.");
       return;
     }
 
@@ -654,6 +652,13 @@ export const FloatingWebWidget: React.FC = () => {
         voiceMediaStreamRef.current = null;
       }
 
+      if (!user) {
+        setVoiceError("Sign in required. Please log in or create an account.");
+        setVoiceState("idle");
+        window.location.hash = "#/login";
+        return;
+      }
+
       let rawSpoken = "";
       let finalText = "";
       if (user) {
@@ -745,8 +750,7 @@ export const FloatingWebWidget: React.FC = () => {
       console.error("Voice typing transcription error:", err);
       let friendly = err?.message || "Failed to transcribe audio. Please try again.";
       if (err?.code === "DEMO_RATE_LIMIT_EXCEEDED" || err?.status === 429) {
-        setIsGuestLimitReached(true);
-        friendly = "Guest demo limit reached (5 requests / 15m). Sign up for 100 free voice typings!";
+        friendly = "Guest demo limit reached. Please sign in to continue voice typing!";
       } else if (err?.code === "QUOTA_EXCEEDED" || err?.status === 403) {
         void refreshSubscription?.();
         friendly = "Monthly usage limit reached. Upgrade to Pro to continue recording!";
@@ -912,6 +916,13 @@ export const FloatingWebWidget: React.FC = () => {
     setMeetingDuration(0);
     setIsMeetingPaused(false);
     meetingChunksRef.current = [];
+
+    if (!user) {
+      setMeetingError("Sign in required. Please log in or create an account to record meetings.");
+      showToast("Please sign in to record meetings");
+      window.location.hash = "#/login";
+      return;
+    }
 
     if (isMeetingLimitReached) {
       setMeetingError("Monthly meeting limit reached. Upgrade to Pro for 25 meetings per month.");
@@ -1110,6 +1121,13 @@ export const FloatingWebWidget: React.FC = () => {
       meetingTimerRef.current = null;
     }
     stopMeetingAnalyser();
+
+    if (!user) {
+      setMeetingError("Sign in required. Please log in or create an account to record meetings.");
+      setMeetingStep("setup");
+      window.location.hash = "#/login";
+      return;
+    }
 
     const recorder = meetingMediaRecorderRef.current;
     if (!recorder) return;
@@ -1901,7 +1919,7 @@ export const FloatingWebWidget: React.FC = () => {
                     padding: "16px 0"
                   }}
                 >
-                  {(isVoiceLimitReached || (!user && isGuestLimitReached)) && (
+                  {(isVoiceLimitReached && user) && (
                     <div
                       style={{
                         width: "100%",
@@ -1942,34 +1960,92 @@ export const FloatingWebWidget: React.FC = () => {
                           boxShadow: "0 2px 6px rgba(0,0,0,0.1)"
                         }}
                       >
-                        {user ? "Upgrade to Pro ⚡" : "Create Free Account →"}
+                        Upgrade to Pro ⚡
                       </button>
+                    </div>
+                  )}
+
+                  {!user && (
+                    <div
+                      style={{
+                        width: "100%",
+                        background: "#fafafa",
+                        border: "1px solid #e4e4e7",
+                        borderRadius: "10px",
+                        padding: "12px 14px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                        textAlign: "center",
+                        boxSizing: "border-box"
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: "13px", color: "#18181b" }}>
+                        🔒 Sign In Required
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#71717a", lineHeight: 1.4 }}>
+                        Log in or create a free account to use Voice Typing and save your history.
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginTop: "4px" }}>
+                        <button
+                          type="button"
+                          onClick={() => { window.location.hash = "#/login"; }}
+                          style={{
+                            background: "#ffffff",
+                            border: "1px solid #d4d4d8",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            color: "#18181b",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Log In
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { window.location.hash = "#/signup"; }}
+                          style={{
+                            background: "#18181b",
+                            border: "none",
+                            padding: "6px 14px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            color: "#ffffff",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Sign Up Free
+                        </button>
+                      </div>
                     </div>
                   )}
 
                   <button
                     id="voxflow-voice-start-btn"
-                    onClick={isVoiceLimitReached || (!user && isGuestLimitReached) ? undefined : handleVoiceStart}
-                    disabled={isVoiceLimitReached || (!user && isGuestLimitReached)}
-                    title={isVoiceLimitReached ? "Monthly voice limit reached — Upgrade to Pro" : "Click to speak"}
+                    onClick={!user ? () => { window.location.hash = "#/login"; } : (isVoiceLimitReached ? undefined : handleVoiceStart)}
+                    disabled={Boolean(user && isVoiceLimitReached)}
+                    title={!user ? "Please sign in to use voice typing" : (isVoiceLimitReached ? "Monthly voice limit reached — Upgrade to Pro" : "Click to speak")}
                     style={{
                       width: "60px",
                       height: "60px",
                       borderRadius: "50%",
-                      background: isVoiceLimitReached || (!user && isGuestLimitReached) ? "#e4e4e7" : "#10b981",
+                      background: !user ? "#18181b" : (isVoiceLimitReached ? "#e4e4e7" : "#10b981"),
                       border: "none",
-                      color: isVoiceLimitReached || (!user && isGuestLimitReached) ? "#a1a1aa" : "#ffffff",
+                      color: isVoiceLimitReached && user ? "#a1a1aa" : "#ffffff",
                       fontSize: "24px",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      cursor: isVoiceLimitReached || (!user && isGuestLimitReached) ? "not-allowed" : "pointer",
-                      boxShadow: isVoiceLimitReached || (!user && isGuestLimitReached) ? "none" : "0 6px 20px rgba(16, 185, 129, 0.35)",
+                      cursor: isVoiceLimitReached && user ? "not-allowed" : "pointer",
+                      boxShadow: isVoiceLimitReached && user ? "none" : "0 6px 20px rgba(16, 185, 129, 0.35)",
                       transition: "transform 0.15s ease",
-                      opacity: isVoiceLimitReached || (!user && isGuestLimitReached) ? 0.6 : 1
+                      opacity: isVoiceLimitReached && user ? 0.6 : 1
                     }}
                     onMouseEnter={(e) => {
-                      if (!isVoiceLimitReached && (user || !isGuestLimitReached)) {
+                      if (!isVoiceLimitReached || !user) {
                         e.currentTarget.style.transform = "scale(1.06)";
                       }
                     }}
@@ -1977,16 +2053,18 @@ export const FloatingWebWidget: React.FC = () => {
                       e.currentTarget.style.transform = "scale(1)";
                     }}
                   >
-                    🎙️
+                    {!user ? "🔒" : "🎙️"}
                   </button>
                   <div style={{ textAlign: "center" }}>
                     <div style={{ fontSize: "14px", fontWeight: 600, color: "#18181b" }}>
-                      {isVoiceLimitReached ? "Voice Typing Locked" : "Click to speak"}
+                      {!user ? "Sign In to Speak" : (isVoiceLimitReached ? "Voice Typing Locked" : "Click to speak")}
                     </div>
                     <div style={{ fontSize: "12px", color: "#71717a", marginTop: "2px" }}>
-                      {isVoiceLimitReached
-                        ? "Upgrade your plan to unlock more transcription minutes."
-                        : "Speaks naturally in any language — text is inserted into focused input"}
+                      {!user
+                        ? "Log in or create a free account to start voice typing."
+                        : (isVoiceLimitReached
+                          ? "Upgrade your plan to unlock more transcription minutes."
+                          : "Speaks naturally in any language — text is inserted into focused input")}
                     </div>
                   </div>
                 </div>
@@ -2530,7 +2608,7 @@ export const FloatingWebWidget: React.FC = () => {
                     </select>
                   </div>
 
-                  {isMeetingLimitReached && (
+                  {isMeetingLimitReached && user && (
                     <div
                       style={{
                         width: "100%",
@@ -2574,30 +2652,88 @@ export const FloatingWebWidget: React.FC = () => {
                     </div>
                   )}
 
+                  {!user && (
+                    <div
+                      style={{
+                        width: "100%",
+                        background: "#fafafa",
+                        border: "1px solid #e4e4e7",
+                        borderRadius: "10px",
+                        padding: "12px 14px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                        textAlign: "center",
+                        boxSizing: "border-box"
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: "13px", color: "#18181b" }}>
+                        🔒 Sign In Required
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#71717a", lineHeight: 1.4 }}>
+                        Log in or create a free account to record meetings and generate AI notes.
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginTop: "4px" }}>
+                        <button
+                          type="button"
+                          onClick={() => { window.location.hash = "#/login"; }}
+                          style={{
+                            background: "#ffffff",
+                            border: "1px solid #d4d4d8",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            color: "#18181b",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Log In
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { window.location.hash = "#/signup"; }}
+                          style={{
+                            background: "#18181b",
+                            border: "none",
+                            padding: "6px 14px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            color: "#ffffff",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Sign Up Free
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     id="voxflow-meeting-start-btn"
-                    onClick={isMeetingLimitReached ? undefined : handleStartMeeting}
-                    disabled={isMeetingLimitReached}
-                    title={isMeetingLimitReached ? "Monthly meeting limit reached — Upgrade to Pro" : "Start Meeting Recording"}
+                    onClick={!user ? () => { window.location.hash = "#/login"; } : (isMeetingLimitReached ? undefined : handleStartMeeting)}
+                    disabled={Boolean(user && isMeetingLimitReached)}
+                    title={!user ? "Please sign in to record meetings" : (isMeetingLimitReached ? "Monthly meeting limit reached — Upgrade to Pro" : "Start Meeting Recording")}
                     style={{
-                      background: isMeetingLimitReached ? "#e4e4e7" : "#10b981",
-                      color: isMeetingLimitReached ? "#a1a1aa" : "#ffffff",
+                      background: !user ? "#18181b" : (isMeetingLimitReached ? "#e4e4e7" : "#10b981"),
+                      color: isMeetingLimitReached && user ? "#a1a1aa" : "#ffffff",
                       border: "none",
                       borderRadius: "8px",
                       padding: "12px",
                       fontWeight: 600,
                       fontSize: "13px",
-                      cursor: isMeetingLimitReached ? "not-allowed" : "pointer",
+                      cursor: isMeetingLimitReached && user ? "not-allowed" : "pointer",
                       marginTop: "6px",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       gap: "8px",
-                      opacity: isMeetingLimitReached ? 0.6 : 1
+                      opacity: isMeetingLimitReached && user ? 0.6 : 1
                     }}
                   >
-                    <span>🔴</span>
-                    <span>Start Meeting Recording</span>
+                    <span>{!user ? "🔒" : "🔴"}</span>
+                    <span>{!user ? "Sign In to Record Meeting" : "Start Meeting Recording"}</span>
                   </button>
                 </div>
               )}
