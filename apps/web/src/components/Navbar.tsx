@@ -89,16 +89,20 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBetaModal: _onOpenBetaModa
         {/* Left: Logo */}
         <div style={{ display: "flex", alignItems: "center" }}>
           <a
-            href="#"
+            href="#/"
             onClick={(e) => {
               e.preventDefault();
+              if (window.location.hash) {
+                window.location.hash = "";
+              }
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             style={{
               display: "inline-flex",
               alignItems: "center",
               textDecoration: "none",
-              borderRadius: "6px"
+              borderRadius: "6px",
+              cursor: "pointer"
             }}
             aria-label="VoxFlow Home"
           >

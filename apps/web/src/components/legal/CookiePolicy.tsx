@@ -172,7 +172,7 @@ export const CookiePolicy: React.FC<CookiePolicyProps> = ({
             <p style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7 }}>
               If you have any questions about our use of storage technologies, please contact:
               <br />
-              Email: <a href="mailto:support@voxflow.ai" style={{ color: "#4f46e5", fontWeight: 600 }}>support@voxflow.ai</a>
+              Email: <a href="mailto:sujalgarg1207@gmail.com" style={{ color: "#4f46e5", fontWeight: 600 }}>support@voxflow.ai</a>
             </p>
           </section>
         </article>

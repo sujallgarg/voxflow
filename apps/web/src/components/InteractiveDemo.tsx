@@ -84,6 +84,11 @@ export const InteractiveDemo: React.FC = () => {
   ];
 
   const runLiveAudioPipeline = async (blob: Blob) => {
+    if (!user) {
+      window.location.hash = "#/login";
+      return;
+    }
+
     try {
       setFlowState("TRANSCRIBING");
       setActiveStepIndex(0);
@@ -166,6 +171,11 @@ export const InteractiveDemo: React.FC = () => {
   };
 
   const handleStartLiveRecord = async () => {
+    if (!user) {
+      window.location.hash = "#/login";
+      return;
+    }
+
     setErrorMessage(null);
     setLiveTranscript("");
     setLiveTransformedText("");
@@ -584,25 +594,33 @@ export const InteractiveDemo: React.FC = () => {
                             justifyContent: "center",
                             border: "none",
                             cursor: "pointer",
-                            transition: "opacity 0.15s ease"
+                            transition: "opacity 0.15s ease",
+                            fontSize: "20px"
                           }}
                           onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
                           onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-                          aria-label="Start recording"
+                          aria-label={user ? "Start recording" : "Sign in to record"}
+                          title={user ? "Start recording" : "Please sign in to use voice input"}
                         >
-                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                            <line x1="12" y1="19" x2="12" y2="22" />
-                          </svg>
+                          {user ? (
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                              <line x1="12" y1="19" x2="12" y2="22" />
+                            </svg>
+                          ) : (
+                            "🔒"
+                          )}
                         </button>
 
                         <div>
                           <strong style={{ display: "block", fontSize: "0.9375rem", color: "#111111", marginBottom: "4px" }}>
-                            Click to Record
+                            {user ? "Click to Record" : "Sign In to Record"}
                           </strong>
                           <span style={{ fontSize: "0.8125rem", color: "#666666" }}>
-                            Speak in English, Hindi, or mixed conversational languages
+                            {user
+                              ? "Speak in English, Hindi, or mixed conversational languages"
+                              : "Log in or create a free account to test live voice input"}
                           </span>
                         </div>
                       </>
@@ -726,7 +744,7 @@ export const InteractiveDemo: React.FC = () => {
                       onClick={handleStartLiveRecord}
                       style={{ flex: 1, padding: "10px 16px", fontSize: "0.875rem" }}
                     >
-                      Record Again
+                      {user ? "Record Again" : "Sign In to Record Again"}
                     </button>
                   )
                 )}

@@ -174,7 +174,7 @@ export const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBackToHome }) 
               <br />
               <strong style={{ color: "#0f172a" }}>VoxFlow Legal Operations</strong>
               <br />
-              Email: <a href="mailto:support@voxflow.ai" style={{ color: "#4f46e5", fontWeight: 600 }}>support@voxflow.ai</a>
+              Email: <a href="mailto:sujalgarg1207@gmail.com" style={{ color: "#4f46e5", fontWeight: 600 }}>support@voxflow.ai</a>
             </p>
           </section>
         </article>
