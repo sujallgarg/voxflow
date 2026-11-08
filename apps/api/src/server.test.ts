@@ -1157,6 +1157,36 @@ describe("VoxFlow API Server Endpoints", () => {
   });
 
   describe("CORS Configuration for Production & Preview Frontends", () => {
+    it("should allow OPTIONS preflight requests to /transcribe from https://voxflowai.devs.surf", async () => {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/transcribe",
+        headers: {
+          origin: "https://voxflowai.devs.surf",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "authorization,content-type"
+        }
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(res.headers["access-control-allow-origin"]).toBe("https://voxflowai.devs.surf");
+      expect(res.headers["access-control-allow-credentials"]).toBe("true");
+      expect(res.headers["access-control-allow-methods"]).toBeDefined();
+    });
+
+    it("should include CORS headers on POST /transcribe from https://voxflowai.devs.surf", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/transcribe",
+        headers: {
+          origin: "https://voxflowai.devs.surf"
+        }
+      });
+
+      expect(res.headers["access-control-allow-origin"]).toBe("https://voxflowai.devs.surf");
+      expect(res.headers["access-control-allow-credentials"]).toBe("true");
+    });
+
     it("should allow OPTIONS preflight requests from https://voxflow-one.vercel.app", async () => {
       const res = await app.inject({
         method: "OPTIONS",

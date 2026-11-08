@@ -81,7 +81,13 @@ export function buildServer() {
         origin === "https://www.voxflow.com" ||
         origin === "https://app.voxflow.com" ||
         origin === "https://voxflow-web.onrender.com" ||
-        (parsed.protocol === "https:" && (hostname === "voxflow.com" || hostname.endsWith(".voxflow.com")))
+        origin === "https://voxflowai.devs.surf" ||
+        (parsed.protocol === "https:" && (
+          hostname === "voxflow.com" ||
+          hostname.endsWith(".voxflow.com") ||
+          hostname === "voxflowai.devs.surf" ||
+          (hostname.endsWith(".devs.surf") && hostname.includes("voxflow"))
+        ))
       ) {
         return true;
       }
