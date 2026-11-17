@@ -102,40 +102,43 @@ export default function App() {
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash || "";
-      if (hash.startsWith("#/meetings/")) {
-        const id = hash.replace("#/meetings/", "");
+      const pathname = window.location.pathname || "";
+      if (hash.startsWith("#/meetings/") || pathname.startsWith("/meetings/")) {
+        const id = hash.startsWith("#/meetings/")
+          ? hash.replace("#/meetings/", "")
+          : pathname.replace("/meetings/", "");
         setSelectedMeetingId(id);
         setCurrentView("companion-workspace");
-      } else if (hash === "#/meetings") {
+      } else if (hash === "#/meetings" || pathname === "/meetings") {
         setCurrentView("companion-dashboard");
-      } else if (hash.startsWith("#/billing/success")) {
+      } else if (hash.startsWith("#/billing/success") || pathname.startsWith("/billing/success")) {
         setCurrentView("billing-success");
-      } else if (hash.startsWith("#/billing/cancel")) {
+      } else if (hash.startsWith("#/billing/cancel") || pathname.startsWith("/billing/cancel")) {
         setCurrentView("billing-cancel");
-      } else if (hash === "#/billing") {
+      } else if (hash === "#/billing" || pathname === "/billing") {
         setCurrentView("billing");
-      } else if (hash === "#/pricing" || hash === "#pricing") {
+      } else if (hash === "#/pricing" || hash === "#pricing" || pathname === "/pricing") {
         setCurrentView("landing");
         setTimeout(() => {
           document.querySelector("#pricing")?.scrollIntoView({ behavior: "smooth" });
         }, 100);
-      } else if (hash === "#/login" || hash.startsWith("#/login?")) {
+      } else if (hash === "#/login" || hash.startsWith("#/login?") || pathname === "/login") {
         setCurrentView("login");
-      } else if (hash === "#/signup" || hash.startsWith("#/signup?")) {
+      } else if (hash === "#/signup" || hash.startsWith("#/signup?") || pathname === "/signup") {
         setCurrentView("signup");
-      } else if (hash === "#/forgot-password") {
+      } else if (hash === "#/forgot-password" || pathname === "/forgot-password") {
         setCurrentView("forgot-password");
-      } else if (hash.startsWith("#/reset-password")) {
+      } else if (hash.startsWith("#/reset-password") || pathname.startsWith("/reset-password")) {
         setCurrentView("reset-password");
-      } else if (hash.startsWith("#/verify")) {
+      } else if (hash.startsWith("#/verify") || pathname.startsWith("/verify")) {
         setCurrentView("verify");
-      } else if (hash === "#/privacy") {
+      } else if (hash === "#/privacy" || pathname === "/privacy") {
         setCurrentView("privacy");
-      } else if (hash === "#/terms") {
+      } else if (hash === "#/terms" || pathname === "/terms") {
         setCurrentView("terms");
-      } else if (hash === "#/refunds") {
+      } else if (hash === "#/refunds" || pathname === "/refunds") {
         setCurrentView("refunds");
-      } else if (hash === "#/cookies") {
+      } else if (hash === "#/cookies" || pathname === "/cookies") {
         setCurrentView("cookies");
       } else {
         setCurrentView("landing");

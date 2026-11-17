@@ -70,8 +70,8 @@ export const Footer: React.FC<FooterProps> = ({
                 lineHeight: 1.6
               }}
             >
-              Speak it. Get polished text. An AI voice input tool that turns
-              spoken thoughts into clear, context-aware text across the web.
+              Speak it. Get polished text. Multilingual AI voice typing, real-time
+              speech to text, and meeting summaries for everyday browser communication.
             </p>
             <div style={{ marginTop: "18px" }}>
               <button

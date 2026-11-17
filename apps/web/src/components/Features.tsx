@@ -5,7 +5,7 @@ export const Features: React.FC = () => {
     {
       id: "multilingual-voice-input",
       tag: "Speech Engine",
-      title: "Multilingual Voice Input",
+      title: "Multilingual Voice Typing",
       description:
         "Speak in your preferred language or naturally switch languages mid-sentence (code-switching like Hinglish or Spanglish) without toggling manual settings.",
       icon: (
@@ -30,7 +30,7 @@ export const Features: React.FC = () => {
     {
       id: "context-aware-improvement",
       tag: "AI Structuring",
-      title: "Context-Aware Text Improvement",
+      title: "Context-Aware Speech to Text",
       description:
         "Transforms spoken intent into structured sentences with accurate grammar, appropriate punctuation, and tone tailored for professional email, docs, or chat.",
       icon: (
@@ -54,7 +54,7 @@ export const Features: React.FC = () => {
     {
       id: "browser-writing-workflow",
       tag: "Productivity",
-      title: "Dictate Into Gmail, Slack and Docs",
+      title: "Voice Dictation for Emails & Documents",
       description:
         "Integrates directly into your browser workflow so you can draft emails in Gmail, compose updates in Slack, and write reports in Google Docs without manual copy-paste.",
       icon: (
@@ -79,7 +79,7 @@ export const Features: React.FC = () => {
     {
       id: "meeting-transcription-summaries",
       tag: "Workspace",
-      title: "Meetings Turned into Clear Summaries",
+      title: "AI Meeting Summaries & Action Items",
       description:
         "Capture live meeting audio directly in your browser. VoxFlow generates full timestamped transcripts, key decisions, and prioritized action items automatically.",
       icon: (
@@ -116,9 +116,9 @@ export const Features: React.FC = () => {
       <div className="container">
         <div className="section-title-wrap">
           <span className="badge">Core Capabilities</span>
-          <h2>Built for the Modern Writing Workflow</h2>
+          <h2>Built for AI Voice Typing & Meeting Intelligence</h2>
           <p>
-            Four verified capabilities designed to convert spoken thoughts into clear, publication-grade writing.
+            Four verified capabilities designed to convert spoken thoughts into clear, publication-grade writing across your browser applications.
           </p>
         </div>
 

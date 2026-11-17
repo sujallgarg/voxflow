@@ -77,7 +77,7 @@ export const Hero: React.FC<HeroProps> = ({
               margin: "0 auto 36px auto"
             }}
           >
-            Turn your voice into clear, polished messages. Communicate across languages and write naturally without typing.
+            Turn your speech into clear, polished text with context-aware AI voice typing. Dictate emails, documents, and messages across languages, and generate automated AI meeting summaries in your browser.
           </p>
 
           {/* Action CTAs */}
