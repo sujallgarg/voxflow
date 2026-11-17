@@ -62,7 +62,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
         <div className="section-title-wrap" style={{ textAlign: "center", marginBottom: "48px" }}>
           <span className="badge">Plans & Pricing</span>
           <h2 style={{ fontSize: "2.25rem", fontWeight: 700, color: "#111111", marginBottom: "12px" }}>
-            Transparent, Predictable Pricing
+            Start free, Pro is $9/mo
           </h2>
           <p style={{ fontSize: "1.0625rem", color: "#666666", maxWidth: "600px", margin: "0 auto" }}>
             Start for free to streamline your daily typing or upgrade to Pro for expanded transcription, higher quotas, and meeting intelligence.
@@ -134,7 +134,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
               </p>
 
               {/* Price Area */}
-              <div style={{ display: "flex", alignItems: "baseline", gap: "6px", margin: "24px 0" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "24px", marginBottom: "8px" }}>
                 <span
                   style={{
                     fontSize: "2.75rem",
@@ -146,6 +146,9 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenBetaModal: _onOpenBetaMo
                   $0
                 </span>
                 <span style={{ fontSize: "0.9375rem", color: "#666666" }}>/ month</span>
+              </div>
+              <div style={{ fontSize: "0.8125rem", color: "#166534", fontWeight: 500, marginBottom: "20px" }}>
+                ✓ No credit card required
               </div>
 
               {/* Feature List */}

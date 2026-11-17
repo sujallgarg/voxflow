@@ -16,6 +16,7 @@ export interface AuthContextType {
   isConfigured: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, name?: string) => Promise<{ error: string | null; requiresVerification: boolean }>;
+  signInWithGoogle: (returnTo?: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
@@ -46,6 +47,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    const handleOAuthRedirect = () => {
+      try {
+        const savedRedirect = sessionStorage.getItem("voxflow_auth_redirect");
+        if (savedRedirect) {
+          sessionStorage.removeItem("voxflow_auth_redirect");
+          if (
+            window.location.hash === "#/login" ||
+            window.location.hash.startsWith("#/login?") ||
+            window.location.hash === "#/signup" ||
+            window.location.hash.startsWith("#/signup?") ||
+            window.location.hash === "#/verify" ||
+            window.location.hash === "#/" ||
+            !window.location.hash
+          ) {
+            window.location.hash = savedRedirect;
+            return;
+          }
+        }
+      } catch {
+        // Ignore storage access errors
+      }
+
+      if (
+        window.location.hash === "#/login" ||
+        window.location.hash.startsWith("#/login?") ||
+        window.location.hash === "#/signup" ||
+        window.location.hash.startsWith("#/signup?") ||
+        window.location.hash === "#/verify"
+      ) {
+        window.location.hash = "#/meetings";
+      }
+    };
+
     // 1. Initial session load
     supabase.auth.getSession().then(({ data: { session: initialSession }, error }) => {
       if (error) {
@@ -64,6 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
         window.dispatchEvent(new CustomEvent("voxflow_auth_sync"));
         window.dispatchEvent(new CustomEvent("voxflow_subscription_updated"));
+        handleOAuthRedirect();
       }
     }).catch((err) => {
       console.warn("Failed to get initial session:", err);
@@ -93,10 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Direct user to set a new password
         window.location.hash = "#/reset-password";
       } else if (event === "SIGNED_IN") {
-        // If user was on login or verify, navigate to dashboard
-        if (window.location.hash === "#/login" || window.location.hash === "#/verify") {
-          window.location.hash = "#/meetings";
-        }
+        handleOAuthRedirect();
       }
     });
 
@@ -177,6 +209,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: null, requiresVerification };
     } catch (err: any) {
       return { error: err.message || "An unexpected error occurred during signup.", requiresVerification: false };
+    }
+  };
+
+  const signInWithGoogle = async (returnTo?: string): Promise<{ error: string | null }> => {
+    if (!isConfigured) {
+      return {
+        error: "Authentication service is not configured. Please supply Supabase environment variables."
+      };
+    }
+
+    try {
+      const target = returnTo || window.location.hash || "#/meetings";
+      try {
+        sessionStorage.setItem("voxflow_auth_redirect", target);
+      } catch {
+        // Ignore sessionStorage restrictions
+      }
+
+      const baseUrl = window.location.origin;
+      const redirectUrl = `${baseUrl}/`;
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent"
+          }
+        }
+      });
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: err.message || "An unexpected error occurred during Google sign in." };
     }
   };
 
@@ -280,6 +355,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isConfigured,
         signIn,
         signUp,
+        signInWithGoogle,
         signOut,
         requestPasswordReset,
         updatePassword,

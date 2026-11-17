@@ -3,31 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VoxFlow: AI Voice Typing for the Web</title>
+    <title>VoxFlow — Multilingual AI Voice Typing & Meeting Summaries for Web</title>
     <meta
       name="description"
-      content="Turn speech into clear, context-aware text in your preferred language with VoxFlow, an AI-powered voice input tool for the web."
+      content="VoxFlow is a multilingual AI voice typing and speech-to-text tool for the browser. Dictate emails, documents, and messages naturally with real-time AI meeting summaries."
     />
-    <link rel="canonical" href="https://voxflow.app/" />
+    <meta
+      name="keywords"
+      content="AI voice typing, AI voice typing for web, AI speech to text, voice typing with AI, multilingual voice typing, AI meeting summaries, voice dictation for emails and documents"
+    />
+    <meta name="author" content="VoxFlow" />
+    <meta name="application-name" content="VoxFlow" />
+    <meta name="apple-mobile-web-app-title" content="VoxFlow" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="canonical" href="https://voxflowai.devs.surf/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://voxflow.app/" />
-    <meta property="og:title" content="VoxFlow: AI Voice Typing for the Web" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://voxflowai.devs.surf/" />
+    <meta property="og:title" content="VoxFlow — Multilingual AI Voice Typing & Meeting Summaries for Web" />
     <meta
       property="og:description"
-      content="Turn speech into clear, context-aware text in your preferred language with VoxFlow, an AI-powered voice input tool for the web."
+      content="VoxFlow is a multilingual AI voice typing and speech-to-text tool for the browser. Dictate emails, documents, and messages naturally with real-time AI meeting summaries."
     />
     <meta property="og:site_name" content="VoxFlow" />
+    <meta property="og:image" content="https://voxflowai.devs.surf/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="VoxFlow — Multilingual AI Voice Typing & Meeting Summaries" />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:url" content="https://voxflow.app/" />
-    <meta name="twitter:title" content="VoxFlow: AI Voice Typing for the Web" />
+    <meta name="twitter:url" content="https://voxflowai.devs.surf/" />
+    <meta name="twitter:title" content="VoxFlow — Multilingual AI Voice Typing & Meeting Summaries for Web" />
     <meta
       name="twitter:description"
-      content="Turn speech into clear, context-aware text in your preferred language with VoxFlow, an AI-powered voice input tool for the web."
+      content="VoxFlow is a multilingual AI voice typing and speech-to-text tool for the browser. Dictate emails, documents, and messages naturally with real-time AI meeting summaries."
     />
+    <meta name="twitter:image" content="https://voxflowai.devs.surf/og-image.png" />
+    <meta name="twitter:image:alt" content="VoxFlow — Multilingual AI Voice Typing & Meeting Summaries" />
 
     <!-- Favicon & Icons -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -35,7 +53,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="manifest" href="/site.webmanifest" crossorigin="use-credentials" />
     <meta name="theme-color" content="#000000" />
 
     <!-- Typography & Performance Pre-connects -->
@@ -65,21 +83,289 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "VoxFlow",
-        "applicationCategory": "ProductivityApplication",
-        "operatingSystem": "Web, Chrome Browser",
-        "description": "An AI-powered voice input tool that turns spoken words into clear, context-aware text in your preferred language across web applications.",
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        }
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://voxflowai.devs.surf/#website",
+            "url": "https://voxflowai.devs.surf/",
+            "name": "VoxFlow",
+            "description": "Multilingual, context-aware AI voice typing tool that converts natural speech into polished text across languages for everyday browser communication.",
+            "publisher": {
+              "@id": "https://voxflowai.devs.surf/#organization"
+            }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://voxflowai.devs.surf/#organization",
+            "name": "VoxFlow",
+            "url": "https://voxflowai.devs.surf/",
+            "logo": "https://voxflowai.devs.surf/icon-512.png",
+            "description": "VoxFlow develops intelligent browser-based voice communication and meeting companion tools."
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://voxflowai.devs.surf/#software",
+            "name": "VoxFlow",
+            "applicationCategory": "ProductivityApplication",
+            "operatingSystem": "Web, Chromium Browsers (Chrome, Edge, Brave, Opera)",
+            "description": "VoxFlow is a multilingual, context-aware AI voice typing tool that converts natural speech into polished text across languages, designed for everyday browser communication.",
+            "url": "https://voxflowai.devs.surf/",
+            "featureList": [
+              "Multilingual AI voice typing across web applications",
+              "Speech to text with automatic punctuation and context awareness",
+              "Conversational code-switching support (English, Hindi, Spanish, Hinglish, Spanglish)",
+              "Voice dictation for Gmail, Slack, Google Docs, and Notion",
+              "AI meeting summaries with timestamped transcripts, action items, and key decisions"
+            ],
+            "offers": [
+              {
+                "@type": "Offer",
+                "name": "Free Plan",
+                "price": "0",
+                "priceCurrency": "USD",
+                "description": "30 minutes transcription, 100 voice typing requests, and 3 meeting summaries per month. No credit card required."
+              },
+              {
+                "@type": "Offer",
+                "name": "Pro Plan",
+                "price": "9",
+                "priceCurrency": "USD",
+                "billingDuration": "P1M",
+                "description": "300 minutes transcription, 1,000 voice typing requests, and 25 meeting summaries per month."
+              }
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://voxflowai.devs.surf/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What is VoxFlow?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "VoxFlow is a multilingual, context-aware AI voice typing tool that converts natural speech into clear, structured, polished text in your preferred language. Instead of literal dictation with awkward punctuation commands, VoxFlow understands your communication intent and formats your words to fit your recipient's tone and format."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Which languages does it support?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "VoxFlow supports major global languages (including English, Hindi, Spanish, French, German, and Portuguese) and natively handles conversational code-switching (such as Hinglish or Spanglish) without requiring you to manually toggle language modes."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How does voice input work?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "VoxFlow records speech through your browser microphone, applies high-accuracy multilingual speech transcription, removes verbal clutter like filler words, and uses contextual AI to adapt grammar, structure, and tone for the application you are writing in."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does VoxFlow work with browser-based applications?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. VoxFlow runs directly in modern Chromium web browsers. You can use it across any web application where you communicate, including Gmail, Slack, Google Docs, Notion, web forms, and customer support desks."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is a credit card required to get started?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. You can sign up and start using the Free plan immediately without entering any credit card or billing information."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What is included in the Free and Pro plans?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The Free plan includes 30 minutes of voice transcription, 100 voice typing requests, 50 AI text corrections, and 3 meeting summaries per month with 7-day history retention. The Pro plan ($9/month) expands limits to 300 minutes of transcription, 1,000 voice typing requests, 500 AI text corrections, 25 meetings & summaries, fair-use retention, and priority processing."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How are usage limits calculated?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Usage allowances reset on the 1st of every calendar month. Your account dashboard tracks real-time counts for voice typing requests, text corrections, and meeting recordings so you always know your remaining monthly allowance."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Are recordings or transcripts stored?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Transcripts, summaries, and action items are saved securely in your authenticated personal workspace so you can reference and search them anytime. Raw meeting audio is processed for transcription and not retained longer than required for processing."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Who can access meeting recordings and notes?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Only you. All meeting records, transcripts, action items, and summaries are isolated to your authenticated account with cryptographic and database-level security."
+                }
+              }
+            ]
+          }
+        ]
       }
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Semantic pre-rendered content for search crawlers & initial render -->
+      <header style="padding: 16px 24px; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; justify-content: space-between;">
+        <nav aria-label="Main Navigation">
+          <a href="/" style="font-weight: 800; font-size: 1.25rem; color: #111111; text-decoration: none;">VoxFlow</a>
+        </nav>
+        <div>
+          <a href="#/login" style="margin-right: 16px; font-size: 0.9rem; color: #111111; text-decoration: none;">Log In</a>
+          <a href="#/signup" style="padding: 8px 16px; background: #111111; color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 0.9rem;">Get Started Free</a>
+        </div>
+      </header>
+      <main>
+        <section style="padding: 64px 24px; text-align: center; max-width: 840px; margin: 0 auto;">
+          <p style="font-size: 0.8rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #666666; margin-bottom: 16px;">AI Voice Typing & Meeting Intelligence</p>
+          <h1 style="font-size: 3rem; font-weight: 800; line-height: 1.1; margin-bottom: 20px; color: #111111;">Speak it. Get polished text.</h1>
+          <p style="font-size: 1.2rem; line-height: 1.6; color: #555555; margin-bottom: 32px;">
+            Turn your voice into clear, polished text with context-aware AI voice typing. Dictate emails, documents, and messages across languages, and generate automated AI meeting summaries right in your browser.
+          </p>
+          <div style="margin-bottom: 24px;">
+            <a href="#/signup" style="padding: 14px 30px; background: #111111; color: #ffffff; font-weight: 600; text-decoration: none; border-radius: 6px; font-size: 1rem; display: inline-block;">Get Started Free →</a>
+          </div>
+          <p style="font-size: 0.85rem; color: #666666;">Free plan available. No credit card needed. • Includes 100 voice requests &amp; 30 min transcription / month.</p>
+        </section>
+
+        <section style="padding: 48px 24px; max-width: 1120px; margin: 0 auto;">
+          <h2 style="font-size: 2rem; font-weight: 700; text-align: center; margin-bottom: 36px;">Speak, get polished text</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px;">
+            <div>
+              <h3 style="font-size: 1.2rem; font-weight: 600; margin-bottom: 8px;">1. Speak naturally</h3>
+              <p style="color: #666666;">Talk comfortably in your native tongue or mix languages mid-sentence without stiff punctuation commands.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.2rem; font-weight: 600; margin-bottom: 8px;">2. AI removes friction</h3>
+              <p style="color: #666666;">VoxFlow filters filler words, corrects grammatical quirks, and detects recipient tone in real time.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.2rem; font-weight: 600; margin-bottom: 8px;">3. Polished text inserted</h3>
+              <p style="color: #666666;">Your completed, professional thoughts appear right inside your active browser application.</p>
+            </div>
+          </div>
+        </section>
+
+        <section style="padding: 48px 24px; max-width: 1120px; margin: 0 auto; border-top: 1px solid #e5e5e5;">
+          <h2 style="font-size: 2rem; font-weight: 700; text-align: center; margin-bottom: 36px;">Core Capabilities for AI Voice Typing & Meeting Intelligence</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px;">
+            <div>
+              <h3 style="font-size: 1.2rem; font-weight: 600; margin-bottom: 8px;">Multilingual Voice Typing</h3>
+              <p style="color: #666666;">Speak comfortably in your native language or mix languages mid-sentence with natural code-switching support (Hinglish, Spanglish) without manual settings.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.2rem; font-weight: 600; margin-bottom: 8px;">Context-Aware Speech to Text</h3>
+              <p style="color: #666666;">Automatically remove filler words, correct grammar, and adapt tone to fit emails, documents, or team chats.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.2rem; font-weight: 600; margin-bottom: 8px;">Voice Dictation for Emails & Documents</h3>
+              <p style="color: #666666;">Dictate directly into Gmail, Slack, Google Docs, Notion, and web forms without awkward copy-pasting.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.2rem; font-weight: 600; margin-bottom: 8px;">AI Meeting Summaries & Action Items</h3>
+              <p style="color: #666666;">Capture live discussions, generate timestamped multilingual transcripts, and extract prioritized action items automatically.</p>
+            </div>
+          </div>
+        </section>
+
+        <section style="padding: 48px 24px; max-width: 1120px; margin: 0 auto; border-top: 1px solid #e5e5e5;">
+          <h2 style="font-size: 2rem; font-weight: 700; text-align: center; margin-bottom: 36px;">Start free, Pro is $9/mo</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
+            <div style="border: 1px solid #e5e5e5; border-radius: 8px; padding: 24px;">
+              <h3 style="font-size: 1.4rem; font-weight: 700;">Free Plan</h3>
+              <p style="font-size: 1.8rem; font-weight: 700; margin: 12px 0;">$0 <span style="font-size: 1rem; color: #666666;">/ month</span></p>
+              <p style="color: #166534; font-size: 0.85rem; font-weight: 500;">✓ No credit card required</p>
+              <ul style="color: #444444; font-size: 0.9rem; margin: 16px 0; padding-left: 20px; line-height: 1.8;">
+                <li>30 minutes audio transcription / mo</li>
+                <li>100 voice typing requests / mo</li>
+                <li>50 AI text corrections / mo</li>
+                <li>3 meetings &amp; summaries / mo</li>
+                <li>7 days meeting history retention</li>
+              </ul>
+              <a href="#/signup" style="display: block; text-align: center; padding: 10px; border: 1px solid #111111; color: #111111; text-decoration: none; border-radius: 6px; font-weight: 500;">Get Started Free</a>
+            </div>
+            <div style="border: 2px solid #111111; border-radius: 8px; padding: 24px;">
+              <h3 style="font-size: 1.4rem; font-weight: 700;">Pro Plan</h3>
+              <p style="font-size: 1.8rem; font-weight: 700; margin: 12px 0;">$9 <span style="font-size: 1rem; color: #666666;">USD / month</span></p>
+              <p style="color: #111111; font-size: 0.85rem; font-weight: 500;">For power users and professionals</p>
+              <ul style="color: #444444; font-size: 0.9rem; margin: 16px 0; padding-left: 20px; line-height: 1.8;">
+                <li>300 minutes audio transcription / mo</li>
+                <li>1,000 voice typing requests / mo</li>
+                <li>500 AI text corrections / mo</li>
+                <li>25 meetings &amp; summaries / mo</li>
+                <li>Fair-use retention &amp; priority processing</li>
+              </ul>
+              <a href="#/signup" style="display: block; text-align: center; padding: 10px; background: #111111; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 500;">Upgrade to Pro — $9/mo</a>
+            </div>
+          </div>
+        </section>
+
+        <section style="padding: 48px 24px; max-width: 800px; margin: 0 auto; border-top: 1px solid #e5e5e5;">
+          <h2 style="font-size: 2rem; font-weight: 700; text-align: center; margin-bottom: 24px;">Frequently Asked Questions</h2>
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">What is VoxFlow?</h3>
+              <p style="color: #555555; line-height: 1.6;">VoxFlow is a multilingual, context-aware AI voice typing tool that converts natural speech into clear, structured, polished text in your preferred language across web applications.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">Which languages does it support?</h3>
+              <p style="color: #555555; line-height: 1.6;">VoxFlow supports major global languages (including English, Hindi, Spanish, French, German, and Portuguese) and natively handles conversational code-switching like Hinglish or Spanglish.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">How does voice input work?</h3>
+              <p style="color: #555555; line-height: 1.6;">VoxFlow records speech through your browser microphone, applies high-accuracy multilingual speech transcription, removes verbal clutter like filler words, and uses contextual AI to adapt grammar, structure, and tone for the application you are writing in.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">Does VoxFlow work with browser-based applications?</h3>
+              <p style="color: #555555; line-height: 1.6;">Yes. VoxFlow works directly across web applications including Gmail, Slack, Google Docs, Notion, web forms, and customer support desks.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">Is a credit card required to get started?</h3>
+              <p style="color: #555555; line-height: 1.6;">No. You can sign up and start using the Free plan immediately without entering any credit card or billing information.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">What is included in the Free and Pro plans?</h3>
+              <p style="color: #555555; line-height: 1.6;">The Free plan includes 30 minutes of voice transcription, 100 voice typing requests, 50 AI text corrections, and 3 meeting summaries per month with 7-day history retention. The Pro plan ($9/month) expands limits to 300 minutes of transcription, 1,000 voice typing requests, 500 AI text corrections, 25 meetings & summaries, fair-use retention, and priority processing.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">How are usage limits calculated?</h3>
+              <p style="color: #555555; line-height: 1.6;">Usage allowances reset on the 1st of every calendar month. Your account dashboard tracks real-time counts for voice typing requests, text corrections, and meeting recordings so you always know your remaining monthly allowance.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">Are recordings or transcripts stored?</h3>
+              <p style="color: #555555; line-height: 1.6;">Transcripts, summaries, and action items are saved securely in your authenticated personal workspace so you can reference and search them anytime. Raw meeting audio is processed for transcription and not retained longer than required for processing.</p>
+            </div>
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">Who can access meeting recordings and notes?</h3>
+              <p style="color: #555555; line-height: 1.6;">Only you. All meeting records, transcripts, action items, and summaries are isolated to your authenticated account with cryptographic and database-level security.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+      <footer style="padding: 32px 24px; border-top: 1px solid #e5e5e5; text-align: center; color: #666666; font-size: 0.85rem;">
+        <p>© 2026 VoxFlow. Speak it. Get polished text. All rights reserved.</p>
+        <p style="margin-top: 8px;">
+          <a href="#/privacy" style="color: #666666; margin: 0 8px;">Privacy Policy</a> |
+          <a href="#/terms" style="color: #666666; margin: 0 8px;">Terms of Service</a> |
+          <a href="#/refunds" style="color: #666666; margin: 0 8px;">Refund Policy</a> |
+          <a href="#/cookies" style="color: #666666; margin: 0 8px;">Cookie Policy</a>
+        </p>
+      </footer>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

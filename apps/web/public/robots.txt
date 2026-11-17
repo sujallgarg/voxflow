@@ -1,5 +1,11 @@
 # VoxFlow Robots.txt
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /billing/success
+Disallow: /billing/cancel
+Disallow: /#/meetings/
+Disallow: /#/billing/
 
-Sitemap: https://voxflow.app/sitemap.xml
+Sitemap: https://voxflowai.devs.surf/sitemap.xml
+Host: https://voxflowai.devs.surf
