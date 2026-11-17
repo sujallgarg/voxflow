@@ -54,7 +54,7 @@ export const Features: React.FC = () => {
     {
       id: "browser-writing-workflow",
       tag: "Productivity",
-      title: "Browser-Based Writing Workflow",
+      title: "Dictate Into Gmail, Slack and Docs",
       description:
         "Integrates directly into your browser workflow so you can draft emails in Gmail, compose updates in Slack, and write reports in Google Docs without manual copy-paste.",
       icon: (
@@ -74,12 +74,12 @@ export const Features: React.FC = () => {
           <line x1="12" y1="17" x2="12" y2="21" />
         </svg>
       ),
-      highlight: "In-field insertion & hotkey activation"
+      highlight: "Insert text in place with a hotkey"
     },
     {
       id: "meeting-transcription-summaries",
       tag: "Workspace",
-      title: "Meeting Transcription & AI Summaries",
+      title: "Meetings Turned into Clear Summaries",
       description:
         "Capture live meeting audio directly in your browser. VoxFlow generates full timestamped transcripts, key decisions, and prioritized action items automatically.",
       icon: (
@@ -98,7 +98,7 @@ export const Features: React.FC = () => {
           <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
         </svg>
       ),
-      highlight: "Action items & decision extraction"
+      highlight: "Action items & decisions, listed"
     }
   ];
 

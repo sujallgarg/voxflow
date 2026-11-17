@@ -337,6 +337,19 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
     min-height: 44px;
   }
 
+  .hero-buttons-row {
+    flex-direction: column !important;
+    width: 100% !important;
+    max-width: 320px !important;
+    margin: 0 auto !important;
+  }
+
+  .hero-buttons-row > * {
+    width: 100% !important;
+    text-align: center !important;
+    min-height: 46px;
+  }
+
   /* Make flex action rows wrap and stretch cleanly on narrow screens */
   .mobile-full-width-stack {
     flex-direction: column !important;

@@ -70,7 +70,7 @@ export const Footer: React.FC<FooterProps> = ({
                 lineHeight: 1.6
               }}
             >
-              Speak naturally. Write everywhere. An AI voice input tool that turns
+              Speak it. Get polished text. An AI voice input tool that turns
               spoken thoughts into clear, context-aware text across the web.
             </p>
             <div style={{ marginTop: "18px" }}>
@@ -319,7 +319,7 @@ export const Footer: React.FC<FooterProps> = ({
           }}
         >
           <div>
-            © {currentYear} VoxFlow. Speak naturally. Write everywhere.
+            © {currentYear} VoxFlow. Speak it. Get polished text.
           </div>
 
           <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>

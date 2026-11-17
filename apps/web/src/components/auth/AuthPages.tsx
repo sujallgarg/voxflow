@@ -7,12 +7,40 @@ interface AuthPageProps {
   onNavigate: (view: string) => void;
 }
 
+const GoogleIcon: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    style={{ flexShrink: 0 }}
+  >
+    <path
+      fill="#4285F4"
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.51h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.34z"
+    />
+    <path
+      fill="#34A853"
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+    />
+    <path
+      fill="#EA4335"
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+    />
+  </svg>
+);
+
 export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) => {
   const {
     user,
     session,
     signIn,
     signUp,
+    signInWithGoogle,
     requestPasswordReset,
     updatePassword,
     resendVerification,
@@ -28,6 +56,7 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [verificationSentTo, setVerificationSentTo] = useState<string | null>(null);
@@ -80,6 +109,139 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
     }
     return "#/meetings";
   };
+
+  // Check for OAuth cancellation or error params in URL on load
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash || "";
+      const hashQueryIndex = hash.indexOf("?");
+      const hashParams = new URLSearchParams(
+        hashQueryIndex !== -1 ? hash.slice(hashQueryIndex + 1) : ""
+      );
+
+      const error = urlParams.get("error") || hashParams.get("error");
+      const errorDescription =
+        urlParams.get("error_description") || hashParams.get("error_description");
+
+      if (error || errorDescription) {
+        if (
+          error === "access_denied" ||
+          (errorDescription && errorDescription.toLowerCase().includes("cancel"))
+        ) {
+          setErrorMessage("Google sign-in was cancelled. Please try again or sign in with your email.");
+        } else {
+          setErrorMessage(errorDescription || `Google authentication error: ${error}`);
+        }
+
+        // Clean query parameters from URL without reloading
+        if (window.history && window.history.replaceState) {
+          const cleanHash = hash.split("?")[0] || "#/login";
+          window.history.replaceState(null, "", window.location.pathname + cleanHash);
+        }
+        try {
+          sessionStorage.removeItem("voxflow_auth_redirect");
+        } catch {
+          // Ignore
+        }
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }, []);
+
+  const handleGoogleAuth = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    if (!isConfigured) {
+      setErrorMessage(
+        "Authentication service is not configured. Live Supabase credentials are required."
+      );
+      return;
+    }
+
+    setIsGoogleLoading(true);
+    try {
+      const destination = getSafeReturnDestination();
+      const { error } = await signInWithGoogle(destination);
+      if (error) {
+        setErrorMessage(error);
+        setIsGoogleLoading(false);
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || "Failed to initiate Google authentication. Please try again.");
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const renderGoogleButton = (ctaText: string = "Continue with Google") => (
+    <div style={{ marginBottom: "20px" }}>
+      <button
+        type="button"
+        onClick={handleGoogleAuth}
+        disabled={isLoading || isGoogleLoading}
+        aria-label={ctaText}
+        style={{
+          width: "100%",
+          minHeight: "44px",
+          padding: "10px 16px",
+          backgroundColor: "#ffffff",
+          color: "#111111",
+          border: "1px solid #e5e5e5",
+          borderRadius: "6px",
+          fontSize: "0.875rem",
+          fontWeight: 500,
+          cursor: isLoading || isGoogleLoading ? "not-allowed" : "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "10px",
+          opacity: isLoading || isGoogleLoading ? 0.7 : 1,
+          transition: "background 0.15s ease, border-color 0.15s ease",
+          boxSizing: "border-box"
+        }}
+        onMouseEnter={(e) => {
+          if (!isLoading && !isGoogleLoading) {
+            e.currentTarget.style.backgroundColor = "#f9f9f9";
+            e.currentTarget.style.borderColor = "#d4d4d4";
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isLoading && !isGoogleLoading) {
+            e.currentTarget.style.backgroundColor = "#ffffff";
+            e.currentTarget.style.borderColor = "#e5e5e5";
+          }
+        }}
+      >
+        <GoogleIcon size={18} />
+        <span>{isGoogleLoading ? "Connecting to Google..." : ctaText}</span>
+      </button>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          margin: "18px 0 0 0",
+          gap: "12px"
+        }}
+      >
+        <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e5e5" }} />
+        <span
+          style={{
+            fontSize: "0.75rem",
+            fontWeight: 500,
+            color: "#888888",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em"
+          }}
+        >
+          or
+        </span>
+        <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e5e5" }} />
+      </div>
+    </div>
+  );
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -376,7 +538,9 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
 
         {/* 1. LOGIN VIEW */}
         {view === "login" && (
-          <form onSubmit={handleLogin} noValidate>
+          <div>
+            {renderGoogleButton("Continue with Google")}
+            <form onSubmit={handleLogin} noValidate>
             <div style={{ marginBottom: "16px" }}>
               <label
                 htmlFor="login-email"
@@ -537,11 +701,14 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
               </a>
             </div>
           </form>
+          </div>
         )}
 
         {/* 2. SIGNUP VIEW */}
         {view === "signup" && (
-          <form onSubmit={handleSignup} noValidate>
+          <div>
+            {renderGoogleButton("Continue with Google")}
+            <form onSubmit={handleSignup} noValidate>
             <div style={{ marginBottom: "14px" }}>
               <label
                 htmlFor="signup-name"
@@ -801,6 +968,7 @@ export const AuthPages: React.FC<AuthPageProps> = ({ initialView, onNavigate }) 
               </a>
             </div>
           </form>
+          </div>
         )}
 
         {/* 3. VERIFY EMAIL VIEW */}

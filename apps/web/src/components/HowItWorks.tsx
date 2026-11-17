@@ -42,7 +42,7 @@ export const HowItWorks: React.FC = () => {
         {/* Section Header */}
         <div className="section-title-wrap">
           <span className="badge">Simple Workflow</span>
-          <h2>How VoxFlow Works</h2>
+          <h2>Speak, get polished text</h2>
           <p>
             From spoken thought to polished prose in three effortless steps.
           </p>

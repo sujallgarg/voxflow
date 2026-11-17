@@ -64,7 +64,7 @@ export const Hero: React.FC<HeroProps> = ({
               color: "#111111"
             }}
           >
-            Speak naturally. Write everywhere.
+            Speak it. Get polished text.
           </h1>
 
           {/* Supporting Copy */}
@@ -77,92 +77,157 @@ export const Hero: React.FC<HeroProps> = ({
               margin: "0 auto 36px auto"
             }}
           >
-            VoxFlow turns your spoken words into polished, context-aware text in your preferred language.
-            Speak naturally, switch languages mid-sentence, and draft effortlessly across your everyday web workflow.
+            Turn your voice into clear, polished messages. Communicate across languages and write naturally without typing.
           </p>
 
           {/* Action CTAs */}
           <div
-            className="mobile-full-width-stack"
+            className="hero-cta-container"
             style={{
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              flexWrap: "wrap",
-              gap: "12px",
-              marginBottom: "40px"
+              gap: "16px",
+              marginBottom: "36px"
             }}
           >
-            {user ? (
-              <a
-                href="#/meetings"
-                className="btn-primary"
-                style={{
-                  padding: "13px 26px",
-                  fontSize: "0.95rem",
-                  textDecoration: "none"
-                }}
-              >
-                Open Dashboard →
-              </a>
-            ) : (
-              <a
-                href="#/signup"
-                className="btn-primary"
-                style={{
-                  padding: "13px 26px",
-                  fontSize: "0.95rem",
-                  textDecoration: "none"
-                }}
-              >
-                Get Started Free →
-              </a>
-            )}
-
-            <button
-              type="button"
-              id="hero-get-extension-btn"
-              className="btn-secondary"
-              onClick={handleGetExtensionClick}
+            <div
+              className="hero-buttons-row"
               style={{
-                padding: "13px 22px",
-                fontSize: "0.95rem",
-                display: "inline-flex",
+                display: "flex",
                 alignItems: "center",
+                justifyContent: "center",
+                flexWrap: "wrap",
+                gap: "12px"
+              }}
+            >
+              {user ? (
+                <a
+                  href="#/meetings"
+                  className="btn-primary hero-primary-btn"
+                  style={{
+                    padding: "14px 30px",
+                    fontSize: "1rem",
+                    fontWeight: 600,
+                    textDecoration: "none"
+                  }}
+                  aria-label="Open your VoxFlow Dashboard"
+                >
+                  Open Dashboard →
+                </a>
+              ) : (
+                <a
+                  href="#/signup"
+                  className="btn-primary hero-primary-btn"
+                  style={{
+                    padding: "14px 30px",
+                    fontSize: "1rem",
+                    fontWeight: 600,
+                    textDecoration: "none"
+                  }}
+                  aria-label="Get Started Free with VoxFlow"
+                >
+                  Get Started Free →
+                </a>
+              )}
+
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={onScrollToDemo}
+                style={{
+                  padding: "14px 24px",
+                  fontSize: "0.95rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+                aria-label="Scroll to test the interactive voice demo"
+              >
+                <span aria-hidden="true">🎙️</span>
+                <span>Try the Demo</span>
+              </button>
+            </div>
+
+            {/* Sub-CTA reassurance */}
+            <div
+              style={{
+                fontSize: "0.8125rem",
+                color: "#666666",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexWrap: "wrap",
                 gap: "8px"
               }}
             >
-              <span aria-hidden="true">🧩</span>
-              <span>Get Our Extension</span>
-            </button>
+              <span style={{ fontWeight: 500, color: "#111111" }}>Free plan available.</span>
+              <span>No credit card needed.</span>
+              <span style={{ color: "#d4d4d4" }} aria-hidden="true">•</span>
+              <span>Includes 100 voice requests & 30 min transcription / mo</span>
+            </div>
 
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={onScrollToDemo}
+            {/* Non-competing subtle tertiary actions */}
+            <div
               style={{
-                padding: "13px 24px",
-                fontSize: "0.95rem",
-                display: "inline-flex",
+                display: "flex",
                 alignItems: "center",
-                gap: "8px"
+                justifyContent: "center",
+                flexWrap: "wrap",
+                gap: "20px",
+                paddingTop: "4px"
               }}
             >
-              <span>🎙️</span>
-              <span>Try the Demo</span>
-            </button>
+              <button
+                type="button"
+                id="hero-get-extension-btn"
+                onClick={handleGetExtensionClick}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: "6px 10px",
+                  fontSize: "0.85rem",
+                  color: "#666666",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  cursor: "pointer",
+                  borderRadius: "4px",
+                  transition: "color 0.15s ease"
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+                aria-label="Get the VoxFlow Chrome extension"
+              >
+                <span aria-hidden="true">🧩</span>
+                <span>Get Our Extension</span>
+              </button>
 
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={handleScrollToHowItWorks}
-              style={{
-                padding: "13px 22px",
-                fontSize: "0.95rem"
-              }}
-            >
-              How It Works
-            </button>
+              <button
+                type="button"
+                onClick={handleScrollToHowItWorks}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: "6px 10px",
+                  fontSize: "0.85rem",
+                  color: "#666666",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  cursor: "pointer",
+                  borderRadius: "4px",
+                  transition: "color 0.15s ease"
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#111111")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "#666666")}
+                aria-label="See how VoxFlow works"
+              >
+                <span>How It Works</span>
+                <span aria-hidden="true">↓</span>
+              </button>
+            </div>
           </div>
 
           {/* Three Concise Benefits */}

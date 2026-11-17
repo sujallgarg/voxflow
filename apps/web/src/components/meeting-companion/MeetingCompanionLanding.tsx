@@ -75,9 +75,9 @@ export const MeetingCompanionLanding: React.FC = () => {
                   ✓
                 </div>
                 <div>
-                  <h4 style={{ fontSize: "0.95rem", fontWeight: 600, color: "#111111", margin: "0 0 2px 0" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: 600, color: "#111111", margin: "0 0 2px 0" }}>
                     Automated Executive Summaries
-                  </h4>
+                  </h3>
                   <p style={{ fontSize: "0.875rem", color: "#666666", margin: 0, lineHeight: 1.5 }}>
                     Instant structured overviews highlighting core discussion topics and conclusions.
                   </p>
@@ -104,9 +104,9 @@ export const MeetingCompanionLanding: React.FC = () => {
                   ✓
                 </div>
                 <div>
-                  <h4 style={{ fontSize: "0.95rem", fontWeight: 600, color: "#111111", margin: "0 0 2px 0" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: 600, color: "#111111", margin: "0 0 2px 0" }}>
                     Extracted Action Items & Decisions
-                  </h4>
+                  </h3>
                   <p style={{ fontSize: "0.875rem", color: "#666666", margin: 0, lineHeight: 1.5 }}>
                     Identify assigned team members, deliverables, and critical commitments automatically.
                   </p>
@@ -133,9 +133,9 @@ export const MeetingCompanionLanding: React.FC = () => {
                   ✓
                 </div>
                 <div>
-                  <h4 style={{ fontSize: "0.95rem", fontWeight: 600, color: "#111111", margin: "0 0 2px 0" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: 600, color: "#111111", margin: "0 0 2px 0" }}>
                     Multilingual Conversation Support
-                  </h4>
+                  </h3>
                   <p style={{ fontSize: "0.875rem", color: "#666666", margin: 0, lineHeight: 1.5 }}>
                     Transcribes multilingual team dialogue and code-switching accurately in one place.
                   </p>

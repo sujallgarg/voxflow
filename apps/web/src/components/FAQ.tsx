@@ -5,7 +5,7 @@ export const FAQ: React.FC = () => {
     {
       id: "what-is-voxflow",
       q: "What is VoxFlow?",
-      a: "VoxFlow is an AI voice input tool that converts natural speech into clear, structured, context-aware text in your preferred language. Instead of literal dictation with awkward punctuation commands, VoxFlow understands your communication intent and formats your words to fit your recipient's tone and format."
+      a: "VoxFlow is a multilingual, context-aware AI voice typing tool that converts natural speech into clear, structured, polished text in your preferred language. Instead of literal dictation with awkward punctuation commands, VoxFlow understands your communication intent and formats your words to fit your recipient's tone and format."
     },
     {
       id: "which-languages-supported",
@@ -13,19 +13,39 @@ export const FAQ: React.FC = () => {
       a: "VoxFlow supports major global languages (including English, Hindi, Spanish, French, German, and Portuguese) and natively handles conversational code-switching (such as Hinglish or Spanglish) without requiring you to manually toggle language modes."
     },
     {
-      id: "where-can-i-use-it",
-      q: "Where can I use VoxFlow?",
-      a: "VoxFlow runs directly in modern Chromium web browsers. You can use it across any web application where you write, including Gmail, Slack, Google Docs, Notion, customer support dashboards, and web forms."
+      id: "how-does-voice-input-work",
+      q: "How does voice input work?",
+      a: "VoxFlow records speech through your browser microphone, applies high-accuracy multilingual speech transcription, removes verbal clutter like filler words, and uses contextual AI to adapt grammar, structure, and tone for the application you are writing in."
     },
     {
-      id: "how-do-meetings-and-summaries-work",
-      q: "How do meetings and summaries work?",
-      a: "The VoxFlow Meeting Workspace allows you to record live audio from your discussions directly within your browser. Once recording stops, VoxFlow produces a full chronological transcript, extracts core discussion decisions, and compiles prioritized action items with zero manual note-taking required."
+      id: "where-can-i-use-it",
+      q: "Does VoxFlow work with browser-based applications?",
+      a: "Yes. VoxFlow runs directly in modern Chromium web browsers. You can use it across any web application where you communicate, including Gmail, Slack, Google Docs, Notion, web forms, and customer support desks."
+    },
+    {
+      id: "is-credit-card-required",
+      q: "Is a credit card required to get started?",
+      a: "No. You can sign up and start using the Free plan immediately without entering any credit card or billing information."
     },
     {
       id: "what-is-included-in-free-and-pro",
       q: "What is included in the Free and Pro plans?",
-      a: "The Free plan includes 30 minutes of voice transcription, 100 voice requests, 50 AI text corrections, and 3 meeting summaries per month with 7-day history retention. The Pro plan ($9/month) expands limits to 300 minutes of transcription, 1,000 voice typing requests, 500 AI text corrections, 25 meetings & summaries, fair-use retention, and priority processing."
+      a: "The Free plan includes 30 minutes of voice transcription, 100 voice typing requests, 50 AI text corrections, and 3 meeting summaries per month with 7-day history retention. The Pro plan ($9/month) expands limits to 300 minutes of transcription, 1,000 voice typing requests, 500 AI text corrections, 25 meetings & summaries, fair-use retention, and priority processing."
+    },
+    {
+      id: "how-are-usage-limits-calculated",
+      q: "How are usage limits calculated?",
+      a: "Usage allowances reset on the 1st of every calendar month. Your account dashboard tracks real-time counts for voice typing requests, text corrections, and meeting recordings so you always know your remaining monthly allowance."
+    },
+    {
+      id: "are-recordings-or-transcripts-stored",
+      q: "Are recordings or transcripts stored?",
+      a: "Transcripts, summaries, and action items are saved securely in your authenticated personal workspace so you can reference and search them anytime. Raw meeting audio is processed for transcription and not retained longer than required for processing."
+    },
+    {
+      id: "who-can-access-meeting-recordings",
+      q: "Who can access meeting recordings and notes?",
+      a: "Only you. All meeting records, transcripts, action items, and summaries are isolated to your authenticated account with cryptographic and database-level security."
     }
   ];
 
