@@ -124,7 +124,7 @@ export function useRecorder(): UseRecorderReturn {
         }
       }
 
-      const recorder = new MediaRecorder(stream, { mimeType });
+      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 32000 });
       mediaRecorderRef.current = recorder;
 
       // Setup Web Audio Analyser for live visualizer
