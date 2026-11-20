@@ -162,10 +162,10 @@ export function buildServer() {
   // Rate Limiter PreHandler Hook (120 req/min sliding window)
   app.addHook("preHandler", createRateLimiter({ windowMs: 60 * 1000, maxRequests: 120 }));
 
-  // 50MB file size limit for audio / meeting recordings
+  // 100MB file size limit for audio / meeting recordings
   app.register(multipart, {
     limits: {
-      fileSize: 50 * 1024 * 1024
+      fileSize: 100 * 1024 * 1024
     }
   });
 

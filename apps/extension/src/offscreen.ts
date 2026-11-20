@@ -240,8 +240,8 @@ async function startTabCapture(
 
     const mimeType = getSupportedMimeType();
     mediaRecorder = mimeType
-      ? new MediaRecorder(recordingDestination.stream, { mimeType })
-      : new MediaRecorder(recordingDestination.stream);
+      ? new MediaRecorder(recordingDestination.stream, { mimeType, audioBitsPerSecond: 32000 })
+      : new MediaRecorder(recordingDestination.stream, { audioBitsPerSecond: 32000 });
 
     setupMediaRecorderListeners("tab");
 
@@ -296,8 +296,8 @@ async function startMicRecording(
 
     const mimeType = getSupportedMimeType();
     mediaRecorder = mimeType
-      ? new MediaRecorder(mediaStream, { mimeType })
-      : new MediaRecorder(mediaStream);
+      ? new MediaRecorder(mediaStream, { mimeType, audioBitsPerSecond: 32000 })
+      : new MediaRecorder(mediaStream, { audioBitsPerSecond: 32000 });
 
     setupMediaRecorderListeners("mic");
 
@@ -387,8 +387,8 @@ async function startMeetingCapture(
 
     const mimeType = getSupportedMimeType();
     mediaRecorder = mimeType
-      ? new MediaRecorder(recordingDestination.stream, { mimeType })
-      : new MediaRecorder(recordingDestination.stream);
+      ? new MediaRecorder(recordingDestination.stream, { mimeType, audioBitsPerSecond: 32000 })
+      : new MediaRecorder(recordingDestination.stream, { audioBitsPerSecond: 32000 });
 
     setupMediaRecorderListeners("meeting");
 

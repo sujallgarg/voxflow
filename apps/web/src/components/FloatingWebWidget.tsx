@@ -529,7 +529,7 @@ export const FloatingWebWidget: React.FC = () => {
         }
       }
 
-      const recorder = new MediaRecorder(stream, { mimeType });
+      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 32000 });
       voiceMediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
@@ -1031,7 +1031,7 @@ export const FloatingWebWidget: React.FC = () => {
         }
       }
 
-      const recorder = new MediaRecorder(activeStream, { mimeType });
+      const recorder = new MediaRecorder(activeStream, { mimeType, audioBitsPerSecond: 32000 });
       meetingMediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
