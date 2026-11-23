@@ -1,0 +1,22 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schemas/server-card.json",
+  "serverInfo": {
+    "name": "voxflow-mcp",
+    "title": "VoxFlow AI Voice & Meeting Intelligence",
+    "version": "1.0.0",
+    "description": "Voice typing, multilingual speech transcription, and structured meeting notes engine."
+  },
+  "transport": {
+    "type": "sse",
+    "endpoint": "https://voxflow-u7h3.onrender.com/mcp/sse"
+  },
+  "capabilities": {
+    "tools": true,
+    "resources": true,
+    "prompts": true
+  },
+  "authentication": {
+    "type": "oauth2",
+    "discoveryUrl": "https://voxflowai.devs.surf/.well-known/oauth-protected-resource"
+  }
+}

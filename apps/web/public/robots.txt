@@ -7,5 +7,8 @@ Disallow: /billing/cancel
 Disallow: /#/meetings/
 Disallow: /#/billing/
 
+# Content Signals for AI agents (https://contentsignals.org/)
+Content-Signal: ai-train=no, search=yes, ai-input=no
+
 Sitemap: https://voxflowai.devs.surf/sitemap.xml
 Host: https://voxflowai.devs.surf

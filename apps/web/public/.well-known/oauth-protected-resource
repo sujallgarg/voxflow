@@ -1,0 +1,18 @@
+{
+  "resource": "https://voxflowai.devs.surf/api",
+  "authorization_servers": [
+    "https://tpiipkjfebudtdxitigx.supabase.co/auth/v1",
+    "https://voxflowai.devs.surf"
+  ],
+  "scopes_supported": [
+    "voice:transcribe",
+    "voice:type",
+    "meetings:read",
+    "meetings:write",
+    "meetings:summarize"
+  ],
+  "bearer_methods_supported": [
+    "header"
+  ],
+  "resource_documentation": "https://voxflowai.devs.surf/auth.md"
+}

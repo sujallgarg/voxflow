@@ -1,0 +1,42 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "name": "VoxFlow",
+    "domain": "voxflowai.devs.surf",
+    "description": "Multilingual AI Voice Typing & Meeting Summaries for Web"
+  },
+  "entries": [
+    {
+      "id": "urn:air:voxflowai.devs.surf:tools:voice-typing",
+      "displayName": "VoxFlow Voice Typing API",
+      "type": "application/json",
+      "url": "https://voxflow-u7h3.onrender.com/transcribe",
+      "representativeQueries": [
+        "transcribe voice audio to text",
+        "convert microphone audio to punctuated English",
+        "multilingual speech to text dictation"
+      ]
+    },
+    {
+      "id": "urn:air:voxflowai.devs.surf:tools:meeting-notes",
+      "displayName": "VoxFlow Meeting Intelligence API",
+      "type": "application/json",
+      "url": "https://voxflow-u7h3.onrender.com/meeting-notes",
+      "representativeQueries": [
+        "generate meeting summary and action items",
+        "extract decisions and tasks from meeting transcript",
+        "executive overview of conference call"
+      ]
+    },
+    {
+      "id": "urn:air:voxflowai.devs.surf:mcp:server",
+      "displayName": "VoxFlow MCP Server Card",
+      "type": "application/json",
+      "url": "https://voxflowai.devs.surf/.well-known/mcp/server-card.json",
+      "representativeQueries": [
+        "connect VoxFlow MCP tools to AI agent",
+        "MCP server card for meeting transcription"
+      ]
+    }
+  ]
+}
