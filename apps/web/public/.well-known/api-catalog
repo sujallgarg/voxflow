@@ -1,0 +1,29 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://voxflowai.devs.surf/api",
+      "service-desc": [
+        {
+          "href": "https://voxflowai.devs.surf/.well-known/ai-catalog.json",
+          "type": "application/json"
+        },
+        {
+          "href": "https://voxflowai.devs.surf/.well-known/mcp/server-card.json",
+          "type": "application/json"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://voxflowai.devs.surf/auth.md",
+          "type": "text/markdown"
+        }
+      ],
+      "status": [
+        {
+          "href": "https://voxflow-u7h3.onrender.com/health",
+          "type": "application/json"
+        }
+      ]
+    }
+  ]
+}

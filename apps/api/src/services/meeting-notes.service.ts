@@ -28,13 +28,116 @@ export interface MeetingNotesResult {
   primaryLanguages: string[];
 }
 
-const MAX_CHUNK_CHARS = 8000;
+// 80,000 characters (~13,000 words / ~90 mins of speech) fits well within the 131,072 token context window
+const MAX_DIRECT_TRANSCRIPT_CHARS = 80000;
+const FALLBACK_CHAT_MODEL = "openai/gpt-oss-20b";
+
+function buildSystemPrompt(meetingTitle?: string, isPartial = false): string {
+  return `You are VoxFlow's Meeting Intelligence Engine.
+Analyze the complete spoken transcript ${isPartial ? "section" : ""} from a meeting session.
+The meeting may be in English, Hindi, Spanish, German, French, or mix multiple languages naturally.
+Extract a thorough, comprehensive executive overview covering the entire meeting from start to finish.
+
+You must extract:
+1. title: A concise, professional title for the meeting (use provided title if appropriate: "${meetingTitle || ''}").
+2. summary: A thorough, multi-paragraph executive summary synthesizing the entire meeting from beginning to end. It must thoroughly detail the purpose of the meeting, the problems analyzed, key debate points, solutions evaluated, agreed outcomes, and future direction. Do not truncate or over-condense to a couple sentences; provide a rich, complete narrative.
+3. keyPoints: Array of 5-10 core discussion points covering all parts of the meeting.
+4. decisions: Array of objects with "decision" and "context" for every decision agreed upon during the meeting.
+5. actionItems: Array of actionable tasks. For each task extract:
+   - "task": specific action required
+   - "assignee": name/role of responsible person when identifiable (or "Unassigned")
+   - "dueDate": deadline if mentioned (or "To be determined")
+   - "completed": false
+6. followUps: Array of follow-up items, future milestones, or upcoming syncs.
+7. topics: Array of objects with "title" and "summary" for every major topic discussed, detailing what was discussed.
+8. primaryLanguages: Array of languages spoken during the meeting (e.g. ["English"]).
+
+Rules:
+- Never hallucinate decisions or commitments that were not discussed.
+- Preserve all names, dates, numbers, and technical terms accurately.
+- Return ONLY valid JSON in this exact structure:
+
+{
+  "title": "Meeting Title",
+  "summary": "Multi-paragraph executive summary covering the entire meeting...",
+  "keyPoints": ["Point 1", "Point 2", "Point 3"],
+  "decisions": [
+    { "decision": "Agreed on...", "context": "Because..." }
+  ],
+  "actionItems": [
+    { "task": "Send deck...", "assignee": "Alex", "dueDate": "Friday", "completed": false }
+  ],
+  "followUps": ["Follow up on..."],
+  "topics": [
+    { "title": "Topic 1", "summary": "Discussion of..." }
+  ],
+  "primaryLanguages": ["English"]
+}`;
+}
+
+async function callChatWithFallback(messages: any[], model = DEFAULT_CHAT_MODEL): Promise<any> {
+  try {
+    return await groq.chat.completions.create({
+      model,
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages
+    });
+  } catch (err: any) {
+    if (model !== FALLBACK_CHAT_MODEL) {
+      console.warn(`[MeetingNotes] Model ${model} call failed, retrying with fallback ${FALLBACK_CHAT_MODEL}:`, err?.message);
+      return await groq.chat.completions.create({
+        model: FALLBACK_CHAT_MODEL,
+        temperature: 0.1,
+        response_format: { type: "json_object" },
+        messages
+      });
+    }
+    throw err;
+  }
+}
+
+async function extractNotesFromText(
+  transcript: string,
+  meetingTitle?: string,
+  isPartial = false
+): Promise<MeetingNotesResult> {
+  const prompt = buildSystemPrompt(meetingTitle, isPartial);
+
+  const response = await callChatWithFallback([
+    {
+      role: "system",
+      content: prompt
+    },
+    {
+      role: "user",
+      content: transcript
+    }
+  ]);
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error("Groq returned an empty meeting notes response.");
+  }
+
+  const result = JSON.parse(content);
+
+  return {
+    title: result.title || meetingTitle || "VoxFlow Meeting Summary",
+    summary: result.summary || "Summary not available.",
+    keyPoints: Array.isArray(result.keyPoints) && result.keyPoints.length > 0 ? result.keyPoints : ["Session completed."],
+    decisions: Array.isArray(result.decisions) ? result.decisions : [],
+    actionItems: Array.isArray(result.actionItems) ? result.actionItems : [],
+    followUps: Array.isArray(result.followUps) ? result.followUps : [],
+    topics: Array.isArray(result.topics) && result.topics.length > 0 ? result.topics : [],
+    primaryLanguages: Array.isArray(result.primaryLanguages) && result.primaryLanguages.length ? result.primaryLanguages : ["English"]
+  };
+}
 
 /**
- * Splits long transcripts into manageable chunks at sentence/paragraph boundaries
- * to prevent exceeding Groq context and token-per-minute (TPM) limits on 30+ min meetings.
+ * Splits massive transcripts (> 80k characters / 2+ hours) into logical segments
  */
-function splitTranscriptIntoChunks(text: string, maxChunkLength = MAX_CHUNK_CHARS): string[] {
+function splitMassiveTranscript(text: string, maxChunkLength = MAX_DIRECT_TRANSCRIPT_CHARS): string[] {
   if (text.length <= maxChunkLength) {
     return [text];
   }
@@ -48,25 +151,11 @@ function splitTranscriptIntoChunks(text: string, maxChunkLength = MAX_CHUNK_CHAR
       break;
     }
 
-    // Try splitting at paragraph boundary first
     let splitIndex = remaining.lastIndexOf("\n\n", maxChunkLength);
     if (splitIndex === -1 || splitIndex < maxChunkLength * 0.5) {
-      // Try splitting at newline
       splitIndex = remaining.lastIndexOf("\n", maxChunkLength);
     }
     if (splitIndex === -1 || splitIndex < maxChunkLength * 0.5) {
-      // Try splitting at sentence boundary (. or ? or !)
-      const match = remaining.slice(0, maxChunkLength).match(/([.?!])\s+(?=[A-Z0-9])/g);
-      if (match && match.length > 0) {
-        const lastPunct = match[match.length - 1];
-        const idx = remaining.slice(0, maxChunkLength).lastIndexOf(lastPunct);
-        if (idx !== -1) {
-          splitIndex = idx + lastPunct.length;
-        }
-      }
-    }
-    if (splitIndex === -1 || splitIndex < maxChunkLength * 0.3) {
-      // Split at space
       splitIndex = remaining.lastIndexOf(" ", maxChunkLength);
     }
     if (splitIndex === -1) {
@@ -83,102 +172,16 @@ function splitTranscriptIntoChunks(text: string, maxChunkLength = MAX_CHUNK_CHAR
   return chunks;
 }
 
-async function extractNotesFromChunk(
-  chunk: string,
-  meetingTitle?: string,
-  isPartial = false
-): Promise<MeetingNotesResult> {
-  const prompt = `You are VoxFlow's Meeting Intelligence Engine.
-
-Analyze the spoken transcript ${isPartial ? "section" : ""} from a meeting.
-The meeting may be in English, Hindi, Spanish, German, French, or mix multiple languages naturally.
-Extract a structured executive meeting overview.
-
-You must extract:
-1. title: A concise, professional title for the meeting (use provided title if appropriate: "${meetingTitle || ''}").
-2. summary: A 2-4 sentence executive overview synthesizing the main outcomes and discussion.
-3. keyPoints: Array of 3-7 core discussion points.
-4. decisions: Array of objects with "decision" and "context" (decisions agreed upon during the meeting).
-5. actionItems: Array of actionable tasks. For each task extract:
-   - "task": specific action required
-   - "assignee": name/role of responsible person when identifiable (or "Unassigned")
-   - "dueDate": deadline if mentioned (or "To be determined")
-   - "completed": false
-6. followUps: Array of things that need to happen later or future agenda items.
-7. topics: Array of objects with "title" and "summary" for the major discussion topics.
-8. primaryLanguages: Array of languages spoken during the meeting (e.g. ["English", "Hindi"]).
-
-Rules:
-- Never hallucinate decisions or commitments that were not discussed.
-- Preserve all names, dates, numbers, and technical terms accurately.
-- Return ONLY valid JSON in this exact structure:
-
-{
-  "title": "Meeting Title",
-  "summary": "Executive summary...",
-  "keyPoints": ["Point 1", "Point 2"],
-  "decisions": [
-    { "decision": "Agreed on...", "context": "Because..." }
-  ],
-  "actionItems": [
-    { "task": "Send deck...", "assignee": "Alex", "dueDate": "Friday", "completed": false }
-  ],
-  "followUps": ["Follow up on..."],
-  "topics": [
-    { "title": "Topic 1", "summary": "Discussion of..." }
-  ],
-  "primaryLanguages": ["English"]
-}`;
-
-  const response = await groq.chat.completions.create({
-    model: DEFAULT_CHAT_MODEL,
-    temperature: 0.1,
-    response_format: {
-      type: "json_object"
-    },
-    messages: [
-      {
-        role: "system",
-        content: prompt
-      },
-      {
-        role: "user",
-        content: chunk
-      }
-    ]
-  });
-
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error("Groq returned an empty meeting notes response.");
-  }
-
-  const result = JSON.parse(content);
-
-  return {
-    title: result.title || meetingTitle || "VoxFlow Meeting Summary",
-    summary: result.summary || "Summary not available.",
-    keyPoints: Array.isArray(result.keyPoints) ? result.keyPoints : [],
-    decisions: Array.isArray(result.decisions) ? result.decisions : [],
-    actionItems: Array.isArray(result.actionItems) ? result.actionItems : [],
-    followUps: Array.isArray(result.followUps) ? result.followUps : [],
-    topics: Array.isArray(result.topics) ? result.topics : [],
-    primaryLanguages: Array.isArray(result.primaryLanguages) && result.primaryLanguages.length ? result.primaryLanguages : ["English"]
-  };
-}
-
 /**
- * Creates structured fallback notes if API rate limits or network issues arise
+ * Fallback notes generator from text when all API calls fail
  */
 function createFallbackMeetingNotes(transcript: string, meetingTitle?: string): MeetingNotesResult {
-  const sentences = transcript
-    .split(/(?<=[.?!])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 15);
+  const paragraphs = transcript.split(/\n+/).map((p) => p.trim()).filter((p) => p.length > 20);
+  const sentences = transcript.split(/(?<=[.?!])\s+/).map((s) => s.trim()).filter((s) => s.length > 15);
 
   const title = meetingTitle || (sentences[0] ? sentences[0].slice(0, 60) : "VoxFlow Meeting Summary");
-  const summary = sentences.slice(0, 3).join(" ") || (transcript.length > 300 ? `${transcript.slice(0, 300)}...` : transcript);
-  const keyPoints = sentences.slice(1, 6);
+  const summary = paragraphs.slice(0, 4).join("\n\n") || transcript.slice(0, 600);
+  const keyPoints = sentences.slice(0, 6);
 
   return {
     title,
@@ -187,7 +190,7 @@ function createFallbackMeetingNotes(transcript: string, meetingTitle?: string): 
     decisions: [],
     actionItems: [],
     followUps: [],
-    topics: [{ title: "Session Discussion", summary: transcript.slice(0, 200) }],
+    topics: [{ title: "General Discussion", summary: transcript.slice(0, 300) }],
     primaryLanguages: ["English"]
   };
 }
@@ -201,19 +204,21 @@ export async function generateMeetingNotes(
   }
 
   const cleanTranscript = transcript.trim();
-  const chunks = splitTranscriptIntoChunks(cleanTranscript, MAX_CHUNK_CHARS);
 
   try {
-    // Single chunk: process directly
-    if (chunks.length === 1) {
-      return await extractNotesFromChunk(chunks[0], meetingTitle, false);
+    // 1. If transcript fits in direct context (up to 80,000 characters / ~90 mins of speech),
+    // analyze the entire meeting holistically in one single pass for maximum quality and coherence.
+    if (cleanTranscript.length <= MAX_DIRECT_TRANSCRIPT_CHARS) {
+      return await extractNotesFromText(cleanTranscript, meetingTitle, false);
     }
 
-    // Multiple chunks (30+ min meeting): process each chunk and aggregate
+    // 2. Only for massive meetings (> 80k chars / > 2 hours), chunk and aggregate
+    const chunks = splitMassiveTranscript(cleanTranscript, MAX_DIRECT_TRANSCRIPT_CHARS);
     const chunkResults: MeetingNotesResult[] = [];
+
     for (let i = 0; i < chunks.length; i++) {
       try {
-        const res = await extractNotesFromChunk(chunks[i], meetingTitle, true);
+        const res = await extractNotesFromText(chunks[i], meetingTitle, true);
         chunkResults.push(res);
       } catch (err) {
         console.warn(`Meeting notes chunk ${i + 1}/${chunks.length} partial warning:`, err);
@@ -221,7 +226,7 @@ export async function generateMeetingNotes(
       }
     }
 
-    // Aggregate decisions, action items, topics, languages, key points
+    // Deduplicate and aggregate decisions, action items, topics, languages
     const seenDecisions = new Set<string>();
     const allDecisions: DecisionResult[] = [];
     for (const r of chunkResults) {
@@ -270,62 +275,46 @@ export async function generateMeetingNotes(
       }
     }
 
-    const seenLanguages = new Set<string>();
-    const allLanguages: string[] = [];
-    for (const r of chunkResults) {
-      for (const lang of r.primaryLanguages) {
-        if (!seenLanguages.has(lang)) {
-          seenLanguages.add(lang);
-          allLanguages.push(lang);
-        }
-      }
-    }
-
     const allKeyPoints: string[] = [];
     for (const r of chunkResults) {
       for (const p of r.keyPoints) {
-        if (!allKeyPoints.includes(p) && allKeyPoints.length < 8) {
+        if (!allKeyPoints.includes(p)) {
           allKeyPoints.push(p);
         }
       }
     }
 
-    // Synthesize final executive summary across chunk summaries
-    const combinedSummaries = chunkResults.map((r, i) => `Section ${i + 1}: ${r.summary}`).join("\n\n");
+    const combinedSummaries = chunkResults.map((r, i) => `### Section ${i + 1}\n${r.summary}`).join("\n\n");
     let finalSummary = "";
     try {
-      const summaryResponse = await groq.chat.completions.create({
-        model: DEFAULT_CHAT_MODEL,
-        temperature: 0.1,
-        messages: [
-          {
-            role: "system",
-            content: "You are VoxFlow's Meeting Intelligence Engine. Synthesize the section summaries of a long meeting into a single 2-4 sentence executive overview highlighting main outcomes and decisions. Return plain text only."
-          },
-          {
-            role: "user",
-            content: combinedSummaries
-          }
-        ]
-      });
-      finalSummary = summaryResponse.choices[0]?.message?.content?.trim() || "";
+      const summaryResponse = await callChatWithFallback([
+        {
+          role: "system",
+          content: "You are VoxFlow's Meeting Intelligence Engine. Synthesize the section summaries of a long meeting into a cohesive, multi-paragraph executive overview covering all major themes, decisions, and outcomes. Return a JSON object with a 'summary' string field."
+        },
+        {
+          role: "user",
+          content: combinedSummaries
+        }
+      ]);
+      const parsed = JSON.parse(summaryResponse.choices[0]?.message?.content || "{}");
+      finalSummary = parsed.summary || "";
     } catch {
-      finalSummary = chunkResults.map((r) => r.summary).join(" ");
+      finalSummary = combinedSummaries;
     }
 
     return {
       title: chunkResults[0]?.title || meetingTitle || "VoxFlow Meeting Summary",
-      summary: finalSummary || chunkResults.map((r) => r.summary).join(" "),
+      summary: finalSummary || combinedSummaries,
       keyPoints: allKeyPoints.length > 0 ? allKeyPoints : ["Comprehensive meeting session held."],
       decisions: allDecisions,
       actionItems: allActionItems,
       followUps: allFollowUps,
-      topics: allTopics.length > 0 ? allTopics : [{ title: "Meeting Discussion", summary: "Detailed session topics discussed." }],
-      primaryLanguages: allLanguages.length > 0 ? allLanguages : ["English"]
+      topics: allTopics.length > 0 ? allTopics : [{ title: "Session Topics", summary: "Multiple detailed discussions covered during the meeting." }],
+      primaryLanguages: ["English"]
     };
   } catch (error: any) {
     console.error("Meeting notes generation error:", error);
-    // If entire generation fails, return a robust structured fallback from the transcript
     return createFallbackMeetingNotes(cleanTranscript, meetingTitle);
   }
 }

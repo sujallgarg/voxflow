@@ -1,0 +1,11 @@
+# VoxFlow
+
+> Multilingual AI Voice Typing and Structured Meeting Summaries for Web.
+
+- Website: https://voxflowai.devs.surf/
+- Full Markdown documentation: https://voxflowai.devs.surf/index.md
+- Authentication & Agent Guide: https://voxflowai.devs.surf/auth.md
+- API Catalog: https://voxflowai.devs.surf/.well-known/api-catalog
+- AI Resource Manifest: https://voxflowai.devs.surf/.well-known/ai-catalog.json
+- MCP Server Card: https://voxflowai.devs.surf/.well-known/mcp/server-card.json
+- Agent Skills: https://voxflowai.devs.surf/.well-known/agent-skills/index.json

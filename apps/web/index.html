@@ -56,6 +56,16 @@
     <link rel="manifest" href="/site.webmanifest" crossorigin="use-credentials" />
     <meta name="theme-color" content="#000000" />
 
+    <!-- AI Agent Discovery (RFC 8288, RFC 9727, RFC 9728) -->
+    <link rel="api-catalog" href="/.well-known/api-catalog" type="application/linkset+json" />
+    <link rel="service-desc" href="/.well-known/ai-catalog.json" type="application/json" title="VoxFlow ARD Manifest" />
+    <link rel="service-desc" href="/.well-known/mcp/server-card.json" type="application/json" title="VoxFlow MCP Server Card" />
+    <link rel="service-desc" href="/.well-known/agent-skills/index.json" type="application/json" title="VoxFlow Agent Skills" />
+    <link rel="service-doc" href="/auth.md" type="text/markdown" title="Agent Authentication Guide" />
+    <link rel="alternate" href="/index.md" type="text/markdown" title="Markdown for Agents" />
+    <link rel="oauth-authorization-server" href="/.well-known/oauth-authorization-server" type="application/json" />
+    <link rel="oauth-protected-resource" href="/.well-known/oauth-protected-resource" type="application/json" />
+
     <!-- Typography & Performance Pre-connects -->
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.gstatic.com" />

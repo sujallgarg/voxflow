@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agentskills.io/schema/v0.2.0/index.json",
+  "skills": [
+    {
+      "name": "voice-typing",
+      "type": "tool",
+      "description": "Convert speech or raw audio into clean, punctuated text with multilingual detection and context styling.",
+      "url": "https://voxflowai.devs.surf/.well-known/agent-skills/voice-typing/SKILL.md",
+      "sha256": "2e8e5cf461f30d60e2b523461e0ad4de426851879ee5a1d5c31e08957be222fa"
+    },
+    {
+      "name": "meeting-summarization",
+      "type": "tool",
+      "description": "Extract structured meeting intelligence: executive summary, key points, decisions, and action items from transcripts.",
+      "url": "https://voxflowai.devs.surf/.well-known/agent-skills/meeting-summarization/SKILL.md",
+      "sha256": "0af0b34be9adc477e8877c41fbaff4373cee8d7444d02300b04c53ae1832e348"
+    }
+  ]
+}
