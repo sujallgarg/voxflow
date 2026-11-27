@@ -7,8 +7,9 @@ import type {
 import { getCurrentUser, saveUserMeeting } from "../../lib/userStore";
 import { api } from "../../lib/api";
 import { recordMeaningfulAction } from "../../lib/upgradeReminders";
+import { MeetingSnapshotsGallery } from "./MeetingSnapshotsGallery";
 
-export type WorkspaceTabType = "overview" | "transcript" | "action-items" | "notes";
+export type WorkspaceTabType = "overview" | "snapshots" | "transcript" | "action-items" | "notes";
 
 interface MeetingWorkspaceProps {
   meeting: MeetingRecord;
@@ -23,6 +24,76 @@ function generateId(prefix: string): string {
 
 function getCurrentTimeString(): string {
   return new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function renderFormattedSummary(text: string) {
+  if (!text) return null;
+  const lines = text.split("\n");
+
+  return lines.map((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return <div key={idx} style={{ height: "8px" }} />;
+    }
+
+    const isBullet = trimmed.startsWith("- ") || trimmed.startsWith("• ") || (trimmed.startsWith("* ") && !trimmed.startsWith("**"));
+    const content = isBullet ? trimmed.replace(/^[-•*]\s+/, "") : trimmed;
+
+    const parts = content.split(/(\*\*[^*]+\*\*)/g);
+    const renderedParts = parts.map((part, pIdx) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={pIdx} style={{ fontWeight: 600, color: "#111827" }}>
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      return part;
+    });
+
+    if (isBullet) {
+      return (
+        <div
+          key={idx}
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "10px",
+            marginBottom: "7px",
+            paddingLeft: "4px"
+          }}
+        >
+          <span style={{ color: "#3b82f6", fontWeight: 700, fontSize: "1.1rem", lineHeight: "1.3", userSelect: "none" }}>•</span>
+          <span style={{ flex: 1, lineHeight: "1.65", color: "#1f2937" }}>{renderedParts}</span>
+        </div>
+      );
+    }
+
+    const isHeader = trimmed.startsWith("#") || (trimmed.startsWith("**") && trimmed.endsWith("**"));
+    if (isHeader) {
+      const headerText = trimmed.replace(/^#+\s*/, "").replace(/^\*\*|\*\*$/g, "");
+      return (
+        <div
+          key={idx}
+          style={{
+            fontWeight: 600,
+            color: "#111827",
+            marginTop: idx === 0 ? "0" : "14px",
+            marginBottom: "8px",
+            fontSize: "1rem"
+          }}
+        >
+          {headerText}
+        </div>
+      );
+    }
+
+    return (
+      <p key={idx} style={{ margin: "0 0 10px 0", lineHeight: "1.65", color: "#374151" }}>
+        {renderedParts}
+      </p>
+    );
+  });
 }
 
 export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
@@ -411,6 +482,7 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
           {(
             [
               { id: "overview", label: "Overview & Decisions" },
+              { id: "snapshots", label: `Meeting Snapshots (${(meeting.snapshots || []).length})` },
               { id: "transcript", label: `Transcript (${(meeting.transcript || []).length})` },
               { id: "action-items", label: `Action Items (${(meeting.actionItems || []).length})` },
               { id: "notes", label: "Notes & Agenda" }
@@ -448,9 +520,9 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                 Meeting Summary
               </h3>
               {meeting.fullSummary ? (
-                <p style={{ fontSize: "0.9375rem", lineHeight: 1.65, color: "#111111", whiteSpace: "pre-line", margin: 0 }}>
-                  {meeting.fullSummary}
-                </p>
+                <div style={{ fontSize: "0.9375rem", lineHeight: 1.65, color: "#111111", margin: 0 }}>
+                  {renderFormattedSummary(meeting.fullSummary)}
+                </div>
               ) : (
                 <div style={{ padding: "24px 0", textAlign: "center", color: "#666666" }}>
                   <p style={{ margin: "0 0 14px 0", fontSize: "0.9375rem" }}>
@@ -501,7 +573,52 @@ export const MeetingWorkspace: React.FC<MeetingWorkspaceProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Quick Snapshots Preview */}
+            {meeting.snapshots && meeting.snapshots.length > 0 && (
+              <div className="card-premium" style={{ padding: "20px 24px", background: "#ffffff", borderRadius: "8px", border: "1px solid #e5e5e5" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                  <h3 style={{ fontSize: "1.05rem", fontWeight: 600, color: "#111111", margin: 0 }}>
+                    Meeting Snapshots ({meeting.snapshots.length})
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("snapshots")}
+                    style={{ background: "none", border: "none", color: "#111111", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    View All Snapshots ({meeting.snapshots.length}) →
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px" }}>
+                  {meeting.snapshots.slice(0, 4).map((s) => (
+                    <div
+                      key={s.id}
+                      onClick={() => setActiveTab("snapshots")}
+                      style={{ cursor: "pointer", borderRadius: "6px", overflow: "hidden", border: "1px solid #e5e5e5", background: "#fcfcfc" }}
+                    >
+                      <img src={s.imageUrl} alt={s.description} style={{ width: "100%", aspectRatio: "16/9", objectFit: "cover", display: "block" }} />
+                      <div style={{ padding: "8px 10px", fontSize: "0.75rem", color: "#333333" }}>
+                        <div style={{ fontWeight: 600, color: "#111111", marginBottom: "2px" }}>{s.category} • {s.timestamp}</div>
+                        <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "#666666" }}>{s.description}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+        )}
+
+        {/* =========================================================
+            TAB: MEETING SNAPSHOTS
+        ========================================================= */}
+        {activeTab === "snapshots" && (
+          <MeetingSnapshotsGallery
+            meeting={meeting}
+            onUpdateMeeting={(updated) => {
+              persistMeeting(updated);
+            }}
+          />
         )}
 
         {/* =========================================================

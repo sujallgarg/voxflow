@@ -4,6 +4,7 @@ import { transcribeAudio, transcribeAudioDetailed } from "../services/transcript
 import { generateMeetingNotes } from "../services/meeting-notes.service.js";
 import { authenticateRequest } from "../services/auth.service.js";
 import { entitlementService } from "../services/entitlement.service.js";
+import { analyzeMeetingSnapshot } from "../services/snapshot-vision.service.js";
 
 const meetingsRoute: FastifyPluginAsync = async (app) => {
   // 1. GET /meetings — List all meetings for the user
@@ -359,6 +360,47 @@ const meetingsRoute: FastifyPluginAsync = async (app) => {
       return reply.code(500).send({
         error: message,
         code: "PROCESS_RECORDING_ERROR"
+      });
+    }
+  });
+
+  // 7. POST /meetings/analyze-snapshot — Evaluate meeting snapshot with AI Vision
+  app.post("/meetings/analyze-snapshot", async (request, reply) => {
+    try {
+      const user = await authenticateRequest(request, reply);
+      if (!user) return;
+
+      const body = request.body as {
+        imageBase64: string;
+        meetingTitle?: string;
+        manual?: boolean;
+        timestamp?: string;
+        meetingId?: string;
+      };
+
+      if (!body || !body.imageBase64) {
+        return reply.code(400).send({
+          error: "imageBase64 is required to analyze a meeting snapshot.",
+          code: "MISSING_IMAGE_DATA"
+        });
+      }
+
+      const analysis = await analyzeMeetingSnapshot({
+        imageBase64: body.imageBase64,
+        meetingTitle: body.meetingTitle,
+        manual: Boolean(body.manual),
+        timestamp: body.timestamp
+      });
+
+      return reply.code(200).send({
+        success: true,
+        ...analysis
+      });
+    } catch (error: any) {
+      app.log.error(error);
+      return reply.code(500).send({
+        error: error?.message || "Failed to analyze snapshot.",
+        code: "SNAPSHOT_ANALYSIS_ERROR"
       });
     }
   });

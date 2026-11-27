@@ -4,7 +4,9 @@ import { useAuth } from "../lib/authContext";
 import { useSubscription } from "../lib/subscriptionContext";
 import { saveUserTranscription, getUserTranscriptions, deleteUserTranscription } from "../lib/userStore";
 import { SUPPORTED_LANGUAGES } from "../data/languages";
-import type { MeetingRecord, TopicItem, DecisionItem, ActionItem } from "@voxflow/shared";
+import type { MeetingRecord, TopicItem, DecisionItem, ActionItem, MeetingSnapshot } from "@voxflow/shared";
+import { SmartMeetingSnapshotManager } from "../lib/snapshotCaptureEngine";
+import { MeetingSnapshotsGallery } from "./meeting-companion/MeetingSnapshotsGallery";
 
 export type WidgetMode = "voice" | "meeting" | "history" | "settings";
 export type VoiceState = "idle" | "recording" | "paused" | "transcribing" | "completed" | "error";
@@ -194,7 +196,11 @@ export const FloatingWebWidget: React.FC = () => {
 
   // Meeting result & tabs
   const [currentMeeting, setCurrentMeeting] = useState<MeetingRecord | null>(null);
-  const [meetingTab, setMeetingTab] = useState<"overview" | "summary" | "topics" | "decisions" | "actions" | "transcript">("overview");
+  const [meetingTab, setMeetingTab] = useState<"overview" | "snapshots" | "summary" | "topics" | "decisions" | "actions" | "transcript">("overview");
+  const [enableSnapshots, setEnableSnapshots] = useState(true);
+  const [capturedSnapshots, setCapturedSnapshots] = useState<MeetingSnapshot[]>([]);
+  const snapshotManagerRef = useRef<SmartMeetingSnapshotManager | null>(null);
+  const capturedSnapshotsRef = useRef<MeetingSnapshot[]>([]);
   const [isEditingMeeting, setIsEditingMeeting] = useState(false);
   const [editedSummary, setEditedSummary] = useState("");
   const [editedTopics, setEditedTopics] = useState<TopicItem[]>([]);
@@ -954,7 +960,21 @@ export const FloatingWebWidget: React.FC = () => {
           video: true,
           audio: true
         });
-        displayStream.getVideoTracks().forEach((vt) => vt.stop());
+        if (enableSnapshots && displayStream.getVideoTracks().length > 0) {
+          const snapMgr = new SmartMeetingSnapshotManager(`meeting_${Date.now()}`, meetingTitle);
+          snapshotManagerRef.current = snapMgr;
+          capturedSnapshotsRef.current = [];
+          setCapturedSnapshots([]);
+          snapMgr.attachStream(displayStream);
+          snapMgr.onSnapshot((s) => {
+            capturedSnapshotsRef.current = [s, ...capturedSnapshotsRef.current];
+            setCapturedSnapshots([...capturedSnapshotsRef.current]);
+          });
+          snapMgr.start(3500);
+        } else {
+          displayStream.getVideoTracks().forEach((vt) => vt.stop());
+        }
+        displayStream.getVideoTracks().forEach((vt) => tracksToStop.push(vt));
         const audioTracks = displayStream.getAudioTracks();
         if (audioTracks.length === 0) {
           displayStream.getTracks().forEach((t) => t.stop());
@@ -976,7 +996,21 @@ export const FloatingWebWidget: React.FC = () => {
               video: true,
               audio: true
             });
-            displayStream.getVideoTracks().forEach((vt) => vt.stop());
+            if (enableSnapshots && displayStream.getVideoTracks().length > 0) {
+              const snapMgr = new SmartMeetingSnapshotManager(`meeting_${Date.now()}`, meetingTitle);
+              snapshotManagerRef.current = snapMgr;
+              capturedSnapshotsRef.current = [];
+              setCapturedSnapshots([]);
+              snapMgr.attachStream(displayStream);
+              snapMgr.onSnapshot((s) => {
+                capturedSnapshotsRef.current = [s, ...capturedSnapshotsRef.current];
+                setCapturedSnapshots([...capturedSnapshotsRef.current]);
+              });
+              snapMgr.start(3500);
+            } else {
+              displayStream.getVideoTracks().forEach((vt) => vt.stop());
+            }
+            displayStream.getVideoTracks().forEach((vt) => tracksToStop.push(vt));
             const tabAudioTracks = displayStream.getAudioTracks();
 
             const micStream = await navigator.mediaDevices.getUserMedia({
@@ -1067,6 +1101,7 @@ export const FloatingWebWidget: React.FC = () => {
     if (isMeetingPaused) {
       try {
         rec.resume();
+        snapshotManagerRef.current?.resume();
         setIsMeetingPaused(false);
         meetingTimerRef.current = setInterval(() => {
           setMeetingDuration((prev) => prev + 1);
@@ -1075,6 +1110,7 @@ export const FloatingWebWidget: React.FC = () => {
     } else {
       try {
         rec.pause();
+        snapshotManagerRef.current?.pause();
         setIsMeetingPaused(true);
         if (meetingTimerRef.current) {
           clearInterval(meetingTimerRef.current);
@@ -1093,6 +1129,7 @@ export const FloatingWebWidget: React.FC = () => {
       meetingTimerRef.current = null;
     }
     stopMeetingAnalyser();
+    snapshotManagerRef.current?.stop();
     if (meetingMediaRecorderRef.current) {
       try {
         meetingMediaRecorderRef.current.stop();
@@ -1103,6 +1140,7 @@ export const FloatingWebWidget: React.FC = () => {
       meetingStreamsToCleanupRef.current();
       meetingStreamsToCleanupRef.current = null;
     }
+    snapshotManagerRef.current?.stop();
     meetingChunksRef.current = [];
     setMeetingStep("setup");
     setMeetingError(null);
@@ -1121,6 +1159,7 @@ export const FloatingWebWidget: React.FC = () => {
       meetingTimerRef.current = null;
     }
     stopMeetingAnalyser();
+    snapshotManagerRef.current?.stop();
 
     if (!user) {
       setMeetingError("Sign in required. Please log in or create an account to record meetings.");
@@ -1180,6 +1219,9 @@ export const FloatingWebWidget: React.FC = () => {
         );
         if (res && res.meeting) {
           meetingRecord = res.meeting;
+          if (meetingRecord && capturedSnapshotsRef.current.length > 0) {
+            meetingRecord.snapshots = capturedSnapshotsRef.current;
+          }
         }
       } catch (backendErr: any) {
         console.warn("processMeetingRecording backend notice, trying transcription + notes synthesis:", backendErr);
@@ -1210,9 +1252,13 @@ export const FloatingWebWidget: React.FC = () => {
           void refreshSubscription?.();
         }
         console.warn("api.generateMeetingNotes recovery, building structured notes from transcript:", notesErr);
+          const sentences = transcriptText.split(/(?<=[.?!])\s+/).filter((s) => s.trim().length > 15);
+          const bullets = (sentences.length > 0 ? sentences.slice(0, 5) : [transcriptText.slice(0, 200)])
+            .map((s) => `- ${s.trim()}`)
+            .join("\n");
           notesResult = {
             title: meetingTitle || "Recorded Meeting Session",
-            summary: transcriptText.length > 300 ? `${transcriptText.slice(0, 300)}...` : transcriptText,
+            summary: bullets ? `Executive Highlights:\n${bullets}` : transcriptText,
             topics: [{ id: "top_1", title: "Session Discussion", summary: transcriptText.slice(0, 200) }],
             decisions: [],
             actionItems: []
@@ -1264,7 +1310,8 @@ export const FloatingWebWidget: React.FC = () => {
               originalText: transcriptText
             }
           ],
-          initialNotes: ""
+          initialNotes: "",
+          snapshots: capturedSnapshotsRef.current
         };
       }
 
@@ -2710,6 +2757,43 @@ export const FloatingWebWidget: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Smart Meeting Snapshots Toggle */}
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px", marginBottom: "4px", cursor: "pointer", fontSize: "12px", color: "#374151" }}>
+                    <input
+                      type="checkbox"
+                      checked={enableSnapshots}
+                      onChange={(e) => setEnableSnapshots(e.target.checked)}
+                      style={{ accentColor: "#10b981", cursor: "pointer" }}
+                    />
+                    <span>📸 <strong>Smart Meeting Snapshots</strong> (Auto-capture slides & diagrams)</span>
+                  </label>
+
+                  {/* Smart Meeting Snapshots Toggle */}
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 12px", width: "100%", boxSizing: "border-box", marginTop: "4px" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "12px", color: "#334155" }}>
+                      <input
+                        type="checkbox"
+                        checked={enableSnapshots}
+                        onChange={(e) => setEnableSnapshots(e.target.checked)}
+                        style={{ accentColor: "#10b981", cursor: "pointer" }}
+                      />
+                      <span>📸 <strong>Smart Meeting Snapshots</strong> (Auto-captures slides, charts & docs)</span>
+                    </label>
+                  </div>
+
+                  {/* Smart Meeting Snapshots Toggle */}
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 12px", width: "100%", boxSizing: "border-box" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "12px", color: "#334155" }}>
+                      <input
+                        type="checkbox"
+                        checked={enableSnapshots}
+                        onChange={(e) => setEnableSnapshots(e.target.checked)}
+                        style={{ accentColor: "#10b981", cursor: "pointer" }}
+                      />
+                      <span>📸 <strong>Smart Meeting Snapshots</strong> (Auto-captures slides & shared documents)</span>
+                    </label>
+                  </div>
+
                   <button
                     id="voxflow-meeting-start-btn"
                     onClick={!user ? () => { window.location.hash = "#/login"; } : (isMeetingLimitReached ? undefined : handleStartMeeting)}
@@ -2759,6 +2843,69 @@ export const FloatingWebWidget: React.FC = () => {
                   <div style={{ fontSize: "28px", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
                     {formatTimer(meetingDuration)}
                   </div>
+
+                  {enableSnapshots && (
+                    <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", boxSizing: "border-box" }}>
+                      <span style={{ fontSize: "11px", color: "#475569", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: isMeetingPaused ? "#eab308" : "#22c55e", display: "inline-block" }} />
+                        Smart Snapshots: <strong>{capturedSnapshots.length}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const snap = await snapshotManagerRef.current?.snapManual();
+                          if (snap) {
+                            showToast("📸 Manual snapshot captured!");
+                          }
+                        }}
+                        style={{ padding: "4px 8px", fontSize: "11px", fontWeight: 600, background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "4px", cursor: "pointer" }}
+                      >
+                        📸 Snap Now
+                      </button>
+                    </div>
+                  )}
+
+                  {enableSnapshots && (
+                    <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", boxSizing: "border-box" }}>
+                      <span style={{ fontSize: "11px", color: "#475569", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: isMeetingPaused ? "#eab308" : "#22c55e", display: "inline-block" }} />
+                        Smart Snapshots: <strong>{capturedSnapshots.length}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const snap = await snapshotManagerRef.current?.snapManual();
+                          if (snap) {
+                            showToast("📸 Manual snapshot captured!");
+                          }
+                        }}
+                        style={{ padding: "4px 8px", fontSize: "11px", fontWeight: 600, background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "4px", cursor: "pointer" }}
+                      >
+                        📸 Snap Now
+                      </button>
+                    </div>
+                  )}
+
+                  {enableSnapshots && (
+                    <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 12px", background: "#f8fafc", borderRadius: "6px", border: "1px solid #e2e8f0", boxSizing: "border-box" }}>
+                      <span style={{ fontSize: "11px", color: "#475569", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: isMeetingPaused ? "#eab308" : "#22c55e", display: "inline-block" }} />
+                        Smart Snapshots: <strong>{capturedSnapshots.length}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const snap = await snapshotManagerRef.current?.snapManual();
+                          if (snap) {
+                            showToast("📸 Manual snapshot captured!");
+                          }
+                        }}
+                        style={{ padding: "3px 8px", fontSize: "11px", fontWeight: 600, background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "4px", cursor: "pointer" }}
+                      >
+                        📸 Snap Now
+                      </button>
+                    </div>
+                  )}
 
                   {/* Real-Time Waveform */}
                   <div
@@ -2952,6 +3099,7 @@ export const FloatingWebWidget: React.FC = () => {
                   >
                     {[
                       { id: "overview", label: "Overview" },
+                      { id: "snapshots", label: `Snapshots (${currentMeeting.snapshots?.length || 0})` },
                       { id: "summary", label: "Summary" },
                       { id: "topics", label: `Topics (${currentMeeting.topics?.length || 0})` },
                       { id: "decisions", label: `Decisions (${currentMeeting.decisions?.length || 0})` },
@@ -2981,6 +3129,17 @@ export const FloatingWebWidget: React.FC = () => {
 
                   {/* Content Panels */}
                   <div style={{ padding: "14px", flex: 1, overflowY: "auto", fontSize: "13px", lineHeight: "1.5" }}>
+                    {/* SNAPSHOTS TAB */}
+                    {meetingTab === "snapshots" && (
+                      <MeetingSnapshotsGallery
+                        meeting={currentMeeting as any}
+                        onUpdateMeeting={(updated) => {
+                          setCurrentMeeting(updated);
+                          saveMeetingToStorage(updated);
+                        }}
+                      />
+                    )}
+
                     {/* OVERVIEW TAB */}
                     {meetingTab === "overview" && (
                       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -3072,8 +3231,30 @@ export const FloatingWebWidget: React.FC = () => {
                             }}
                           />
                         ) : (
-                          <div style={{ whiteSpace: "pre-wrap", color: "#18181b" }}>
-                            {currentMeeting.fullSummary || currentMeeting.summaryPreview || "No summary available."}
+                          <div style={{ color: "#18181b", fontSize: "12px", lineHeight: "1.6" }}>
+                            {(currentMeeting.fullSummary || currentMeeting.summaryPreview || "No summary available.")
+                              .split("\n")
+                              .map((line, idx) => {
+                                const trimmed = line.trim();
+                                if (!trimmed) return <div key={idx} style={{ height: "4px" }} />;
+                                const isBullet = trimmed.startsWith("- ") || trimmed.startsWith("• ") || (trimmed.startsWith("* ") && !trimmed.startsWith("**"));
+                                const content = isBullet ? trimmed.replace(/^[-•*]\s+/, "") : trimmed;
+                                const parts = content.split(/(\*\*[^*]+\*\*)/g);
+                                const rendered = parts.map((p, pIdx) =>
+                                  p.startsWith("**") && p.endsWith("**") ? (
+                                    <strong key={pIdx} style={{ fontWeight: 600, color: "#09090b" }}>{p.slice(2, -2)}</strong>
+                                  ) : p
+                                );
+                                if (isBullet) {
+                                  return (
+                                    <div key={idx} style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "4px" }}>
+                                      <span style={{ color: "#3b82f6", fontWeight: 700, fontSize: "12px", lineHeight: "1.3" }}>•</span>
+                                      <span style={{ flex: 1 }}>{rendered}</span>
+                                    </div>
+                                  );
+                                }
+                                return <div key={idx} style={{ marginBottom: "6px" }}>{rendered}</div>;
+                              })}
                           </div>
                         )}
                       </div>
