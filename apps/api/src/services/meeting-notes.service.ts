@@ -40,7 +40,11 @@ Extract a thorough, comprehensive executive overview covering the entire meeting
 
 You must extract:
 1. title: A concise, professional title for the meeting (use provided title if appropriate: "${meetingTitle || ''}").
-2. summary: A thorough, multi-paragraph executive summary synthesizing the entire meeting from beginning to end. It must thoroughly detail the purpose of the meeting, the problems analyzed, key debate points, solutions evaluated, agreed outcomes, and future direction. Do not truncate or over-condense to a couple sentences; provide a rich, complete narrative.
+2. summary: A structured, easy-to-read executive summary formatted with clean bullet point dashes (- ). Format it logically:
+   - Brief 1-2 sentence high-level overview of the meeting's main purpose.
+   - Core Discussion Points: Use crisp bullet points with dashes (- ), each starting with a bold key topic or takeaway (e.g. "- **Topic/Problem**: Explanation...").
+   - Solutions & Outcomes: Bullet points with dashes (- ) covering agreed directions and resolution of key issues.
+   Make it highly readable, clear, and understandable at a glance. Avoid dense, unformatted walls of text.
 3. keyPoints: Array of 5-10 core discussion points covering all parts of the meeting.
 4. decisions: Array of objects with "decision" and "context" for every decision agreed upon during the meeting.
 5. actionItems: Array of actionable tasks. For each task extract:
@@ -59,7 +63,7 @@ Rules:
 
 {
   "title": "Meeting Title",
-  "summary": "Multi-paragraph executive summary covering the entire meeting...",
+  "summary": "Executive overview of the meeting...\\n\\n- **Main Goal**: Discussion regarding...\\n- **Key Finding**: Team identified that...\\n- **Agreed Outcome**: Plan finalized to...",
   "keyPoints": ["Point 1", "Point 2", "Point 3"],
   "decisions": [
     { "decision": "Agreed on...", "context": "Because..." }
@@ -180,7 +184,10 @@ function createFallbackMeetingNotes(transcript: string, meetingTitle?: string): 
   const sentences = transcript.split(/(?<=[.?!])\s+/).map((s) => s.trim()).filter((s) => s.length > 15);
 
   const title = meetingTitle || (sentences[0] ? sentences[0].slice(0, 60) : "VoxFlow Meeting Summary");
-  const summary = paragraphs.slice(0, 4).join("\n\n") || transcript.slice(0, 600);
+  const bullets = (sentences.length > 0 ? sentences.slice(0, 6) : [transcript.slice(0, 200)])
+    .map((s) => `- ${s}`)
+    .join("\n");
+  const summary = `Executive Overview:\n${paragraphs[0] || transcript.slice(0, 200)}\n\nKey Highlights:\n${bullets}`;
   const keyPoints = sentences.slice(0, 6);
 
   return {
@@ -290,7 +297,7 @@ export async function generateMeetingNotes(
       const summaryResponse = await callChatWithFallback([
         {
           role: "system",
-          content: "You are VoxFlow's Meeting Intelligence Engine. Synthesize the section summaries of a long meeting into a cohesive, multi-paragraph executive overview covering all major themes, decisions, and outcomes. Return a JSON object with a 'summary' string field."
+          content: "You are VoxFlow's Meeting Intelligence Engine. Synthesize the section summaries of a long meeting into a cohesive, structured executive overview. Format cleanly with bullet point dashes (- ) and bold lead-in titles for key themes, decisions, and outcomes so it is easy to read and understand at a glance. Return a JSON object with a 'summary' string field."
         },
         {
           role: "user",

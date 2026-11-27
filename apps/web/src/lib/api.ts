@@ -1,9 +1,30 @@
 import { supabase } from "./supabase";
 
-const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
-export const API_BASE_URL = configuredApiUrl
-  ? configuredApiUrl.replace(/\/+$/, "")
-  : (import.meta.env.PROD ? "https://voxflow-u7h3.onrender.com" : "http://localhost:3001");
+const LIVE_API_URL = "https://voxflow-u7h3.onrender.com";
+
+function resolveApiBaseUrl(): string {
+  const configured = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+  const isBrowser = typeof window !== "undefined";
+  const isHttps = isBrowser && window.location.protocol === "https:";
+  const isRemoteHost = isBrowser && !["localhost", "127.0.0.1"].includes(window.location.hostname);
+
+  // If page is loaded over HTTPS or hosted on a remote domain (e.g. Vercel, devs.surf, Render),
+  // NEVER use an insecure http://localhost URL which browsers block with mixed-content / Failed to fetch.
+  if (isHttps || isRemoteHost || import.meta.env.PROD) {
+    if (configured && configured.startsWith("https://")) {
+      return configured.replace(/\/+$/, "");
+    }
+    return LIVE_API_URL;
+  }
+
+  // Local development
+  if (configured) {
+    return configured.replace(/\/+$/, "");
+  }
+  return "http://localhost:3001";
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export interface LanguageResult {
   primaryLanguage: string;
@@ -75,14 +96,40 @@ export interface MeetingNotesResult {
 
 class VoxFlowApiClient {
   private baseUrl: string;
+  private fallbackBaseUrl = LIVE_API_URL;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
   }
 
+  private async requestFetch(url: string, init?: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url, init);
+    } catch (err: any) {
+      const isNetworkError =
+        err instanceof TypeError ||
+        err?.message?.includes("Failed to fetch") ||
+        err?.name === "TypeError" ||
+        err?.name === "NetworkError";
+
+      const isLocal =
+        this.baseUrl.includes("localhost") ||
+        this.baseUrl.includes("127.0.0.1") ||
+        this.baseUrl.startsWith("http://");
+
+      if (isNetworkError && isLocal && this.fallbackBaseUrl && this.baseUrl !== this.fallbackBaseUrl) {
+        console.warn(`[VoxFlow API] ${this.baseUrl} unreachable. Switching to live backend: ${this.fallbackBaseUrl}`);
+        this.baseUrl = this.fallbackBaseUrl;
+        const fallbackUrl = url.replace(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, this.fallbackBaseUrl);
+        return await fetch(fallbackUrl, init);
+      }
+      throw err;
+    }
+  }
+
   async checkHealth(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
+      const res = await this.requestFetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
       return res.ok;
     } catch {
       return false;
@@ -97,7 +144,7 @@ class VoxFlowApiClient {
       return formData;
     };
 
-    let res = await fetch(`${this.baseUrl}/transcribe`, {
+    let res = await this.requestFetch(`${this.baseUrl}/transcribe`, {
       method: "POST",
       headers: {
         ...authHeaders
@@ -109,7 +156,7 @@ class VoxFlowApiClient {
     if (res.status === 401 && authHeaders.Authorization) {
       const freshHeaders = await this.getAuthHeaders(userId, true);
       if (freshHeaders.Authorization && freshHeaders.Authorization !== authHeaders.Authorization) {
-        res = await fetch(`${this.baseUrl}/transcribe`, {
+        res = await this.requestFetch(`${this.baseUrl}/transcribe`, {
           method: "POST",
           headers: {
             ...freshHeaders
@@ -147,7 +194,7 @@ class VoxFlowApiClient {
       formData.append("targetLanguage", targetLanguage);
     }
 
-    const res = await fetch(`${this.baseUrl}/demo/process-audio`, {
+    const res = await this.requestFetch(`${this.baseUrl}/demo/process-audio`, {
       method: "POST",
       body: formData
     });
@@ -165,7 +212,7 @@ class VoxFlowApiClient {
 
   async detectLanguage(transcript: string, userId?: string): Promise<LanguageResult> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/detect-language`, {
+    const res = await this.requestFetch(`${this.baseUrl}/detect-language`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -184,7 +231,7 @@ class VoxFlowApiClient {
 
   async understand(transcript: string, userId?: string): Promise<UnderstandingResult> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/understand`, {
+    const res = await this.requestFetch(`${this.baseUrl}/understand`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -203,7 +250,7 @@ class VoxFlowApiClient {
 
   async detectContext(transcript: string, userId?: string): Promise<ContextResult> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/detect-context`, {
+    const res = await this.requestFetch(`${this.baseUrl}/detect-context`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -233,7 +280,7 @@ class VoxFlowApiClient {
     targetLanguage?: string;
   }, userId?: string): Promise<TransformationResult> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/transform`, {
+    const res = await this.requestFetch(`${this.baseUrl}/transform`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -255,7 +302,7 @@ class VoxFlowApiClient {
 
   async processVoice(transcript: string, targetLanguage?: string, userId?: string): Promise<ProcessPipelineResult> {
     let authHeaders = await this.getAuthHeaders(userId);
-    let res = await fetch(`${this.baseUrl}/process`, {
+    let res = await this.requestFetch(`${this.baseUrl}/process`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -267,7 +314,7 @@ class VoxFlowApiClient {
     if (res.status === 401 && authHeaders.Authorization) {
       const freshHeaders = await this.getAuthHeaders(userId, true);
       if (freshHeaders.Authorization && freshHeaders.Authorization !== authHeaders.Authorization) {
-        res = await fetch(`${this.baseUrl}/process`, {
+        res = await this.requestFetch(`${this.baseUrl}/process`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -291,7 +338,7 @@ class VoxFlowApiClient {
 
   async generateMeetingNotes(transcript: string, title?: string, userId?: string): Promise<MeetingNotesResult> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/meeting-notes`, {
+    const res = await this.requestFetch(`${this.baseUrl}/meeting-notes`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -380,7 +427,7 @@ class VoxFlowApiClient {
 
   async getMeetings(userId?: string): Promise<{ meetings: any[] }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/meetings`, {
+    const res = await this.requestFetch(`${this.baseUrl}/meetings`, {
       headers: { ...authHeaders }
     });
     if (!res.ok) {
@@ -392,7 +439,7 @@ class VoxFlowApiClient {
 
   async getMeeting(id: string, userId?: string): Promise<{ meeting: any }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
+    const res = await this.requestFetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
       headers: { ...authHeaders }
     });
     if (!res.ok) {
@@ -402,9 +449,36 @@ class VoxFlowApiClient {
     return res.json();
   }
 
+  async analyzeMeetingSnapshot(
+    imageBase64: string,
+    params?: { meetingTitle?: string; manual?: boolean; timestamp?: string; meetingId?: string },
+    userId?: string
+  ): Promise<{ success: boolean; isUseful: boolean; category: string; description: string; confidence: number }> {
+    const authHeaders = await this.getAuthHeaders(userId);
+    const res = await this.requestFetch(`${this.baseUrl}/meetings/analyze-snapshot`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders
+      },
+      body: JSON.stringify({
+        imageBase64,
+        meetingTitle: params?.meetingTitle,
+        manual: params?.manual,
+        timestamp: params?.timestamp,
+        meetingId: params?.meetingId
+      })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to analyze snapshot (${res.status})`);
+    }
+    return res.json();
+  }
+
   async saveMeeting(meeting: any, userId?: string): Promise<{ success: boolean; meeting: any }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/meetings`, {
+    const res = await this.requestFetch(`${this.baseUrl}/meetings`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -424,7 +498,7 @@ class VoxFlowApiClient {
 
   async updateMeeting(id: string, updates: any, userId?: string): Promise<{ success: boolean; meeting: any }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
+    const res = await this.requestFetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -441,7 +515,7 @@ class VoxFlowApiClient {
 
   async deleteMeeting(id: string, userId?: string): Promise<{ success: boolean }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
+    const res = await this.requestFetch(`${this.baseUrl}/meetings/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers: { ...authHeaders }
     });
@@ -454,7 +528,7 @@ class VoxFlowApiClient {
 
   async getTranscriptions(userId?: string): Promise<{ transcriptions: any[] }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/transcriptions`, {
+    const res = await this.requestFetch(`${this.baseUrl}/transcriptions`, {
       headers: { ...authHeaders }
     });
     if (!res.ok) {
@@ -466,7 +540,7 @@ class VoxFlowApiClient {
 
   async getTranscription(id: string, userId?: string): Promise<{ transcription: any }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/transcriptions/${encodeURIComponent(id)}`, {
+    const res = await this.requestFetch(`${this.baseUrl}/transcriptions/${encodeURIComponent(id)}`, {
       headers: { ...authHeaders }
     });
     if (!res.ok) {
@@ -478,7 +552,7 @@ class VoxFlowApiClient {
 
   async saveTranscription(item: any, userId?: string): Promise<{ success: boolean; transcription: any }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/transcriptions`, {
+    const res = await this.requestFetch(`${this.baseUrl}/transcriptions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -495,7 +569,7 @@ class VoxFlowApiClient {
 
   async deleteTranscription(id: string, userId?: string): Promise<{ success: boolean }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/transcriptions/${encodeURIComponent(id)}`, {
+    const res = await this.requestFetch(`${this.baseUrl}/transcriptions/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers: { ...authHeaders }
     });
@@ -518,7 +592,7 @@ class VoxFlowApiClient {
     if (title) formData.append("title", title);
     if (targetLanguage) formData.append("targetLanguage", targetLanguage);
 
-    const res = await fetch(`${this.baseUrl}/meetings/process-recording`, {
+    const res = await this.requestFetch(`${this.baseUrl}/meetings/process-recording`, {
       method: "POST",
       headers: { ...authHeaders },
       body: formData
@@ -543,7 +617,7 @@ class VoxFlowApiClient {
     source = "website_modal",
     marketingConsent = false
   ): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${this.baseUrl}/waitlist`, {
+    const res = await this.requestFetch(`${this.baseUrl}/waitlist`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, source, marketingConsent })
@@ -574,7 +648,7 @@ class VoxFlowApiClient {
       };
     }
     const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
-    let res = await fetch(`${this.baseUrl}/billing/subscription${query}`, {
+    let res = await this.requestFetch(`${this.baseUrl}/billing/subscription${query}`, {
       headers: { ...authHeaders }
     });
 
@@ -582,7 +656,7 @@ class VoxFlowApiClient {
     if (res.status === 401 && authHeaders.Authorization) {
       const freshHeaders = await this.getAuthHeaders(userId, true);
       if (freshHeaders.Authorization && freshHeaders.Authorization !== authHeaders.Authorization) {
-        res = await fetch(`${this.baseUrl}/billing/subscription${query}`, {
+        res = await this.requestFetch(`${this.baseUrl}/billing/subscription${query}`, {
           headers: { ...freshHeaders }
         });
       }
@@ -596,7 +670,7 @@ class VoxFlowApiClient {
   }
 
   async getAddons(): Promise<{ packs: any[]; notice: string }> {
-    const res = await fetch(`${this.baseUrl}/billing/addons`);
+    const res = await this.requestFetch(`${this.baseUrl}/billing/addons`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.error || `Failed to fetch add-on packs (${res.status})`);
@@ -620,7 +694,7 @@ class VoxFlowApiClient {
     if (packId) params.append("packId", packId);
     if (index !== undefined) params.append("index", String(index));
     const query = params.toString() ? `?${params.toString()}` : "";
-    const res = await fetch(`${this.baseUrl}/billing/addon-quote${query}`, {
+    const res = await this.requestFetch(`${this.baseUrl}/billing/addon-quote${query}`, {
       headers: { ...authHeaders }
     });
     if (!res.ok) {
@@ -638,7 +712,7 @@ class VoxFlowApiClient {
   ): Promise<{ sessionId: string; checkoutUrl: string }> {
     const authHeaders = await this.getAuthHeaders(userId);
     const host = window.location.origin;
-    const res = await fetch(`${this.baseUrl}/billing/checkout`, {
+    const res = await this.requestFetch(`${this.baseUrl}/billing/checkout`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -665,7 +739,7 @@ class VoxFlowApiClient {
 
   async createPortalSession(userId?: string): Promise<{ portalUrl: string }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/billing/portal`, {
+    const res = await this.requestFetch(`${this.baseUrl}/billing/portal`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -683,7 +757,7 @@ class VoxFlowApiClient {
 
   async getInvoices(userId?: string): Promise<{ invoices: any[] }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/billing/invoices`, {
+    const res = await this.requestFetch(`${this.baseUrl}/billing/invoices`, {
       headers: { ...authHeaders }
     });
 
@@ -697,7 +771,7 @@ class VoxFlowApiClient {
 
   async cancelSubscription(userId?: string): Promise<{ success: boolean; message: string; subscription: any }> {
     const authHeaders = await this.getAuthHeaders(userId);
-    const res = await fetch(`${this.baseUrl}/billing/cancel`, {
+    const res = await this.requestFetch(`${this.baseUrl}/billing/cancel`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

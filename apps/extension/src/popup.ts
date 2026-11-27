@@ -87,6 +87,8 @@ const pauseMeetingButton = document.getElementById("pause-meeting-button") as HT
 const pauseIcon = document.getElementById("pause-icon") as HTMLSpanElement;
 const pauseText = document.getElementById("pause-text") as HTMLSpanElement;
 const stopMeetingButton = document.getElementById("stop-meeting-button") as HTMLButtonElement;
+const snapMeetingButton = document.getElementById("snap-meeting-button") as HTMLButtonElement | null;
+const snapMeetingText = document.getElementById("snap-meeting-text") as HTMLSpanElement | null;
 
 const meetingProcessingCard = document.getElementById("meeting-processing-card") as HTMLDivElement;
 const meetingMessage = document.getElementById("meeting-message") as HTMLParagraphElement;
@@ -636,6 +638,32 @@ pauseMeetingButton.addEventListener("click", async () => {
     console.error("Pause/resume error:", err);
   } finally {
     pauseMeetingButton.disabled = false;
+  }
+});
+
+snapMeetingButton?.addEventListener("click", async () => {
+  if (!snapMeetingButton) return;
+  snapMeetingButton.disabled = true;
+  try {
+    const res = (await chrome.runtime.sendMessage({
+      type: "CAPTURE_MEETING_SNAPSHOT"
+    })) as { success: boolean; imageUrl?: string; reason?: string } | undefined;
+
+    if (res?.success) {
+      if (snapMeetingText) snapMeetingText.textContent = "✓ Snapshot Captured!";
+      setTimeout(() => {
+        if (snapMeetingText) snapMeetingText.textContent = "Capture Meeting Snapshot";
+      }, 2000);
+    } else {
+      if (snapMeetingText) snapMeetingText.textContent = "Notice: Tab not visible";
+      setTimeout(() => {
+        if (snapMeetingText) snapMeetingText.textContent = "Capture Meeting Snapshot";
+      }, 2000);
+    }
+  } catch (err) {
+    console.warn("Capture snapshot error:", err);
+  } finally {
+    snapMeetingButton.disabled = false;
   }
 });
 

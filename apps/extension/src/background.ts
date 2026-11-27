@@ -1583,6 +1583,27 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     return true;
   }
 
+  // Snapshot Capture for active meeting tab
+  if (msg.type === "CAPTURE_MEETING_SNAPSHOT") {
+    void (async () => {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!activeTab || !activeTab.id || activeTab.windowId === undefined) {
+          sendResponse({ success: false, reason: "No active tab found" });
+          return;
+        }
+        const dataUrl = await chrome.tabs.captureVisibleTab(activeTab.windowId, {
+          format: "jpeg",
+          quality: 85
+        });
+        sendResponse({ success: true, imageUrl: dataUrl });
+      } catch (err: any) {
+        sendResponse({ success: false, reason: err?.message || "Failed to capture tab" });
+      }
+    })();
+    return true;
+  }
+
   // 5. Session State Query
   if (msg.type === "GET_SESSION_STATE") {
     void ensureSessionLoaded().then(() => {

@@ -69,6 +69,26 @@ export interface TopicItem {
   summary: string;
 }
 
+export type SnapshotCategory =
+  | "Slide"
+  | "Chart / Metrics"
+  | "Diagram / Architecture"
+  | "Document / Notes"
+  | "Product Demo"
+  | "General";
+
+export interface MeetingSnapshot {
+  id: string;
+  meetingId?: string;
+  timestamp: string;
+  capturedAt: number;
+  imageUrl: string;
+  title?: string;
+  description: string;
+  category: SnapshotCategory;
+  manual?: boolean;
+}
+
 export interface MeetingRecord {
   id: string;
   userId: string;
@@ -87,6 +107,7 @@ export interface MeetingRecord {
   actionItems: ActionItem[];
   transcript: TranscriptUtterance[];
   initialNotes: string;
+  snapshots?: MeetingSnapshot[];
   createdAt?: string;
   updatedAt?: string;
 }
